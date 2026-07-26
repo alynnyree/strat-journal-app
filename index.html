@@ -298,7 +298,7 @@
       <label>Backend URL</label>
       <input id="f_backendUrl" placeholder="https://your-backend.example.com">
       <button class="secondary" id="btnConnect" onclick="connectBackend()">Connect</button>
-      <button class="secondary" id="btnRefresh" onclick="pollBackend()">Refresh Pending Queue Now</button>
+      <button class="secondary" id="btnRefresh" onclick="connectBackend()">Refresh Pending Queue Now</button>
       <button class="secondary" id="btnBackfill" onclick="runBackfillNow()">Import Trade History (one-time)</button>
       <div class="status-banner" id="syncStatus"></div>
       <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
