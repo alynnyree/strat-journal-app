@@ -716,7 +716,7 @@ async function runBackfillNow(){
   log('syncLog', 'Requesting historical backfill...');
   try{
     const r = await fetch(url+'/api/trades/backfill', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:730})
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365})
     });
     if(!r.ok) throw new Error('Server responded with status '+r.status);
     const data = await r.json();
