@@ -249,7 +249,7 @@
 
     <div class="card">
       <h3>Full Time Frame Continuity Check</h3>
-      <div style="font-size:12px; color:var(--text-dim); margin-bottom:4px;">Tap each timeframe: bullish / bearish / neutral, at the moment of entry.</div>
+      <div style="font-size:12px; color:var(--text-dim); margin-bottom:4px;">Auto-checked from Schwab candle data when tagging an imported trade — tap any timeframe to override.</div>
       <div class="tf-grid" id="tfGrid"></div>
       <div class="ftfc-result no" id="ftfcResult">Tap timeframes to check for 4+ consecutive alignment</div>
     </div>
@@ -298,7 +298,7 @@
       <label>Backend URL</label>
       <input id="f_backendUrl" placeholder="https://your-backend.example.com">
       <button class="secondary" id="btnConnect" onclick="connectBackend()">Connect</button>
-      <button class="secondary" id="btnRefresh" onclick="connectBackend()">Refresh Pending Queue Now</button>
+      <button class="secondary" id="btnRefresh" onclick="pollBackend()">Refresh Pending Queue Now</button>
       <button class="secondary" id="btnBackfill" onclick="runBackfillNow()">Import Trade History (one-time)</button>
       <div class="status-banner" id="syncStatus"></div>
       <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
@@ -436,11 +436,6 @@ function saveTrade(){
   const pnlDollar = perContractDiff * 100 * contracts;
   const pnlPercent = optEntry ? (perContractDiff/optEntry)*100 : 0;
 
-  // actual R:R realized vs planned risk (based on stop distance in underlying terms, approximated via option prices)
-  const riskPerContract = Math.abs(optEntry - (optEntry * (rrPlanned? (1/(1+rrPlanned)) : 0.4))); // fallback approximation
-  const rewardPerContract = Math.abs(perContractDiff);
-  const rrActual = stop && undEntry ? null : null; // left blank unless computable reliably; kept simple/manual below
-
   const seq = TIMEFRAMES.map(tf=>currentTf[tf]);
   let best=0, run=0, dirRun=null;
   seq.forEach(v=>{ if(v && v===dirRun){run++;} else {run=v?1:0; dirRun=v;} best=Math.max(best,run); });
@@ -477,7 +472,6 @@ function saveTrade(){
     currentPendingId = null;
   }
 
-  // reset form
   ['f_ticker','f_occ','f_optEntry','f_optExit','f_undEntry','f_undExit','f_stop','f_rr','f_notes','f_entryDate','f_entryTime','f_exitDate','f_exitTime'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.strat-opt').forEach(o=>o.classList.remove('sel'));
   selectedStrat = null;
@@ -509,7 +503,6 @@ function renderDashboard(){
   document.getElementById('statRR').textContent = avgRR.toFixed(1);
   document.getElementById('statCount').textContent = count;
 
-  // hero ladder = last trade's FTFC snapshot, else empty
   const ladder = document.getElementById('heroLadder');
   ladder.innerHTML = '';
   const last = trades[0];
@@ -519,7 +512,6 @@ function renderDashboard(){
     ladder.appendChild(seg);
   });
 
-  // setup breakdown
   const bySetup = {};
   trades.forEach(t=>{
     bySetup[t.strat] = bySetup[t.strat] || {count:0, pnl:0, wins:0};
@@ -539,7 +531,6 @@ function renderDashboard(){
     }).join('');
   }
 
-  // ftfc breakdown
   const fb = document.getElementById('ftfcBreakdown');
   if(!count){ fb.innerHTML = '<div class="empty">No data yet.</div>'; }
   else {
@@ -552,7 +543,6 @@ function renderDashboard(){
     `;
   }
 
-  // recent
   const rt = document.getElementById('recentTrades');
   if(!count){ rt.innerHTML = '<div class="empty">No trades logged yet. Tap "New" below to add your first one.</div>'; }
   else {
@@ -761,10 +751,41 @@ function prefillFromPending(t){
   document.getElementById('f_optEntry').value = t.optEntry ?? '';
   document.getElementById('f_optExit').value = t.optExit ?? '';
   document.getElementById('f_contracts').value = t.contracts || 1;
+  autoCheckFtfc(t.ticker, t.entryDate, t.entryTime);
+}
+async function autoCheckFtfc(ticker, entryDate, entryTime){
+  const url = backendUrl();
+  if(!url || !ticker || !entryDate) return;
+  const entryTimestamp = new Date(`${entryDate}T${entryTime||'09:30'}:00`).getTime();
+  if(isNaN(entryTimestamp)) return;
+  showStatus('info', 'Checking FTFC from Schwab candle data...');
+  try{
+    const r = await fetch(url+'/api/ftfc/check', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ticker, entryTimestamp })
+    });
+    if(!r.ok){ showStatus('err', 'FTFC auto-check failed — tap timeframes manually.'); return; }
+    const data = await r.json();
+    currentTf = data.ftfc || {};
+    buildTfGrid();
+    const btns = [...document.querySelectorAll('.tf-btn')];
+    TIMEFRAMES.forEach((tf,i)=>{
+      const val = currentTf[tf];
+      if(!val) return;
+      btns[i].classList.add(val);
+      btns[i].querySelector('.tf-state').textContent = val==='bull'?'▲':'▼';
+    });
+    updateFtfcResult();
+    const filled = TIMEFRAMES.filter(tf=>currentTf[tf]).length;
+    const confirmMsg = data.confirmed ? `FTFC CONFIRMED (${data.runLength} consecutive ${data.direction})` : `No FTFC (longest run: ${data.runLength||0})`;
+    showStatus(data.confirmed?'ok':'info', `${confirmMsg} — ${filled}/${TIMEFRAMES.length} timeframes had data.`);
+  }catch(e){
+    showStatus('err', 'FTFC auto-check failed — tap timeframes manually.');
+  }
 }
 (function initBackend(){
   const url = localStorage.getItem('strat_backend_url');
-  if(url){ document.getElementById('f_backendUrl').value = url; pollBackend(); }
+  if(url){ document.getElementById('f_backendUrl').value = url; connectBackend(); }
 })();
 
 // ---- CSV import (Schwab transaction export) ----
@@ -775,9 +796,6 @@ function handleCsv(input){
   reader.onload = e=>{
     const lines = e.target.result.split('\n').filter(l=>l.trim());
     log('csvLog', `Parsed ${lines.length-1} row(s). Review and tag Strat setup + FTFC in New Trade for each.`);
-    // Minimal parse: Schwab export columns vary by account; we just surface row count here
-    // and let the user finish tagging manually in the New Trade tab, since column layout
-    // differs between cash/margin/options-enabled exports.
   };
   reader.readAsText(file);
 }
