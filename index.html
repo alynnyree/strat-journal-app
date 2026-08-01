@@ -300,6 +300,7 @@
       <button class="secondary" id="btnConnect" onclick="connectBackend()">Connect</button>
       <button class="secondary" id="btnRefresh" onclick="pollBackend()">Refresh Pending Queue Now</button>
       <button class="secondary" id="btnBackfill" onclick="runBackfillNow()">Import Trade History (one-time)</button>
+      <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" id="btnReset" onclick="resetAndReimport()">Reset &amp; Re-import Trades</button>
       <div class="status-banner" id="syncStatus"></div>
       <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
     </div>
@@ -697,6 +698,25 @@ async function pollBackend(){
     log('syncLog', 'Refresh failed: '+e.message);
   }
   setBusy('btnRefresh', false);
+}
+async function resetAndReimport(){
+  const url = backendUrl();
+  if(!url){ showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
+  if(!confirm('This clears your entire "Ready to Tag" queue and re-imports everything fresh from Schwab using the current matching logic. Trades already saved in your Journal are NOT affected. Continue?')) return;
+  setBusy('btnReset', true);
+  showStatus('info', 'Clearing pending queue...');
+  log('syncLog', 'Clearing pending queue...');
+  try{
+    const r = await fetch(url+'/api/trades/reset', { method:'POST' });
+    if(!r.ok) throw new Error('Server responded with status '+r.status);
+    log('syncLog', 'Pending queue cleared. Re-importing...');
+    setBusy('btnReset', false);
+    await runBackfillNow();
+  }catch(e){
+    showStatus('err', `Reset failed (${e.message}).`);
+    log('syncLog', 'Reset failed: '+e.message);
+    setBusy('btnReset', false);
+  }
 }
 async function runBackfillNow(){
   const url = backendUrl();
