@@ -56,6 +56,7 @@
   .badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:10.5px; font-weight:700; font-family:var(--sans);}
   .badge.win{background:var(--bull-dim); color:var(--bull);}
   .badge.loss{background:var(--bear-dim); color:var(--bear);}
+  .badge.open{background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border);}
   .badge.long{background:#1B3A5C; color:#5FA8E0;}
   .badge.short{background:#4A2C5C; color:#C084E0;}
   .badge.setup{background:#2A2416; color:var(--amber);}
@@ -425,7 +426,9 @@ function saveTrade(){
   if(!selectedStrat){ alert('Pick a Strat setup.'); return; }
 
   const optEntry = parseFloat(document.getElementById('f_optEntry').value)||0;
-  const optExit = parseFloat(document.getElementById('f_optExit').value)||0;
+  const optExitRaw = document.getElementById('f_optExit').value;
+  const hasExit = optExitRaw !== ''; // no exit price entered yet = position still open, no contracts sold
+  const optExit = hasExit ? parseFloat(optExitRaw) : null;
   const contracts = parseFloat(document.getElementById('f_contracts').value)||1;
   const dir = document.getElementById('f_dir').value;
   const rrPlanned = parseFloat(document.getElementById('f_rr').value)||0;
@@ -433,9 +436,13 @@ function saveTrade(){
   const undExit = parseFloat(document.getElementById('f_undExit').value)||0;
   const stop = parseFloat(document.getElementById('f_stop').value)||0;
 
-  const perContractDiff = (optExit - optEntry) * (dir==='Short' ? -1 : 1);
-  const pnlDollar = perContractDiff * 100 * contracts;
-  const pnlPercent = optEntry ? (perContractDiff/optEntry)*100 : 0;
+  // P&L only calculated once contracts have actually been sold (exit price
+  // entered). No sign flip for Short — every position here is a BOUGHT
+  // option (call or put), so a rising option price is always the direct
+  // profit, regardless of whether the underlying bet is Long or Short.
+  const perContractDiff = hasExit ? (optExit - optEntry) : null;
+  const pnlDollar = hasExit ? perContractDiff * 100 * contracts : null;
+  const pnlPercent = hasExit && optEntry ? (perContractDiff / optEntry) * 100 : null;
 
   const seq = TIMEFRAMES.map(tf=>currentTf[tf]);
   let best=0, run=0, dirRun=null;
@@ -455,7 +462,7 @@ function saveTrade(){
     rrPlanned,
     ftfc: {...currentTf}, ftfcRun: best, ftfcConfirmed,
     pnlDollar, pnlPercent,
-    winLoss: pnlDollar>=0 ? 'Win':'Loss',
+    winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
     notes: document.getElementById('f_notes').value,
     shotEntry: currentShots.entry, shotExit: currentShots.exit,
     source: currentPendingId ? 'schwab-auto' : 'manual'
@@ -495,7 +502,7 @@ function renderDashboard(){
   const trades = loadTrades();
   const count = trades.length;
   const wins = trades.filter(t=>t.winLoss==='Win').length;
-  const netPnl = trades.reduce((s,t)=>s+t.pnlDollar,0);
+  const netPnl = trades.reduce((s,t)=>s+(t.pnlDollar||0),0);
   const avgRR = count ? (trades.reduce((s,t)=>s+(t.rrPlanned||0),0)/count) : 0;
 
   document.getElementById('statPnl').textContent = fmtMoney(netPnl);
@@ -516,7 +523,7 @@ function renderDashboard(){
   const bySetup = {};
   trades.forEach(t=>{
     bySetup[t.strat] = bySetup[t.strat] || {count:0, pnl:0, wins:0};
-    bySetup[t.strat].count++; bySetup[t.strat].pnl += t.pnlDollar;
+    bySetup[t.strat].count++; bySetup[t.strat].pnl += (t.pnlDollar||0);
     if(t.winLoss==='Win') bySetup[t.strat].wins++;
   });
   const sb = document.getElementById('setupBreakdown');
@@ -554,7 +561,7 @@ function renderDashboard(){
           <span class="badge ${t.dir.toLowerCase()}" style="margin-left:6px;">${t.dir}</span>
           <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${t.strat} · ${t.entryDate||''}</div>
         </div>
-        <div class="num ${t.pnlDollar>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(t.pnlDollar)}</div>
+        <div class="num ${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}" style="font-weight:700;">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</div>
       </div>`).join('');
   }
 }
@@ -571,13 +578,13 @@ function renderJournal(){
       <td><span class="badge setup">${t.strat}</span></td>
       <td>${t.ftfcConfirmed ? '✅ '+t.ftfcRun : t.ftfcRun+'/4'}</td>
       <td>$${t.optEntry.toFixed(2)}</td>
-      <td>$${t.optExit.toFixed(2)}</td>
+      <td>${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</td>
       <td>$${t.undEntry.toFixed(2)} / $${t.undExit.toFixed(2)}</td>
       <td>$${t.stop.toFixed(2)}</td>
       <td>${t.rrPlanned.toFixed(1)}</td>
       <td>—</td>
-      <td class="${t.pnlDollar>=0?'pos':'neg'}">${fmtMoney(t.pnlDollar)}</td>
-      <td class="${t.pnlPercent>=0?'pos':'neg'}">${fmtPct(t.pnlPercent)}</td>
+      <td class="${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</td>
+      <td class="${t.pnlPercent==null?'':(t.pnlPercent>=0?'pos':'neg')}">${t.pnlPercent==null?'—':fmtPct(t.pnlPercent)}</td>
       <td><span class="badge ${t.winLoss.toLowerCase()}">${t.winLoss}</span></td>
     </tr>
   `).join('');
@@ -750,8 +757,8 @@ function renderPendingQueue(list){
   wrap.innerHTML = list.map(t=>`
     <div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div><span style="font-weight:700;">${t.ticker}</span> <span class="badge ${t.dir.toLowerCase()}">${t.dir}</span></div>
-        <div class="num ${t.pnlDollar>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(t.pnlDollar)}</div>
+        <div><span style="font-weight:700;">${t.ticker}</span> <span class="badge ${t.dir.toLowerCase()}">${t.dir}</span> <span class="badge ${t.fillStatus==='Closed'?'win':'setup'}">${t.fillStatus||'Closed'} ${t.contractsOpened?`(${t.contracts}/${t.contractsOpened})`:''}</span></div>
+        <div class="num ${t.fillStatus==='Partial Fill'?'':(t.pnlDollar>=0?'pos':'neg')}" style="font-weight:700;">${t.fillStatus==='Partial Fill' ? 'Pending close' : fmtMoney(t.pnlDollar)}</div>
       </div>
       <div style="font-size:11px; color:var(--text-dim); margin:4px 0;">${t.entryDate} ${t.entryTime} → ${t.exitDate} ${t.exitTime} · ${t.occ||''}</div>
       <button class="secondary" style="margin-top:4px;" onclick='prefillFromPending(${JSON.stringify(t).replace(/'/g,"&apos;")})'>Tag This Trade</button>
