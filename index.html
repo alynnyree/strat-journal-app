@@ -348,6 +348,7 @@ let currentTf = {}; // {tf: 'bull'|'bear'|'neutral'}
 let currentShots = {entry:null, exit:null};
 let selectedStrat = null;
 let currentPendingId = null; // set when tagging a trade that came from the auto-sync queue
+let currentFtfcRun = {confirmed:false, runLength:0, direction:null, timeframesInRun:[]};
 
 function loadTrades(){ try{ return JSON.parse(localStorage.getItem('strat_trades')||'[]'); }catch(e){ return []; } }
 function saveTrades(t){ localStorage.setItem('strat_trades', JSON.stringify(t)); }
@@ -382,16 +383,30 @@ function buildTfGrid(){
     grid.appendChild(btn);
   });
 }
-function updateFtfcResult(){
-  const seq = TIMEFRAMES.map(tf=>currentTf[tf]);
-  let best = 0, run = 0, dir = null;
-  seq.forEach(v=>{
-    if(v && v===dir){ run++; } else { run = v?1:0; dir = v; }
-    best = Math.max(best, run);
+// Finds the longest run of consecutive same-direction timeframes anywhere
+// in the list — the run can start at any timeframe, not just the largest
+// (e.g. 1M/1W/1D/4H bullish in a row confirms FTFC the same as 30m/15m/5m/3m would).
+function computeFtfcRun(tfMap){
+  const seq = TIMEFRAMES.map(tf=>tfMap[tf]);
+  let bestRun=0, bestDir=null, bestStart=-1, bestEnd=-1;
+  let run=0, dir=null, start=-1;
+  seq.forEach((v,i)=>{
+    if(v && v===dir){ run++; } else { run = v?1:0; dir = v||null; start = i; }
+    if(run>bestRun){ bestRun=run; bestDir=dir; bestStart=start; bestEnd=i; }
   });
+  const timeframesInRun = bestRun>=4 ? TIMEFRAMES.slice(bestStart, bestEnd+1) : [];
+  return { confirmed: bestRun>=4, runLength: bestRun, direction: bestRun>=4?bestDir:null, timeframesInRun };
+}
+function updateFtfcResult(){
+  currentFtfcRun = computeFtfcRun(currentTf);
   const el = document.getElementById('ftfcResult');
-  if(best>=4){ el.className='ftfc-result yes'; el.textContent = `FTFC confirmed — ${best} consecutive timeframes aligned`; }
-  else { el.className='ftfc-result no'; el.textContent = `No FTFC yet — longest run is ${best} timeframe(s)`; }
+  if(currentFtfcRun.confirmed){
+    el.className='ftfc-result yes';
+    el.textContent = `FTFC confirmed (${currentFtfcRun.direction}): ${currentFtfcRun.timeframesInRun.join(' → ')}`;
+  } else {
+    el.className='ftfc-result no';
+    el.textContent = `No FTFC yet — longest run is ${currentFtfcRun.runLength} timeframe(s)`;
+  }
 }
 buildTfGrid();
 
@@ -444,10 +459,9 @@ function saveTrade(){
   const pnlDollar = hasExit ? perContractDiff * 100 * contracts : null;
   const pnlPercent = hasExit && optEntry ? (perContractDiff / optEntry) * 100 : null;
 
-  const seq = TIMEFRAMES.map(tf=>currentTf[tf]);
-  let best=0, run=0, dirRun=null;
-  seq.forEach(v=>{ if(v && v===dirRun){run++;} else {run=v?1:0; dirRun=v;} best=Math.max(best,run); });
-  const ftfcConfirmed = best>=4;
+  const ftfcRunData = computeFtfcRun(currentTf);
+  const best = ftfcRunData.runLength;
+  const ftfcConfirmed = ftfcRunData.confirmed;
 
   const trade = {
     id: Date.now(),
@@ -461,6 +475,7 @@ function saveTrade(){
     undEntry, undExit, stop,
     rrPlanned,
     ftfc: {...currentTf}, ftfcRun: best, ftfcConfirmed,
+    ftfcDirection: ftfcRunData.direction, ftfcTimeframesInRun: ftfcRunData.timeframesInRun,
     pnlDollar, pnlPercent,
     winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
     notes: document.getElementById('f_notes').value,
@@ -484,6 +499,7 @@ function saveTrade(){
   document.querySelectorAll('.strat-opt').forEach(o=>o.classList.remove('sel'));
   selectedStrat = null;
   currentTf = {};
+  currentFtfcRun = {confirmed:false, runLength:0, direction:null, timeframesInRun:[]};
   currentShots = {entry:null, exit:null};
   document.getElementById('shotEntryBox').innerHTML = '+ Entry shot';
   document.getElementById('shotExitBox').innerHTML = '+ Exit shot';
@@ -576,7 +592,7 @@ function renderJournal(){
       <td>${t.ticker}</td>
       <td><span class="badge ${t.dir.toLowerCase()}">${t.dir}</span></td>
       <td><span class="badge setup">${t.strat}</span></td>
-      <td>${t.ftfcConfirmed ? '✅ '+t.ftfcRun : t.ftfcRun+'/4'}</td>
+      <td>${t.ftfcConfirmed ? '✅ '+(t.ftfcTimeframesInRun||[]).join('→') : t.ftfcRun+'/4'}</td>
       <td>$${t.optEntry.toFixed(2)}</td>
       <td>${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</td>
       <td>$${t.undEntry.toFixed(2)} / $${t.undExit.toFixed(2)}</td>
@@ -808,6 +824,7 @@ async function autoCheckFtfc(ticker, entryDate, entryTime){
     if(!r.ok){ showStatus('err', 'FTFC auto-check failed — tap timeframes manually.'); return; }
     const data = await r.json();
     currentTf = data.ftfc || {};
+    currentFtfcRun = { confirmed: !!data.confirmed, runLength: data.runLength||0, direction: data.direction||null, timeframesInRun: data.timeframesInRun||[] };
     buildTfGrid();
     const btns = [...document.querySelectorAll('.tf-btn')];
     TIMEFRAMES.forEach((tf,i)=>{
@@ -818,7 +835,7 @@ async function autoCheckFtfc(ticker, entryDate, entryTime){
     });
     updateFtfcResult();
     const filled = TIMEFRAMES.filter(tf=>currentTf[tf]).length;
-    const confirmMsg = data.confirmed ? `FTFC CONFIRMED (${data.runLength} consecutive ${data.direction})` : `No FTFC (longest run: ${data.runLength||0})`;
+    const confirmMsg = data.confirmed ? `FTFC CONFIRMED (${data.direction}): ${(data.timeframesInRun||[]).join(' → ')}` : `No FTFC (longest run: ${data.runLength||0})`;
     showStatus(data.confirmed?'ok':'info', `${confirmMsg} — ${filled}/${TIMEFRAMES.length} timeframes had data.`);
   }catch(e){
     showStatus('err', 'FTFC auto-check failed — tap timeframes manually.');
