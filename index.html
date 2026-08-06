@@ -163,6 +163,20 @@
   .replay-meta{font-size:11px; color:var(--text-dim); text-align:center; margin-top:4px; font-family:var(--mono);}
   .replay-btn.empty-note{background:none; border:none; color:var(--text-dim); font-size:12px; cursor:default; flex:none; width:100%; padding:20px 0; text-align:center;}
   .replay-link{background:none; border:none; color:var(--amber); font-family:var(--sans); font-size:12.5px; font-weight:700; padding:8px 6px; cursor:pointer; min-height:36px; touch-action:manipulation;}
+
+  .trade-card{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;}
+  .trade-card .tc-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .trade-card .tc-ticker{font-weight:800; font-size:16px;}
+  .trade-card .tc-pnl{font-weight:800; font-size:17px;}
+  .trade-card .tc-badges{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .trade-card .tc-details{font-size:11.5px; color:var(--text-dim); font-family:var(--mono); display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; margin-bottom:12px;}
+  .trade-card .tc-actions{display:flex; gap:8px;}
+  .trade-card .tc-actions button{
+    flex:1; padding:12px 4px; border-radius:8px; font-size:13px; font-weight:700;
+    border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer; touch-action:manipulation;
+  }
+  .trade-card .tc-actions button.tc-del{color:var(--bear); border-color:var(--bear-dim);}
+  .trade-card .tc-actions button.tc-replay{color:var(--amber); border-color:var(--amber);}
 </style>
 </head>
 <body>
@@ -227,15 +241,7 @@
 
     <div class="card">
       <h3>All Trades</h3>
-      <div class="tbl-wrap">
-        <table id="journalTable">
-          <thead><tr>
-            <th>Date</th><th>Ticker</th><th>Dir</th><th>Setup</th><th>FTFC</th>
-            <th>Entry</th><th>Exit</th><th>Under. E/X</th><th>Stop</th><th>R:R Plan</th><th>R:R Act.</th><th>P&L $</th><th>P&L %</th><th>W/L</th><th>Replay</th><th>Actions</th>
-          </tr></thead>
-          <tbody id="journalBody"></tbody>
-        </table>
-      </div>
+      <div id="journalList"></div>
       <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
     </div>
 
@@ -858,32 +864,48 @@ function renderDashboard(){
 
 function renderJournal(){
   const trades = loadTrades();
-  const body = document.getElementById('journalBody');
+  const list = document.getElementById('journalList');
   document.getElementById('journalEmpty').style.display = trades.length ? 'none':'block';
-  body.innerHTML = trades.map(t=>`
-    <tr>
-      <td>${t.entryDate||''}</td>
-      <td>${t.ticker}</td>
-      <td><span class="badge ${t.dir.toLowerCase()}">${t.dir}</span></td>
-      <td>${t.strat ? `<span class="badge setup">${t.strat}</span>` : `<button class="replay-link" style="color:var(--amber);" onclick="editTrade('${t.id}')">⚠ Needs Setup</button>`}</td>
-      <td>${t.ftfcConfirmed ? '✅ '+(t.ftfcTimeframesInRun||[]).join('→') : (t.ftfcRun||0)+'/4'}</td>
-      <td>$${t.optEntry.toFixed(2)}</td>
-      <td>${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</td>
-      <td>${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}</td>
-      <td>${t.stop!=null?'$'+t.stop.toFixed(2):'—'}</td>
-      <td>${t.rrPlanned!=null?t.rrPlanned.toFixed(1):'—'}</td>
-      <td>—</td>
-      <td class="${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</td>
-      <td class="${t.pnlPercent==null?'':(t.pnlPercent>=0?'pos':'neg')}">${t.pnlPercent==null?'—':fmtPct(t.pnlPercent)}</td>
-      <td><span class="badge ${t.winLoss.toLowerCase()}">${t.winLoss}</span></td>
-      <td>${t.replayData ? `<button class="replay-link" onclick="openReplayById('${t.id}')">▶ Replay</button>` : '—'}</td>
-      <td style="white-space:nowrap;">
-        <button class="replay-link" onclick="editTrade('${t.id}')">✎ Edit</button>
-        <button class="replay-link" style="color:var(--bear);" onclick="deleteTrade('${t.id}')">🗑 Del</button>
-      </td>
-    </tr>
-  `).join('');
+  list.innerHTML = trades.map(t=>{
+    const pnlKnown = t.pnlDollar!=null;
+    const pnlClass = !pnlKnown ? '' : (t.pnlDollar>=0?'pos':'neg');
+    const setupBadge = t.strat
+      ? `<span class="badge setup">${t.strat}</span>`
+      : `<span class="badge" style="background:var(--panel); color:var(--amber); border:1px solid var(--amber);">⚠ Needs Setup</span>`;
+    const ftfcBadge = t.ftfcConfirmed
+      ? `<span class="badge win">✅ FTFC ${(t.ftfcTimeframesInRun||[]).join('→')}</span>`
+      : `<span class="badge open">FTFC ${t.ftfcRun||0}/4</span>`;
+    return `
+    <div class="trade-card">
+      <div class="tc-head">
+        <div>
+          <span class="tc-ticker">${t.ticker}</span>
+          <span class="badge ${t.dir.toLowerCase()}" style="margin-left:6px;">${t.dir}</span>
+        </div>
+        <div class="tc-pnl num ${pnlClass}">${pnlKnown ? fmtMoney(t.pnlDollar) : 'Open'}</div>
+      </div>
+      <div class="tc-badges">
+        ${setupBadge}
+        ${ftfcBadge}
+        <span class="badge ${t.winLoss.toLowerCase()}">${t.winLoss}</span>
+      </div>
+      <div class="tc-details">
+        <div>Entry: ${t.entryDate||''} ${t.entryTime||''}</div>
+        <div>Exit: ${t.exitDate||''} ${t.exitTime||''}</div>
+        <div>Opt: $${t.optEntry.toFixed(2)} → ${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</div>
+        <div>Under: ${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}</div>
+        <div>Stop: ${t.stop!=null?'$'+t.stop.toFixed(2):'—'}</div>
+        <div>R:R Plan: ${t.rrPlanned!=null?t.rrPlanned.toFixed(1):'—'}</div>
+      </div>
+      <div class="tc-actions">
+        ${t.replayData ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
+        <button onclick="editTrade('${t.id}')">✎ Edit</button>
+        <button class="tc-del" onclick="deleteTrade('${t.id}')">🗑 Delete</button>
+      </div>
+    </div>`;
+  }).join('');
 }
+
 function openReplayById(id){
   const trade = loadTrades().find(t=>String(t.id)===String(id));
   if(trade) openReplay(trade);
