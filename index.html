@@ -650,7 +650,7 @@ function startFreshTrade(){
   showView('new');
 }
 function editTrade(id){
-  const trade = loadTrades().find(t=>t.id===id);
+  const trade = loadTrades().find(t=>String(t.id)===String(id));
   if(!trade){ alert('Trade not found — it may have been deleted.'); return; }
   showView('new');
   editingTradeId = id;
@@ -700,7 +700,7 @@ function editTrade(id){
 }
 function deleteTrade(id){
   if(!confirm('Delete this trade permanently? This cannot be undone.')) return;
-  const trades = loadTrades().filter(t=>t.id!==id);
+  const trades = loadTrades().filter(t=>String(t.id)!==String(id));
   saveTrades(trades);
   renderJournal();
   renderDashboard();
@@ -865,7 +865,7 @@ function renderJournal(){
       <td>${t.entryDate||''}</td>
       <td>${t.ticker}</td>
       <td><span class="badge ${t.dir.toLowerCase()}">${t.dir}</span></td>
-      <td>${t.strat ? `<span class="badge setup">${t.strat}</span>` : `<button class="replay-link" style="color:var(--amber);" onclick="editTrade(${t.id})">⚠ Needs Setup</button>`}</td>
+      <td>${t.strat ? `<span class="badge setup">${t.strat}</span>` : `<button class="replay-link" style="color:var(--amber);" onclick="editTrade('${t.id}')">⚠ Needs Setup</button>`}</td>
       <td>${t.ftfcConfirmed ? '✅ '+(t.ftfcTimeframesInRun||[]).join('→') : (t.ftfcRun||0)+'/4'}</td>
       <td>$${t.optEntry.toFixed(2)}</td>
       <td>${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</td>
@@ -876,16 +876,16 @@ function renderJournal(){
       <td class="${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</td>
       <td class="${t.pnlPercent==null?'':(t.pnlPercent>=0?'pos':'neg')}">${t.pnlPercent==null?'—':fmtPct(t.pnlPercent)}</td>
       <td><span class="badge ${t.winLoss.toLowerCase()}">${t.winLoss}</span></td>
-      <td>${t.replayData ? `<button class="replay-link" onclick="openReplayById(${t.id})">▶ Replay</button>` : '—'}</td>
+      <td>${t.replayData ? `<button class="replay-link" onclick="openReplayById('${t.id}')">▶ Replay</button>` : '—'}</td>
       <td style="white-space:nowrap;">
-        <button class="replay-link" onclick="editTrade(${t.id})">✎ Edit</button>
-        <button class="replay-link" style="color:var(--bear);" onclick="deleteTrade(${t.id})">🗑 Del</button>
+        <button class="replay-link" onclick="editTrade('${t.id}')">✎ Edit</button>
+        <button class="replay-link" style="color:var(--bear);" onclick="deleteTrade('${t.id}')">🗑 Del</button>
       </td>
     </tr>
   `).join('');
 }
 function openReplayById(id){
-  const trade = loadTrades().find(t=>t.id===id);
+  const trade = loadTrades().find(t=>String(t.id)===String(id));
   if(trade) openReplay(trade);
 }
 
