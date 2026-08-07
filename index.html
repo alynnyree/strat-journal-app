@@ -292,6 +292,7 @@
         <div><label>Underlying Price @ Exit</label><input id="f_undExit" class="num" type="number" step="0.01" placeholder="561.05"></div>
       </div>
       <button class="secondary" style="margin-top:8px;" onclick="autoFillEnrichment()">Auto-Fill Underlying Price + Replay Data</button>
+      <div class="status-banner" id="newTradeStatus"></div>
       <div class="row3">
         <div><label>Contracts</label><input id="f_contracts" class="num" type="number" value="1" min="1"></div>
         <div><label>Stop Loss (Strat-based)</label><input id="f_stop" class="num" type="number" step="0.01" placeholder="557.80"></div>
@@ -989,6 +990,14 @@ function showStatus(kind, msg){
   el.className = 'status-banner show ' + kind;
   el.textContent = msg;
 }
+// Same idea as showStatus, but writes to the banner living on the New Trade
+// screen itself — showStatus's banner is on the Journal tab, invisible
+// while the person is actually looking at the New Trade form.
+function showNewTradeStatus(kind, msg){
+  const el = document.getElementById('newTradeStatus');
+  el.className = 'status-banner show ' + kind;
+  el.textContent = msg;
+}
 function setBusy(btnId, busy){
   document.getElementById(btnId).classList.toggle('busy', busy);
 }
@@ -1132,17 +1141,17 @@ async function runBackfillNow(){
 }
 async function autoFillEnrichment(){
   const url = backendUrl();
-  if(!url){ showStatus('err', 'No backend connected yet — enter a URL and tap Connect first (on this Journal tab).'); showView('journal'); return; }
+  if(!url){ showNewTradeStatus('err', 'No backend connected yet — go to the Journal tab, enter a URL, and tap Connect first.'); return; }
   const ticker = document.getElementById('f_ticker').value.trim().toUpperCase();
   const entryDate = document.getElementById('f_entryDate').value;
   const entryTime = document.getElementById('f_entryTime').value;
   const exitDate = document.getElementById('f_exitDate').value;
   const exitTime = document.getElementById('f_exitTime').value;
-  if(!ticker || !entryDate){ alert('Enter a ticker and entry date first.'); return; }
+  if(!ticker || !entryDate){ showNewTradeStatus('err', 'Enter a ticker and entry date first.'); return; }
   const entryTimestamp = new Date(`${entryDate}T${entryTime||'09:30'}:00`).getTime();
   const exitTimestamp = exitDate ? new Date(`${exitDate}T${exitTime||'09:30'}:00`).getTime() : null;
-  if(isNaN(entryTimestamp)){ alert('Entry date/time looks invalid.'); return; }
-  showStatus('info', `Fetching underlying price and replay data for ${ticker}...`);
+  if(isNaN(entryTimestamp)){ showNewTradeStatus('err', 'Entry date/time looks invalid.'); return; }
+  showNewTradeStatus('info', `Fetching underlying price and replay data for ${ticker}...`);
   try{
     const r = await fetch(url+'/api/trade-data/enrich', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -1153,26 +1162,27 @@ async function autoFillEnrichment(){
     if(data.undEntry!=null) document.getElementById('f_undEntry').value = data.undEntry;
     if(data.undExit!=null) document.getElementById('f_undExit').value = data.undExit;
     currentReplayData = data.replayData || null;
-    showStatus(currentReplayData ? 'ok' : 'info',
+    showNewTradeStatus(currentReplayData ? 'ok' : 'info',
       currentReplayData
         ? `Underlying price and replay data filled in for ${ticker}.`
         : `Underlying price filled in — no replay data available (this date is likely outside Schwab's ~30-35 day minute-data window).`);
   }catch(e){
-    showStatus('err', `Auto-fill failed (${e.message}).`);
+    showNewTradeStatus('err', `Auto-fill failed (${e.message}).`);
   }
 }
 async function autoCheckFtfc(ticker, entryDate, entryTime){
   const url = backendUrl();
-  if(!url || !ticker || !entryDate) return;
+  if(!url){ showNewTradeStatus('err', 'No backend connected yet — go to the Journal tab, enter a URL, and tap Connect first.'); return; }
+  if(!ticker || !entryDate){ showNewTradeStatus('err', 'Enter a ticker and entry date first.'); return; }
   const entryTimestamp = new Date(`${entryDate}T${entryTime||'09:30'}:00`).getTime();
-  if(isNaN(entryTimestamp)) return;
-  showStatus('info', 'Checking FTFC from Schwab candle data...');
+  if(isNaN(entryTimestamp)){ showNewTradeStatus('err', 'Entry date/time looks invalid.'); return; }
+  showNewTradeStatus('info', 'Checking FTFC from Schwab candle data...');
   try{
     const r = await fetch(url+'/api/ftfc/check', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ticker, entryTimestamp })
     });
-    if(!r.ok){ showStatus('err', 'FTFC auto-check failed — tap timeframes manually.'); return; }
+    if(!r.ok){ showNewTradeStatus('err', 'FTFC auto-check failed — tap timeframes manually.'); return; }
     const data = await r.json();
     currentTf = data.ftfc || {};
     currentFtfcRun = { confirmed: !!data.confirmed, runLength: data.runLength||0, direction: data.direction||null, timeframesInRun: data.timeframesInRun||[] };
@@ -1187,9 +1197,9 @@ async function autoCheckFtfc(ticker, entryDate, entryTime){
     updateFtfcResult();
     const filled = TIMEFRAMES.filter(tf=>currentTf[tf]).length;
     const confirmMsg = data.confirmed ? `FTFC CONFIRMED (${data.direction}): ${(data.timeframesInRun||[]).join(' → ')}` : `No FTFC (longest run: ${data.runLength||0})`;
-    showStatus(data.confirmed?'ok':'info', `${confirmMsg} — ${filled}/${TIMEFRAMES.length} timeframes had data.`);
+    showNewTradeStatus(data.confirmed?'ok':'info', `${confirmMsg} — ${filled}/${TIMEFRAMES.length} timeframes had data.`);
   }catch(e){
-    showStatus('err', 'FTFC auto-check failed — tap timeframes manually.');
+    showNewTradeStatus('err', 'FTFC auto-check failed — tap timeframes manually.');
   }
 }
 (function initBackend(){
