@@ -148,7 +148,6 @@
   .modal-head .t{font-weight:800; font-size:15px;}
   .modal-close{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); border-radius:50%; width:28px; height:28px; text-align:center; line-height:26px; cursor:pointer; font-size:14px;}
   .replay-canvas-wrap{background:#070A0F; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px;}
-  #replayCanvas{width:100%; display:block; touch-action:none;}
   .replay-legend{display:flex; gap:14px; font-size:11px; color:var(--text-dim); margin-top:6px;}
   .replay-legend span{display:inline-flex; align-items:center; gap:4px;}
   .replay-legend .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
@@ -365,7 +364,7 @@
       </div>
       <div class="pill-row" id="replayTfRow"></div>
       <div class="replay-canvas-wrap">
-        <canvas id="replayCanvas" width="600" height="320"></canvas>
+        <div id="replayChartContainer" style="width:100%; height:340px;"></div>
       </div>
       <div class="replay-legend">
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
@@ -391,6 +390,7 @@
   <div class="item" data-view="ai" onclick="showView('ai')"><span class="ic">✦</span>AI</div>
 </div>
 
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const TIMEFRAMES = ['6M','3M','1M','1W','1D','4H','2H','1H','30m','15m','5m','3m','1m'];
 let currentTf = {}; // {tf: 'bull'|'bear'|'neutral'}
@@ -488,9 +488,12 @@ function clearShot(which){
 // ---- Bar Replay ----
 // Renders a stored 1-minute candle window (captured server-side around a
 // trade's entry/exit) as a candle-by-candle playback — a substitute for
-// video screen recording. All rendering happens client-side on a canvas;
-// the raw 1-minute data is fetched once and re-aggregated on the fly when
-// the user switches timeframes, so nothing needs to be re-fetched.
+// video screen recording. Uses TradingView's own open-source Lightweight
+// Charts library (loaded above) for real candlesticks with a proper price
+// axis, time axis, and gridlines — same rendering engine TradingView's own
+// site uses, so it looks and behaves like a real chart instead of a
+// hand-drawn approximation. The raw 1-minute data is fetched once and
+// re-aggregated client-side when the user switches timeframes.
 const REPLAY_TIMEFRAMES = [1, 5, 15]; // minutes per candle
 const REPLAY_SPEEDS = [0.5, 1, 2, 4];
 let replayRaw = null;        // {candles, entryIndex, exitIndex} - the original 1m data for the open trade
@@ -499,8 +502,10 @@ let replayEntryIdx = null;
 let replayExitIdx = null;
 let replayTf = 1;
 let replaySpeed = 1;
-let replayRevealCount = 0;   // how many candles are currently drawn (for the play animation)
+let replayRevealCount = 0;   // how many candles are currently shown (for the play animation)
 let replayTimer = null;
+let replayChart = null;
+let replaySeries = null;
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
 // mirrors the backend's aggregateCandles logic but also carries high/low
@@ -522,7 +527,37 @@ function aggregateReplayCandles(candles, groupSize) {
   }
   return groups;
 }
-
+function toChartFormat(candles){
+  // Lightweight Charts wants unix seconds, not ms, and needs strictly
+  // increasing unique times — de-dupe just in case aggregation ever
+  // produces a collision.
+  const seen = new Set();
+  return candles.map(c=>{
+    let t = Math.floor(c.datetime/1000);
+    while(seen.has(t)) t++;
+    seen.add(t);
+    return { time: t, open: c.open, high: c.high, low: c.low, close: c.close };
+  });
+}
+function ensureReplayChart(){
+  if(replayChart) return;
+  const container = document.getElementById('replayChartContainer');
+  replayChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth, height: 340,
+    layout: { background: { color: '#070A0F' }, textColor: '#8C9AAD' },
+    grid: { vertLines: { color: '#182130' }, horzLines: { color: '#182130' } },
+    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#24303F' },
+    rightPriceScale: { borderColor: '#24303F' },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+  replaySeries = replayChart.addCandlestickSeries({
+    upColor: '#2FBF71', downColor: '#E5484D', borderVisible: false,
+    wickUpColor: '#2FBF71', wickDownColor: '#E5484D',
+  });
+  window.addEventListener('resize', ()=>{
+    if(replayChart) replayChart.applyOptions({ width: container.clientWidth });
+  });
+}
 function openReplay(trade){
   if(!trade.replayData || !trade.replayData.candles || !trade.replayData.candles.length){
     alert('No replay data available for this trade — either it was tagged before this feature was added, or the trade is too old for Schwab\'s minute-data history.');
@@ -530,10 +565,10 @@ function openReplay(trade){
   }
   replayRaw = trade.replayData;
   document.getElementById('replayTitle').textContent = `${trade.ticker} · ${trade.entryDate||''}`;
-  buildReplayTfRow();
+  document.getElementById('replayModal').classList.add('show');
+  ensureReplayChart(); // must run AFTER the modal is visible, so the container has a real width
   buildReplaySpeedRow();
   setReplayTimeframe(1);
-  document.getElementById('replayModal').classList.add('show');
 }
 function closeReplay(){
   replayPause();
@@ -557,7 +592,7 @@ function setReplayTimeframe(tf){
   document.getElementById('replayScrub').max = replayAggregated.length;
   document.getElementById('replayScrub').value = replayRevealCount;
   buildReplayTfRow();
-  drawReplayChart();
+  updateReplayChart();
 }
 function setReplaySpeed(s){
   replaySpeed = s;
@@ -578,7 +613,7 @@ function replayPlay(){
       replayPause();
     }
     document.getElementById('replayScrub').value = replayRevealCount;
-    drawReplayChart();
+    updateReplayChart();
   }, intervalMs);
 }
 function replayPause(){
@@ -590,63 +625,34 @@ function replayStep(dir){
   replayPause();
   replayRevealCount = Math.max(0, Math.min(replayAggregated.length, replayRevealCount + dir));
   document.getElementById('replayScrub').value = replayRevealCount;
-  drawReplayChart();
+  updateReplayChart();
 }
 function replayScrubTo(val){
   replayPause();
   replayRevealCount = parseInt(val, 10);
-  drawReplayChart();
+  updateReplayChart();
 }
-function drawReplayChart(){
-  const canvas = document.getElementById('replayCanvas');
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0,0,w,h);
-
+function updateReplayChart(){
+  if(!replaySeries) return;
   const visible = replayAggregated.slice(0, replayRevealCount);
-  if(!visible.length){ return; }
+  const formatted = toChartFormat(visible);
+  replaySeries.setData(formatted);
 
-  const highs = replayAggregated.map(c=>c.high), lows = replayAggregated.map(c=>c.low);
-  const maxP = Math.max(...highs), minP = Math.min(...lows);
-  const pad = (maxP-minP)*0.08 || 1;
-  const top = maxP+pad, bottom = minP-pad;
-  const priceToY = p => h - ((p-bottom)/(top-bottom))*h;
-
-  const slotW = w/replayAggregated.length;
-  const bodyW = Math.max(2, slotW*0.6);
-
-  visible.forEach((c,i)=>{
-    const x = i*slotW + slotW/2;
-    const up = c.close >= c.open;
-    ctx.strokeStyle = up ? '#2FBF71' : '#E5484D';
-    ctx.fillStyle = up ? '#2FBF71' : '#E5484D';
-    ctx.beginPath();
-    ctx.moveTo(x, priceToY(c.high));
-    ctx.lineTo(x, priceToY(c.low));
-    ctx.stroke();
-    const yO = priceToY(c.open), yC = priceToY(c.close);
-    ctx.fillRect(x-bodyW/2, Math.min(yO,yC), bodyW, Math.max(1, Math.abs(yC-yO)));
-  });
-
-  // Entry/exit markers — only draw if that candle has been revealed yet
-  function drawMarker(idx, color, label){
-    if(idx==null || idx >= replayRevealCount) return;
-    const x = idx*slotW + slotW/2;
-    ctx.strokeStyle = color;
-    ctx.setLineDash([3,3]);
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = color;
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(label, x+3, 12);
+  const markers = [];
+  if(replayEntryIdx!=null && replayEntryIdx < replayRevealCount && formatted[replayEntryIdx]){
+    markers.push({ time: formatted[replayEntryIdx].time, position: 'belowBar', color: '#2FBF71', shape: 'arrowUp', text: 'ENTRY' });
   }
-  drawMarker(replayEntryIdx, '#2FBF71', 'ENTRY');
-  drawMarker(replayExitIdx, '#E5484D', 'EXIT');
+  if(replayExitIdx!=null && replayExitIdx < replayRevealCount && formatted[replayExitIdx]){
+    markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', text: 'EXIT' });
+  }
+  replaySeries.setMarkers(markers);
+  replayChart.timeScale().fitContent();
 
+  const el = document.getElementById('replayMeta');
+  if(!visible.length){ el.textContent = '–'; return; }
   const shown = visible[visible.length-1];
   const d = new Date(shown.datetime);
-  document.getElementById('replayMeta').textContent =
-    `${replayRevealCount}/${replayAggregated.length} candles · ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} · O ${shown.open.toFixed(2)} H ${shown.high.toFixed(2)} L ${shown.low.toFixed(2)} C ${shown.close.toFixed(2)}`;
+  el.textContent = `${replayRevealCount}/${replayAggregated.length} candles · ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} · O ${shown.open.toFixed(2)} H ${shown.high.toFixed(2)} L ${shown.low.toFixed(2)} C ${shown.close.toFixed(2)}`;
 }
 
 // ---- Edit / Delete saved trades ----
