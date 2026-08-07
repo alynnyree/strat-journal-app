@@ -148,6 +148,11 @@
   .modal-head .t{font-weight:800; font-size:15px;}
   .modal-close{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); border-radius:50%; width:28px; height:28px; text-align:center; line-height:26px; cursor:pointer; font-size:14px;}
   .replay-canvas-wrap{background:#070A0F; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px;}
+  .replay-watermark{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-20deg);
+    font-size:34px; font-weight:800; letter-spacing:2px; color:rgba(140,154,173,0.10);
+    pointer-events:none; z-index:1; user-select:none;
+  }
   .replay-legend{display:flex; gap:14px; font-size:11px; color:var(--text-dim); margin-top:6px;}
   .replay-legend span{display:inline-flex; align-items:center; gap:4px;}
   .replay-legend .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
@@ -159,9 +164,22 @@
   .replay-btn.play{background:var(--bull-dim); color:var(--bull); border-color:var(--bull); font-weight:700;}
   .replay-scrub{width:100%; margin-top:10px; -webkit-appearance:none; height:4px; border-radius:2px; background:var(--border); outline:none;}
   .replay-scrub::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--amber); cursor:pointer;}
-  .replay-meta{font-size:11px; color:var(--text-dim); text-align:center; margin-top:4px; font-family:var(--mono);}
+  .replay-meta{font-size:11.5px; color:var(--text); text-align:center; margin-top:8px; font-family:var(--mono); background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:8px; font-weight:600;}
   .replay-btn.empty-note{background:none; border:none; color:var(--text-dim); font-size:12px; cursor:default; flex:none; width:100%; padding:20px 0; text-align:center;}
   .replay-link{background:none; border:none; color:var(--amber); font-family:var(--sans); font-size:12.5px; font-weight:700; padding:8px 6px; cursor:pointer; min-height:36px; touch-action:manipulation;}
+
+  /* Visible "pressed" feedback on every tappable element — without this,
+     nothing visibly reacts to a tap since tap-highlight is disabled globally. */
+  button, .pill, .tf-btn, .strat-opt, .replay-link, .modal-close,
+  .navbar .item, .shot-box, .close-x {
+    transition: transform 0.08s ease, filter 0.08s ease, opacity 0.08s ease;
+  }
+  button:active, .pill:active, .tf-btn:active, .strat-opt:active, .replay-link:active,
+  .modal-close:active, .navbar .item:active, .shot-box:active, .close-x:active {
+    transform: scale(0.94);
+    filter: brightness(1.35);
+    opacity: 0.9;
+  }
 
   .trade-card{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;}
   .trade-card .tc-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
@@ -365,7 +383,8 @@
         <div class="modal-close" onclick="closeReplay()">✕</div>
       </div>
       <div class="pill-row" id="replayTfRow"></div>
-      <div class="replay-canvas-wrap">
+      <div class="replay-canvas-wrap" style="position:relative;">
+        <div class="replay-watermark">REPLAY</div>
         <div id="replayChartContainer" style="width:100%; height:340px;"></div>
       </div>
       <div class="replay-legend">
@@ -375,9 +394,10 @@
       <div class="replay-meta" id="replayMeta">–</div>
       <input type="range" class="replay-scrub" id="replayScrub" min="0" max="0" value="0" oninput="replayScrubTo(this.value)">
       <div class="replay-controls">
-        <div class="replay-btn" onclick="replayStep(-1)">◀ Step</div>
+        <div class="replay-btn" onclick="replayGoToStart()">⏮</div>
+        <div class="replay-btn" onclick="replayStep(-1)">◀</div>
         <div class="replay-btn play" id="replayPlayBtn" onclick="replayToggle()">▶ Play</div>
-        <div class="replay-btn" onclick="replayStep(1)">Step ▶</div>
+        <div class="replay-btn" onclick="replayStep(1)">▶</div>
       </div>
       <div class="pill-row" id="replaySpeedRow" style="margin-top:8px;"></div>
     </div>
@@ -622,6 +642,12 @@ function replayPause(){
   if(replayTimer){ clearInterval(replayTimer); replayTimer = null; }
   const btn = document.getElementById('replayPlayBtn');
   if(btn) btn.textContent = '▶ Play';
+}
+function replayGoToStart(){
+  replayPause();
+  replayRevealCount = 0;
+  document.getElementById('replayScrub').value = 0;
+  updateReplayChart();
 }
 function replayStep(dir){
   replayPause();
