@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Strat Journal</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B0F14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Strat Journal">
+<link rel="apple-touch-icon" href="icon-180.png">
 <style>
   :root{
     --bg: #0B0F14;
@@ -147,11 +153,23 @@
   .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
   .modal-head .t{font-weight:800; font-size:15px;}
   .modal-close{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); border-radius:50%; width:28px; height:28px; text-align:center; line-height:26px; cursor:pointer; font-size:14px;}
-  .replay-canvas-wrap{background:#070A0F; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px;}
+  .replay-canvas-wrap{background:#070A0F; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px; position:relative;}
   .replay-watermark{
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-20deg);
     font-size:34px; font-weight:800; letter-spacing:2px; color:rgba(140,154,173,0.10);
     pointer-events:none; z-index:1; user-select:none;
+  }
+  .modal-box.fs{
+    max-width:100vw; width:100vw; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh;
+    border-radius:0; display:flex; flex-direction:column; padding:10px 10px calc(10px + env(safe-area-inset-bottom));
+    overflow:hidden;
+  }
+  .modal-box.fs .replay-canvas-wrap{flex:1; min-height:0; margin-top:6px;}
+  .modal-box.fs #replayChartContainer{width:100%; height:100%;}
+  .replay-ohlc-overlay{
+    position:absolute; top:8px; left:8px; z-index:2; pointer-events:none;
+    background:rgba(11,15,20,0.75); border:1px solid var(--border); border-radius:6px;
+    padding:6px 9px; font-family:var(--mono); font-size:11.5px; color:var(--text); line-height:1.5; white-space:nowrap;
   }
   .replay-legend{display:flex; gap:14px; font-size:11px; color:var(--text-dim); margin-top:6px;}
   .replay-legend span{display:inline-flex; align-items:center; gap:4px;}
@@ -377,21 +395,21 @@
 
   <!-- BAR REPLAY MODAL -->
   <div class="modal-overlay" id="replayModal">
-    <div class="modal-box">
+    <div class="modal-box fs">
       <div class="modal-head">
         <div class="t" id="replayTitle">Trade Replay</div>
         <div class="modal-close" onclick="closeReplay()">✕</div>
       </div>
       <div class="pill-row" id="replayTfRow"></div>
-      <div class="replay-canvas-wrap" style="position:relative;">
+      <div class="replay-canvas-wrap" id="replayCanvasWrap">
         <div class="replay-watermark">REPLAY</div>
-        <div id="replayChartContainer" style="width:100%; height:340px;"></div>
+        <div class="replay-ohlc-overlay" id="replayOhlcOverlay">–</div>
+        <div id="replayChartContainer"></div>
       </div>
       <div class="replay-legend">
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
         <span><span class="dot" style="background:var(--bear);"></span>Exit</span>
       </div>
-      <div class="replay-meta" id="replayMeta">–</div>
       <input type="range" class="replay-scrub" id="replayScrub" min="0" max="0" value="0" oninput="replayScrubTo(this.value)">
       <div class="replay-controls">
         <div class="replay-btn" onclick="replayGoToStart()">⏮</div>
@@ -565,7 +583,7 @@ function ensureReplayChart(){
   if(replayChart) return;
   const container = document.getElementById('replayChartContainer');
   replayChart = LightweightCharts.createChart(container, {
-    width: container.clientWidth, height: 340,
+    width: container.clientWidth, height: container.clientHeight,
     layout: { background: { color: '#070A0F' }, textColor: '#8C9AAD' },
     grid: { vertLines: { color: '#182130' }, horzLines: { color: '#182130' } },
     timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#24303F' },
@@ -576,9 +594,18 @@ function ensureReplayChart(){
     upColor: '#2FBF71', downColor: '#E5484D', borderVisible: false,
     wickUpColor: '#2FBF71', wickDownColor: '#E5484D',
   });
-  window.addEventListener('resize', ()=>{
-    if(replayChart) replayChart.applyOptions({ width: container.clientWidth });
-  });
+  const doResize = ()=>{
+    if(!replayChart) return;
+    // A brief delay lets iOS Safari finish reflowing the layout after a
+    // rotation before we measure the container — reading clientWidth/Height
+    // immediately on orientationchange sometimes still returns the old values.
+    setTimeout(()=>{
+      replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+      replayChart.timeScale().fitContent();
+    }, 120);
+  };
+  window.addEventListener('resize', doResize);
+  window.addEventListener('orientationchange', doResize);
 }
 function openReplay(trade){
   if(!trade.replayData || !trade.replayData.candles || !trade.replayData.candles.length){
@@ -588,13 +615,15 @@ function openReplay(trade){
   replayRaw = trade.replayData;
   document.getElementById('replayTitle').textContent = `${trade.ticker} · ${trade.entryDate||''}`;
   document.getElementById('replayModal').classList.add('show');
-  ensureReplayChart(); // must run AFTER the modal is visible, so the container has a real width
+  document.body.style.overflow = 'hidden'; // lock background scroll while fullscreen
+  ensureReplayChart(); // must run AFTER the modal is visible, so the container has real dimensions
   buildReplaySpeedRow();
   setReplayTimeframe(1);
 }
 function closeReplay(){
   replayPause();
   document.getElementById('replayModal').classList.remove('show');
+  document.body.style.overflow = '';
 }
 function buildReplayTfRow(){
   const row = document.getElementById('replayTfRow');
@@ -676,11 +705,17 @@ function updateReplayChart(){
   replaySeries.setMarkers(markers);
   replayChart.timeScale().fitContent();
 
-  const el = document.getElementById('replayMeta');
+  const el = document.getElementById('replayOhlcOverlay');
   if(!visible.length){ el.textContent = '–'; return; }
   const shown = visible[visible.length-1];
   const d = new Date(shown.datetime);
-  el.textContent = `${replayRevealCount}/${replayAggregated.length} candles · ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} · O ${shown.open.toFixed(2)} H ${shown.high.toFixed(2)} L ${shown.low.toFixed(2)} C ${shown.close.toFixed(2)}`;
+  const dateStr = d.toLocaleDateString([], {month:'short', day:'numeric'});
+  const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  el.innerHTML = `${dateStr} ${timeStr} · bar ${replayRevealCount}/${replayAggregated.length}<br>`+
+    `O <span style="color:var(--text-dim);">${shown.open.toFixed(2)}</span> `+
+    `H <span style="color:var(--bull);">${shown.high.toFixed(2)}</span> `+
+    `L <span style="color:var(--bear);">${shown.low.toFixed(2)}</span> `+
+    `C <span style="color:${shown.close>=shown.open?'var(--bull)':'var(--bear)'};">${shown.close.toFixed(2)}</span>`;
 }
 
 // ---- Edit / Delete saved trades ----
