@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Strat Journal">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" href="icon-180.png?v=2">
 <style>
   :root{
     --bg: #0B0F14;
@@ -584,10 +584,10 @@ function ensureReplayChart(){
   const container = document.getElementById('replayChartContainer');
   replayChart = LightweightCharts.createChart(container, {
     width: container.clientWidth, height: container.clientHeight,
-    layout: { background: { color: '#070A0F' }, textColor: '#8C9AAD' },
+    layout: { background: { color: '#070A0F' }, textColor: '#A8B6C6', fontSize: 13 },
     grid: { vertLines: { color: '#182130' }, horzLines: { color: '#182130' } },
-    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#24303F' },
-    rightPriceScale: { borderColor: '#24303F' },
+    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true, ticksVisible: true },
+    rightPriceScale: { borderColor: '#3A4A5E' },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
   });
   replaySeries = replayChart.addCandlestickSeries({
