@@ -171,6 +171,12 @@
     background:rgba(11,15,20,0.75); border:1px solid var(--border); border-radius:6px;
     padding:6px 9px; font-family:var(--mono); font-size:11.5px; color:var(--text); line-height:1.5; white-space:nowrap;
   }
+  .replay-time-banner{
+    position:absolute; left:0; right:0; bottom:0; height:26px; z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 10px; background:rgba(11,15,20,0.92); border-top:1px solid var(--border);
+    font-family:var(--mono); font-size:10.5px; color:var(--text-dim); pointer-events:none;
+  }
   .replay-legend{display:flex; gap:14px; font-size:11px; color:var(--text-dim); margin-top:6px;}
   .replay-legend span{display:inline-flex; align-items:center; gap:4px;}
   .replay-legend .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
@@ -405,6 +411,7 @@
         <div class="replay-watermark">REPLAY</div>
         <div class="replay-ohlc-overlay" id="replayOhlcOverlay">–</div>
         <div id="replayChartContainer"></div>
+        <div class="replay-time-banner" id="replayTimeBanner"></div>
       </div>
       <div class="replay-legend">
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
@@ -582,8 +589,9 @@ function toChartFormat(candles){
 function ensureReplayChart(){
   if(replayChart) return;
   const container = document.getElementById('replayChartContainer');
+  const BANNER_H = 26; // must match .replay-time-banner height in CSS
   replayChart = LightweightCharts.createChart(container, {
-    width: container.clientWidth, height: container.clientHeight,
+    width: container.clientWidth, height: Math.max(50, container.clientHeight - BANNER_H),
     layout: { background: { color: '#070A0F' }, textColor: '#A8B6C6', fontSize: 13 },
     grid: { vertLines: { color: '#182130' }, horzLines: { color: '#182130' } },
     timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true, ticksVisible: true },
@@ -600,7 +608,7 @@ function ensureReplayChart(){
     // rotation before we measure the container — reading clientWidth/Height
     // immediately on orientationchange sometimes still returns the old values.
     setTimeout(()=>{
-      replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+      replayChart.applyOptions({ width: container.clientWidth, height: Math.max(50, container.clientHeight - BANNER_H) });
       replayChart.timeScale().fitContent();
     }, 120);
   };
@@ -706,7 +714,7 @@ function updateReplayChart(){
   replayChart.timeScale().fitContent();
 
   const el = document.getElementById('replayOhlcOverlay');
-  if(!visible.length){ el.textContent = '–'; return; }
+  if(!visible.length){ el.textContent = '–'; document.getElementById('replayTimeBanner').innerHTML = ''; return; }
   const shown = visible[visible.length-1];
   const d = new Date(shown.datetime);
   const dateStr = d.toLocaleDateString([], {month:'short', day:'numeric'});
@@ -716,6 +724,25 @@ function updateReplayChart(){
     `H <span style="color:var(--bull);">${shown.high.toFixed(2)}</span> `+
     `L <span style="color:var(--bear);">${shown.low.toFixed(2)}</span> `+
     `C <span style="color:${shown.close>=shown.open?'var(--bull)':'var(--bear)'};">${shown.close.toFixed(2)}</span>`;
+
+  // Custom time banner — built independently of the chart library's own
+  // axis (which wasn't reliably rendering in fullscreen), so the date/time
+  // strip along the bottom is always guaranteed to show. Picks ~5 evenly
+  // spaced candles from what's currently visible and labels each with
+  // time-of-day, or date if the visible range spans multiple days.
+  const banner = document.getElementById('replayTimeBanner');
+  const n = visible.length;
+  const labelCount = Math.min(5, n);
+  const spansMultipleDays = n>1 && new Date(visible[0].datetime).toDateString() !== new Date(visible[n-1].datetime).toDateString();
+  let labels = [];
+  for(let i=0;i<labelCount;i++){
+    const idx = labelCount===1 ? n-1 : Math.round(i * (n-1) / (labelCount-1));
+    const dt = new Date(visible[idx].datetime);
+    labels.push(spansMultipleDays
+      ? dt.toLocaleDateString([], {month:'short', day:'numeric'})
+      : dt.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}));
+  }
+  banner.innerHTML = labels.map(l=>`<span>${l}</span>`).join('');
 }
 
 // ---- Edit / Delete saved trades ----
