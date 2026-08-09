@@ -154,11 +154,6 @@
   .modal-head .t{font-weight:800; font-size:15px;}
   .modal-close{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); border-radius:50%; width:28px; height:28px; text-align:center; line-height:26px; cursor:pointer; font-size:14px;}
   .replay-canvas-wrap{background:#070A0F; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px; position:relative;}
-  .replay-watermark{
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-20deg);
-    font-size:34px; font-weight:800; letter-spacing:2px; color:rgba(140,154,173,0.10);
-    pointer-events:none; z-index:1; user-select:none;
-  }
   .modal-box.fs{
     max-width:100vw; width:100vw; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh;
     border-radius:0; display:flex; flex-direction:column; padding:10px 10px calc(10px + env(safe-area-inset-bottom));
@@ -167,17 +162,9 @@
   .modal-box.fs .replay-canvas-wrap{flex:1; min-height:0; margin-top:6px;}
   .modal-box.fs #replayChartContainer{width:100%; height:100%;}
   .replay-ohlc-overlay{
-    position:absolute; top:8px; left:8px; z-index:2; pointer-events:none;
-    background:rgba(11,15,20,0.75); border:1px solid var(--border); border-radius:6px;
-    padding:6px 9px; font-family:var(--mono); font-size:11.5px; color:var(--text); line-height:1.5; white-space:nowrap;
-  }
-  .replay-time-banner{
-    position:absolute; left:0; right:0; bottom:0; height:26px; z-index:2;
-    background:rgba(11,15,20,0.92); border-top:1px solid var(--border); overflow:hidden;
-    font-family:var(--mono); font-size:10.5px; color:var(--text-dim); pointer-events:none;
-  }
-  .replay-time-banner span{
-    position:absolute; top:50%; transform:translate(-50%,-50%); white-space:nowrap;
+    position:absolute; top:6px; left:6px; z-index:2; pointer-events:none;
+    background:rgba(11,15,20,0.72); border:1px solid var(--border); border-radius:5px;
+    padding:4px 7px; font-family:var(--mono); font-size:10.5px; color:var(--text); line-height:1.4; white-space:nowrap;
   }
   .replay-legend{display:flex; gap:14px; font-size:11px; color:var(--text-dim); margin-top:6px;}
   .replay-legend span{display:inline-flex; align-items:center; gap:4px;}
@@ -413,10 +400,8 @@
       </div>
       <div class="pill-row" id="replayTfRow"></div>
       <div class="replay-canvas-wrap" id="replayCanvasWrap">
-        <div class="replay-watermark">REPLAY</div>
         <div class="replay-ohlc-overlay" id="replayOhlcOverlay">–</div>
         <div id="replayChartContainer"></div>
-        <div class="replay-time-banner" id="replayTimeBanner"></div>
       </div>
       <div class="replay-legend">
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
@@ -558,7 +543,7 @@ let replayRevealCount = 0;   // how many candles are currently shown (for the pl
 let replayTimer = null;
 let replayChart = null;
 let replaySeries = null;
-let replayLastFormatted = []; // last candle set passed to the chart, reused by updateReplayTimeBanner on pan/zoom
+
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
 // mirrors the backend's aggregateCandles logic but also carries high/low
@@ -595,12 +580,11 @@ function toChartFormat(candles){
 function ensureReplayChart(){
   if(replayChart) return;
   const container = document.getElementById('replayChartContainer');
-  const BANNER_H = 26; // must match .replay-time-banner height in CSS
   replayChart = LightweightCharts.createChart(container, {
-    width: container.clientWidth, height: Math.max(50, container.clientHeight - BANNER_H),
-    layout: { background: { color: '#070A0F' }, textColor: '#A8B6C6', fontSize: 13 },
-    grid: { vertLines: { color: '#182130' }, horzLines: { color: '#182130' } },
-    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true, ticksVisible: true },
+    width: container.clientWidth, height: container.clientHeight,
+    layout: { background: { color: '#070A0F' }, textColor: '#A8B6C6', fontSize: 12 },
+    grid: { vertLines: { color: '#131a24' }, horzLines: { color: '#131a24' } },
+    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true, ticksVisible: true, rightOffset: 6 },
     rightPriceScale: { borderColor: '#3A4A5E' },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
   });
@@ -608,17 +592,19 @@ function ensureReplayChart(){
     upColor: '#2FBF71', downColor: '#E5484D', borderVisible: false,
     wickUpColor: '#2FBF71', wickDownColor: '#E5484D',
   });
-  // Keep the time banner aligned whenever the visible range changes for
-  // any reason — a pinch-zoom or pan gesture moves candles without going
-  // through updateReplayChart(), so it needs its own listener too.
-  replayChart.timeScale().subscribeVisibleLogicalRangeChange(()=>{ updateReplayTimeBanner(); });
+  // There used to be a second, hand-built row of time labels drawn
+  // underneath the chart, on top of the chart library's own built-in time
+  // labels (timeVisible:true above already draws these correctly on its
+  // own). Having both was the cause of two mismatched time rows (one in
+  // 24-hour format, one in 12-hour format) stacked on top of each other.
+  // Removed the duplicate rather than trying to keep them in sync.
   const doResize = ()=>{
     if(!replayChart) return;
     // A brief delay lets iOS Safari finish reflowing the layout after a
     // rotation before we measure the container — reading clientWidth/Height
     // immediately on orientationchange sometimes still returns the old values.
     setTimeout(()=>{
-      replayChart.applyOptions({ width: container.clientWidth, height: Math.max(50, container.clientHeight - BANNER_H) });
+      replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
       replayChart.timeScale().fitContent();
     }, 120);
   };
@@ -715,16 +701,16 @@ function updateReplayChart(){
 
   const markers = [];
   if(replayEntryIdx!=null && replayEntryIdx < replayRevealCount && formatted[replayEntryIdx]){
-    markers.push({ time: formatted[replayEntryIdx].time, position: 'belowBar', color: '#2FBF71', shape: 'arrowUp', text: 'ENTRY' });
+    markers.push({ time: formatted[replayEntryIdx].time, position: 'belowBar', color: '#2FBF71', shape: 'arrowUp', text: 'IN' });
   }
   if(replayExitIdx!=null && replayExitIdx < replayRevealCount && formatted[replayExitIdx]){
-    markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', text: 'EXIT' });
+    markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', text: 'OUT' });
   }
   replaySeries.setMarkers(markers);
   replayChart.timeScale().fitContent();
 
   const el = document.getElementById('replayOhlcOverlay');
-  if(!visible.length){ el.textContent = '–'; document.getElementById('replayTimeBanner').innerHTML = ''; replayLastFormatted = []; return; }
+  if(!visible.length){ el.textContent = '–'; return; }
   const shown = visible[visible.length-1];
   const d = new Date(shown.datetime);
   const dateStr = d.toLocaleDateString([], {month:'short', day:'numeric'});
@@ -734,46 +720,6 @@ function updateReplayChart(){
     `H <span style="color:var(--bull);">${shown.high.toFixed(2)}</span> `+
     `L <span style="color:var(--bear);">${shown.low.toFixed(2)}</span> `+
     `C <span style="color:${shown.close>=shown.open?'var(--bull)':'var(--bear)'};">${shown.close.toFixed(2)}</span>`;
-
-  // formatted[i].time (unix seconds) maps 1:1 with visible[i].datetime, so
-  // this is what the banner's coordinate lookup uses to find each label's
-  // real on-screen candle.
-  replayLastFormatted = formatted;
-  updateReplayTimeBanner();
-}
-// Positions each time label at the exact pixel x-coordinate of its real
-// candle using the chart's own timeToCoordinate() — this is what keeps it
-// genuinely aligned under the right bar, including while zoomed/panned,
-// rather than just spreading labels evenly across the container width
-// (which breaks because the price scale on the right eats into the
-// actual plot width).
-function updateReplayTimeBanner(){
-  const banner = document.getElementById('replayTimeBanner');
-  if(!banner || !replayChart) return;
-  const formatted = replayLastFormatted || [];
-  if(!formatted.length){ banner.innerHTML = ''; return; }
-  const n = formatted.length;
-  const spansMultipleDays = n>1 && new Date(formatted[0].time*1000).toDateString() !== new Date(formatted[n-1].time*1000).toDateString();
-  const labelCount = Math.min(6, n);
-  const ts = replayChart.timeScale();
-  const bannerWidth = banner.clientWidth;
-  let html = '';
-  let lastRight = -Infinity;
-  for(let i=0;i<labelCount;i++){
-    const idx = labelCount===1 ? n-1 : Math.round(i * (n-1) / (labelCount-1));
-    const bar = formatted[idx];
-    const x = ts.timeToCoordinate(bar.time);
-    if(x==null || x<0 || x>bannerWidth) continue; // off-screen (panned/zoomed away) — skip rather than mislabel
-    const dt = new Date(bar.time*1000);
-    const label = spansMultipleDays
-      ? dt.toLocaleDateString([], {month:'short', day:'numeric'})
-      : dt.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
-    const approxHalfWidth = label.length * 3.3; // avoid overlapping neighboring labels when candles are tightly packed
-    if(x - approxHalfWidth < lastRight) continue;
-    lastRight = x + approxHalfWidth;
-    html += `<span style="left:${x}px;">${label}</span>`;
-  }
-  banner.innerHTML = html;
 }
 
 // ---- Edit / Delete saved trades ----
