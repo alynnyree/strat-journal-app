@@ -399,6 +399,7 @@
         <div class="modal-close" onclick="closeReplay()">✕</div>
       </div>
       <div class="pill-row" id="replayTfRow"></div>
+      <div class="pill-row" id="replayDrawRow" style="margin-top:6px;"></div>
       <div class="replay-canvas-wrap" id="replayCanvasWrap">
         <div class="replay-ohlc-overlay" id="replayOhlcOverlay">–</div>
         <div id="replayChartContainer"></div>
@@ -546,6 +547,9 @@ let replaySeries = null;
 let replayVolumeSeries = null;
 let replayCandleByTime = new Map(); // time -> candle, rebuilt each frame, used to look up whatever candle the crosshair is over
 let replayLastVisibleCandle = null; // the newest revealed candle — what the info box reverts to when the crosshair isn't active
+let replayDrawMode = null; // null | 'trend' | 'hline' — which tool is currently active
+let replayPendingPoint = null; // first tap of a 2-tap trendline, waiting on the second tap
+let replayDrawings = []; // handles for everything currently drawn on the chart, so Clear can remove them all
 
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
@@ -619,6 +623,39 @@ function ensureReplayChart(){
       renderReplayOhlc(replayLastVisibleCandle, true);
     }
   });
+  // Handles taps while a drawing tool is active (see setReplayDrawMode).
+  // Does nothing when no tool is selected, so normal pan/zoom/crosshair
+  // behavior is untouched the rest of the time.
+  replayChart.subscribeClick((param) => {
+    if (!replayDrawMode || !param || !param.time || !param.point) return;
+    const price = replaySeries.coordinateToPrice(param.point.y);
+    if (price == null) return;
+
+    if (replayDrawMode === 'hline') {
+      const line = replaySeries.createPriceLine({
+        price, color: '#F2B94A', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true, title: price.toFixed(2),
+      });
+      replayDrawings.push({ type: 'hline', handle: line });
+      return;
+    }
+
+    if (replayDrawMode === 'trend') {
+      if (!replayPendingPoint) {
+        // First tap — remember it and wait for the second.
+        replayPendingPoint = { time: param.time, price };
+        return;
+      }
+      // Second tap — draw the line connecting both points.
+      const trendSeries = replayChart.addLineSeries({
+        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+      });
+      const points = [replayPendingPoint, { time: param.time, price }].sort((a,b)=> a.time - b.time);
+      trendSeries.setData(points);
+      replayDrawings.push({ type: 'trend', handle: trendSeries });
+      replayPendingPoint = null;
+    }
+  });
   // There used to be a second, hand-built row of time labels drawn
   // underneath the chart, on top of the chart library's own built-in time
   // labels (timeVisible:true above already draws these correctly on its
@@ -648,17 +685,50 @@ function openReplay(trade){
   document.getElementById('replayModal').classList.add('show');
   document.body.style.overflow = 'hidden'; // lock background scroll while fullscreen
   ensureReplayChart(); // must run AFTER the modal is visible, so the container has real dimensions
+  // The chart/series objects persist across different trades (ensureReplayChart
+  // only builds them once) — so a fresh trade needs any previous trade's
+  // drawings actually removed from the chart, not just the tracking list reset.
+  clearReplayDrawings();
+  replayDrawMode = null;
+  buildReplayDrawRow();
   buildReplaySpeedRow();
   setReplayTimeframe(1);
 }
 function closeReplay(){
   replayPause();
+  replayDrawMode = null;
+  replayPendingPoint = null;
   document.getElementById('replayModal').classList.remove('show');
   document.body.style.overflow = '';
 }
 function buildReplayTfRow(){
   const row = document.getElementById('replayTfRow');
   row.innerHTML = REPLAY_TIMEFRAMES.map(tf=>`<div class="pill ${tf===replayTf?'sel':''}" onclick="setReplayTimeframe(${tf})">${tf}m</div>`).join('');
+}
+function buildReplayDrawRow(){
+  const row = document.getElementById('replayDrawRow');
+  const trendLabel = replayDrawMode==='trend' ? (replayPendingPoint ? 'Trend (tap 2nd point)' : 'Trend ✓') : 'Trend Line';
+  row.innerHTML =
+    `<div class="pill ${replayDrawMode==='trend'?'sel':''}" onclick="setReplayDrawMode('trend')">${trendLabel}</div>`+
+    `<div class="pill ${replayDrawMode==='hline'?'sel':''}" onclick="setReplayDrawMode('hline')">H-Line ✓</div>`+
+    `<div class="pill" onclick="clearReplayDrawings()">Clear</div>`;
+}
+// Cycles a tool on/off — tapping the already-active tool turns drawing
+// mode off again, same as tapping a selected timeframe pill wouldn't
+// un-select it, but here it makes sense since you're toggling "am I
+// drawing right now" rather than picking one of a fixed set.
+function setReplayDrawMode(mode){
+  replayDrawMode = (replayDrawMode === mode) ? null : mode;
+  replayPendingPoint = null; // starting/stopping a tool cancels any half-finished trendline
+  buildReplayDrawRow();
+}
+function clearReplayDrawings(){
+  replayDrawings.forEach(d=>{
+    if(d.type==='hline') replaySeries.removePriceLine(d.handle);
+    if(d.type==='trend') replayChart.removeSeries(d.handle);
+  });
+  replayDrawings = [];
+  replayPendingPoint = null;
 }
 function buildReplaySpeedRow(){
   const row = document.getElementById('replaySpeedRow');
