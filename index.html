@@ -543,6 +543,7 @@ let replayRevealCount = 0;   // how many candles are currently shown (for the pl
 let replayTimer = null;
 let replayChart = null;
 let replaySeries = null;
+let replayVolumeSeries = null;
 
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
@@ -591,6 +592,17 @@ function ensureReplayChart(){
   replaySeries = replayChart.addCandlestickSeries({
     upColor: '#2FBF71', downColor: '#E5484D', borderVisible: false,
     wickUpColor: '#2FBF71', wickDownColor: '#E5484D',
+  });
+  // Volume bars, squeezed into the bottom ~18% of the chart via
+  // scaleMargins rather than a separate chart — this is the same
+  // approach TradingView itself uses so the volume pane shares the
+  // same time axis as the candles above it instead of needing its own.
+  replayVolumeSeries = replayChart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'replay-volume',
+  });
+  replayChart.priceScale('replay-volume').applyOptions({
+    scaleMargins: { top: 0.82, bottom: 0 },
   });
   // There used to be a second, hand-built row of time labels drawn
   // underneath the chart, on top of the chart library's own built-in time
@@ -699,12 +711,24 @@ function updateReplayChart(){
   const formatted = toChartFormat(visible);
   replaySeries.setData(formatted);
 
+  // Volume bars, colored to match the candle they belong to (matched by
+  // array position — toChartFormat() preserves order 1:1 with `visible`).
+  const volData = formatted.map((f,i)=>({
+    time: f.time,
+    value: visible[i].volume || 0,
+    color: f.close >= f.open ? 'rgba(47,191,113,0.45)' : 'rgba(229,72,77,0.45)'
+  }));
+  replayVolumeSeries.setData(volData);
+
+  // Small, subtle triangles instead of big arrows + text — the Entry/Exit
+  // legend under the chart already explains the colors, so the markers
+  // themselves don't need to repeat "IN"/"OUT" in large text.
   const markers = [];
   if(replayEntryIdx!=null && replayEntryIdx < replayRevealCount && formatted[replayEntryIdx]){
-    markers.push({ time: formatted[replayEntryIdx].time, position: 'belowBar', color: '#2FBF71', shape: 'arrowUp', text: 'IN' });
+    markers.push({ time: formatted[replayEntryIdx].time, position: 'belowBar', color: '#2FBF71', shape: 'arrowUp', size: 0.6 });
   }
   if(replayExitIdx!=null && replayExitIdx < replayRevealCount && formatted[replayExitIdx]){
-    markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', text: 'OUT' });
+    markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', size: 0.6 });
   }
   replaySeries.setMarkers(markers);
   replayChart.timeScale().fitContent();
