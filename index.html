@@ -867,6 +867,11 @@ function saveTrade(){
   const ftfcRunData = computeFtfcRun(currentTf);
   const best = ftfcRunData.runLength;
   const ftfcConfirmed = ftfcRunData.confirmed;
+  // Realized R:R uses the UNDERLYING's move (not the option premium), since
+  // the trader's stop is drawn on the underlying's chart, not the option's
+  // price — this keeps R:R tied to the actual risk decision made at entry,
+  // independent of IV crush/theta skewing the option premium's behavior.
+  const realizedRR = calcRealizedRR(dir, undEntry, undExit, stop);
 
   const trade = {
     id: editingTradeId || Date.now(),
@@ -878,7 +883,7 @@ function saveTrade(){
     occ: document.getElementById('f_occ').value.trim(),
     optEntry, optExit, contracts,
     undEntry, undExit, stop,
-    rrPlanned,
+    rrPlanned, realizedRR,
     ftfc: {...currentTf}, ftfcRun: best, ftfcConfirmed,
     ftfcDirection: ftfcRunData.direction, ftfcTimeframesInRun: ftfcRunData.timeframesInRun,
     replayData: currentReplayData,
@@ -919,6 +924,16 @@ function saveTrade(){
 // ---- Rendering ----
 function fmtMoney(n){ const s = n<0?'-':''; return s+'$'+Math.abs(n).toFixed(2); }
 function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
+// Realized R:R computed off the UNDERLYING's actual price move against the
+// stop the trader drew on their chart (not the option premium's move) —
+// see the note above where this is called from saveTrade().
+function calcRealizedRR(dir, undEntry, undExit, stop){
+  if(!undEntry || !undExit || !stop) return null;
+  const risk = Math.abs(undEntry - stop);
+  if(risk === 0) return null; // stop == entry — avoid divide-by-zero, treat as unset
+  const reward = dir === 'Short' ? (undEntry - undExit) : (undExit - undEntry);
+  return reward / risk;
+}
 
 function renderDashboard(){
   const trades = loadTrades();
@@ -1023,6 +1038,7 @@ function renderJournal(){
         <div>Under: ${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}</div>
         <div>Stop: ${t.stop!=null?'$'+t.stop.toFixed(2):'—'}</div>
         <div>R:R Plan: ${t.rrPlanned!=null?t.rrPlanned.toFixed(1):'—'}</div>
+        <div>Realized R:R: ${t.realizedRR!=null?t.realizedRR.toFixed(2)+':1':'—'}</div>
       </div>
       <div class="tc-actions">
         ${t.replayData ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
@@ -1400,8 +1416,8 @@ function exportData(){
 }
 function exportCsvSheet(){
   const trades = loadTrades();
-  const headers = ['EntryDate','EntryTime','ExitDate','ExitTime','Ticker','Strat','FTFC','OCC','OptEntry','OptExit','UnderEntry','UnderExit','Stop','RRPlanned','PnlDollar','PnlPercent','WinLoss','Direction','Notes'];
-  const rows = trades.map(t=>[t.entryDate,t.entryTime,t.exitDate,t.exitTime,t.ticker,t.strat||'Unclassified',t.ftfcConfirmed?'Yes':'No',t.occ,t.optEntry,t.optExit,t.undEntry,t.undExit,t.stop,t.rrPlanned,t.pnlDollar==null?'':t.pnlDollar.toFixed(2),t.pnlPercent==null?'':t.pnlPercent.toFixed(1),t.winLoss,t.dir,(t.notes||'').replace(/,/g,';')]);
+  const headers = ['EntryDate','EntryTime','ExitDate','ExitTime','Ticker','Strat','FTFC','OCC','OptEntry','OptExit','UnderEntry','UnderExit','Stop','RRPlanned','RealizedRR','PnlDollar','PnlPercent','WinLoss','Direction','Notes'];
+  const rows = trades.map(t=>[t.entryDate,t.entryTime,t.exitDate,t.exitTime,t.ticker,t.strat||'Unclassified',t.ftfcConfirmed?'Yes':'No',t.occ,t.optEntry,t.optExit,t.undEntry,t.undExit,t.stop,t.rrPlanned,t.realizedRR==null?'':t.realizedRR.toFixed(2),t.pnlDollar==null?'':t.pnlDollar.toFixed(2),t.pnlPercent==null?'':t.pnlPercent.toFixed(1),t.winLoss,t.dir,(t.notes||'').replace(/,/g,';')]);
   const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
