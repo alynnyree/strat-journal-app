@@ -773,7 +773,17 @@ function renderReplayOhlc(candle, isLatest){
     `O <span style="color:var(--text-dim);">${candle.open.toFixed(2)}</span> `+
     `H <span style="color:var(--bull);">${candle.high.toFixed(2)}</span> `+
     `L <span style="color:var(--bear);">${candle.low.toFixed(2)}</span> `+
-    `C <span style="color:${candle.close>=candle.open?'var(--bull)':'var(--bear)'};">${candle.close.toFixed(2)}</span>`;
+    `C <span style="color:${candle.close>=candle.open?'var(--bull)':'var(--bear)'};">${candle.close.toFixed(2)}</span><br>`+
+    `Vol <span style="color:var(--text-dim);">${formatReplayVolume(candle.volume)}</span>`;
+}
+// Shortens a raw share-volume number the way TradingView does — 1,240,000
+// becomes "1.24M", 45,300 becomes "45.3K" — so it fits the small info box
+// without wrapping or getting truncated.
+function formatReplayVolume(v){
+  v = v || 0;
+  if(v >= 1000000) return (v/1000000).toFixed(2)+'M';
+  if(v >= 1000) return (v/1000).toFixed(1)+'K';
+  return String(v);
 }
 
 // ---- Edit / Delete saved trades ----
