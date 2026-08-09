@@ -544,6 +544,8 @@ let replayTimer = null;
 let replayChart = null;
 let replaySeries = null;
 let replayVolumeSeries = null;
+let replayCandleByTime = new Map(); // time -> candle, rebuilt each frame, used to look up whatever candle the crosshair is over
+let replayLastVisibleCandle = null; // the newest revealed candle — what the info box reverts to when the crosshair isn't active
 
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
@@ -603,6 +605,19 @@ function ensureReplayChart(){
   });
   replayChart.priceScale('replay-volume').applyOptions({
     scaleMargins: { top: 0.82, bottom: 0 },
+  });
+  // Dragging a finger across the chart moves Lightweight Charts' built-in
+  // crosshair line automatically (that's what crosshair:{mode:Normal} in
+  // the chart options above turns on) — this just wires up the price info
+  // box in the corner to follow it, the same way TradingView's does. When
+  // the finger lifts (param.time is empty), it falls back to showing the
+  // newest revealed candle instead of leaving stale numbers on screen.
+  replayChart.subscribeCrosshairMove((param) => {
+    if (param && param.time && replayCandleByTime.has(param.time)) {
+      renderReplayOhlc(replayCandleByTime.get(param.time));
+    } else if (replayLastVisibleCandle) {
+      renderReplayOhlc(replayLastVisibleCandle, true);
+    }
   });
   // There used to be a second, hand-built row of time labels drawn
   // underneath the chart, on top of the chart library's own built-in time
@@ -711,6 +726,12 @@ function updateReplayChart(){
   const formatted = toChartFormat(visible);
   replaySeries.setData(formatted);
 
+  // Rebuilt every frame so the crosshair lookup always matches whatever
+  // candles are currently on screen (the set shown grows during Play, and
+  // resets whenever the timeframe changes).
+  replayCandleByTime = new Map();
+  formatted.forEach((f,i)=>{ replayCandleByTime.set(f.time, visible[i]); });
+
   // Volume bars, colored to match the candle they belong to (matched by
   // array position — toChartFormat() preserves order 1:1 with `visible`).
   const volData = formatted.map((f,i)=>({
@@ -733,17 +754,26 @@ function updateReplayChart(){
   replaySeries.setMarkers(markers);
   replayChart.timeScale().fitContent();
 
+  replayLastVisibleCandle = visible.length ? visible[visible.length-1] : null;
+  renderReplayOhlc(replayLastVisibleCandle);
+}
+// Draws the price info box in the corner for one candle — shared by both
+// the default "latest revealed candle" view and by the crosshair, so
+// dragging your finger across the chart and letting go always shows
+// consistent formatting.
+function renderReplayOhlc(candle, isLatest){
   const el = document.getElementById('replayOhlcOverlay');
-  if(!visible.length){ el.textContent = '–'; return; }
-  const shown = visible[visible.length-1];
-  const d = new Date(shown.datetime);
+  if(!el) return;
+  if(!candle){ el.textContent = '–'; return; }
+  const d = new Date(candle.datetime);
   const dateStr = d.toLocaleDateString([], {month:'short', day:'numeric'});
   const timeStr = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-  el.innerHTML = `${dateStr} ${timeStr} · bar ${replayRevealCount}/${replayAggregated.length}<br>`+
-    `O <span style="color:var(--text-dim);">${shown.open.toFixed(2)}</span> `+
-    `H <span style="color:var(--bull);">${shown.high.toFixed(2)}</span> `+
-    `L <span style="color:var(--bear);">${shown.low.toFixed(2)}</span> `+
-    `C <span style="color:${shown.close>=shown.open?'var(--bull)':'var(--bear)'};">${shown.close.toFixed(2)}</span>`;
+  const barLabel = isLatest ? ` · bar ${replayRevealCount}/${replayAggregated.length}` : '';
+  el.innerHTML = `${dateStr} ${timeStr}${barLabel}<br>`+
+    `O <span style="color:var(--text-dim);">${candle.open.toFixed(2)}</span> `+
+    `H <span style="color:var(--bull);">${candle.high.toFixed(2)}</span> `+
+    `L <span style="color:var(--bear);">${candle.low.toFixed(2)}</span> `+
+    `C <span style="color:${candle.close>=candle.open?'var(--bull)':'var(--bear)'};">${candle.close.toFixed(2)}</span>`;
 }
 
 // ---- Edit / Delete saved trades ----
