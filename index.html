@@ -627,12 +627,12 @@ function ensureReplayChart(){
   // that was just shown — the same timing quirk the resize handler below
   // already works around for actual window resizes. If the chart's
   // initial height was measured wrong, everything sized as a fraction of
-  // that height (the volume pane included) ends up positioned off — this
-  // corrects it shortly after the modal has had a moment to settle.
+  // that height (the volume pane and time-axis strip included) ends up
+  // positioned off — this corrects it shortly after the modal has had a
+  // moment to settle.
   setTimeout(()=>{
-    if(!replayChart) return;
-    replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-    replayChart.timeScale().fitContent();
+    resizeReplayChartToContainer();
+    if(replayChart) replayChart.timeScale().fitContent();
   }, 150);
   // Dragging a finger across the chart moves Lightweight Charts' built-in
   // crosshair line automatically (that's what crosshair:{mode:Normal} in
@@ -664,18 +664,28 @@ function ensureReplayChart(){
   // 24-hour format, one in 12-hour format) stacked on top of each other.
   // Removed the duplicate rather than trying to keep them in sync.
   const doResize = ()=>{
-    if(!replayChart) return;
     // A brief delay lets iOS Safari finish reflowing the layout after a
     // rotation before we measure the container — reading clientWidth/Height
     // immediately on orientationchange sometimes still returns the old values.
-    setTimeout(()=>{
-      replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-      replayChart.timeScale().fitContent();
-    }, 120);
+    setTimeout(resizeReplayChartToContainer, 120);
   };
   window.addEventListener('resize', doResize);
   window.addEventListener('orientationchange', doResize);
   setupReplayDragHandlers(container);
+}
+// Re-measures the chart's actual container and re-applies that size —
+// needed any time something on screen could have changed how much space
+// is actually available: a window resize/rotation, or (just as often
+// missed) our OWN toolbar changing height, like the "Delete Line" button
+// appearing/disappearing when a drawing gets selected. Without re-syncing
+// here too, the chart kept rendering at its old (too-tall) size after the
+// toolbar grew, pushing the bottom of the chart — the volume bars, the
+// time-axis labels — outside the visible clipped area.
+function resizeReplayChartToContainer(){
+  if(!replayChart) return;
+  const container = document.getElementById('replayChartContainer');
+  if(!container) return;
+  replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
 }
 function openReplay(trade){
   if(!trade.replayData || !trade.replayData.candles || !trade.replayData.candles.length){
@@ -721,6 +731,12 @@ function buildReplayDrawRow(){
     `<div class="pill ${replayMagnetOn?'sel':''}" onclick="toggleReplayMagnet()">🧲 Magnet</div>`+
     `<div class="pill" onclick="clearReplayDrawings()">Clear All</div>`+
     (replaySelectedDrawing ? `<div class="pill" style="color:var(--bear); border-color:var(--bear-dim);" onclick="deleteSelectedReplayDrawing()">🗑 Delete Line</div>` : '');
+  // This row can wrap onto an extra line (e.g. when "Delete Line" shows
+  // up), which changes how tall the toolbar is and therefore how much
+  // room is actually left for the chart below it. A tiny delay lets the
+  // browser finish laying out the new row before measuring — measuring
+  // in the same instant as the innerHTML change can still read the old size.
+  setTimeout(resizeReplayChartToContainer, 0);
 }
 function toggleReplayMagnet(){
   replayMagnetOn = !replayMagnetOn;
@@ -1102,6 +1118,12 @@ function setReplayTimeframe(tf){
   document.getElementById('replayScrub').value = replayRevealCount;
   buildReplayTfRow();
   updateReplayChart();
+  // Sets the candle width/zoom ONCE, based on the full revealed set at
+  // this timeframe. Play/scrub no longer re-fits every frame (see
+  // updateReplayChart) — this is the only place it happens, so candles
+  // keep a steady, readable width throughout playback instead of
+  // shrinking as more of them get revealed.
+  replayChart.timeScale().fitContent();
 }
 function setReplaySpeed(s){
   replaySpeed = s;
@@ -1179,7 +1201,13 @@ function updateReplayChart(){
     markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', size: 0.6 });
   }
   replaySeries.setMarkers(markers);
-  replayChart.timeScale().fitContent();
+  // Scrolls to keep the newest revealed candle in view WITHOUT changing
+  // candle width — fitContent() used to run here every frame, which is
+  // what caused candles to keep shrinking as more of them got revealed
+  // during Play (it was re-squeezing the entire revealed history into the
+  // same fixed space every single tick). This just pans forward instead,
+  // the way a real live/replay chart does.
+  replayChart.timeScale().scrollToPosition(0, false);
 
   replayLastVisibleCandle = visible.length ? visible[visible.length-1] : null;
   renderReplayOhlc(replayLastVisibleCandle);
