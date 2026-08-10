@@ -622,6 +622,18 @@ function ensureReplayChart(){
   replayChart.priceScale('replay-volume').applyOptions({
     scaleMargins: { top: 0.82, bottom: 0 },
   });
+  // The very first measurement above (container.clientWidth/clientHeight)
+  // can happen before iOS Safari finishes laying out the fullscreen modal
+  // that was just shown — the same timing quirk the resize handler below
+  // already works around for actual window resizes. If the chart's
+  // initial height was measured wrong, everything sized as a fraction of
+  // that height (the volume pane included) ends up positioned off — this
+  // corrects it shortly after the modal has had a moment to settle.
+  setTimeout(()=>{
+    if(!replayChart) return;
+    replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    replayChart.timeScale().fitContent();
+  }, 150);
   // Dragging a finger across the chart moves Lightweight Charts' built-in
   // crosshair line automatically (that's what crosshair:{mode:Normal} in
   // the chart options above turns on) — this just wires up the price info
