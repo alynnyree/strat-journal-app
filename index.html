@@ -684,6 +684,7 @@ function openReplay(trade){
   replayOpenTradeId = trade.id;
   restoreReplayDrawings(trade);
   replayDrawMode = null;
+  replayChart.applyOptions({ handleScroll: true, handleScale: true }); // in case a previous trade's session left this locked from an active tool
   buildReplayDrawRow();
   buildReplaySpeedRow();
   setReplayTimeframe(1);
@@ -745,6 +746,11 @@ function setReplayDrawMode(mode){
   replayDrawMode = (replayDrawMode === mode) ? null : mode;
   replayPendingPoint = null; // starting/stopping a tool cancels any half-finished trendline
   deselectReplayDrawing();
+  // Pan/zoom stays off for as long as a tool is selected — not just
+  // during a single touch — so the chart can't shift under you at any
+  // point while you're lining up a placement, across as many taps as it
+  // takes. Turns back on the moment you deselect the tool.
+  if(replayChart) replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode });
   buildReplayDrawRow();
 }
 // Finds whichever drawing (if any) sits under a given chart-pixel point —
@@ -972,12 +978,12 @@ function setupReplayDragHandlers(container){
   function onUp(e){
     if(replayDragTarget){
       replayDragTarget = null;
-      replayChart.applyOptions({ handleScroll: true, handleScale: true });
+      replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode });
       persistReplayDrawings();
       gestureStart = null; frozePan = false;
       return;
     }
-    if(frozePan){ replayChart.applyOptions({ handleScroll: true, handleScale: true }); frozePan = false; }
+    if(frozePan){ replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode }); frozePan = false; }
 
     // A genuine tap: pointer went down and came back up without enough
     // movement to count as a pan attempt. Handles both placing a new
