@@ -534,6 +534,14 @@ function clearShot(which){
 // re-aggregated client-side when the user switches timeframes.
 const REPLAY_TIMEFRAMES = [1, 5, 15]; // minutes per candle
 const REPLAY_SPEEDS = [0.5, 1, 2, 4];
+// How far into the future (in seconds) a Horizontal Ray's second point sits.
+// Lightweight Charts has no built-in "extend forever in one direction" line
+// type (that's what price lines DO span the full width both ways, which is
+// the wrong behavior here) — so a ray is built as a 2-point line stretched
+// far enough right that it looks like it goes on forever for any zoom level
+// realistic on a single trade's replay window (60 days, vastly more than
+// any trade's candle span).
+const REPLAY_RAY_EXTENSION_SECONDS = 60 * 24 * 3600;
 let replayRaw = null;        // {candles, entryIndex, exitIndex} - the original 1m data for the open trade
 let replayAggregated = [];   // currently-displayed (possibly aggregated) candle array
 let replayEntryIdx = null;
@@ -646,12 +654,20 @@ function ensureReplayChart(){
     if (price == null) return;
     if (replayMagnetOn) price = snapPriceToCandle(price, replayCandleByTime.get(param.time));
 
-    if (replayDrawMode === 'hline') {
-      const line = replaySeries.createPriceLine({
-        price, color: '#F2B94A', lineWidth: 2,
-        axisLabelVisible: true, title: price.toFixed(2),
+    if (replayDrawMode === 'ray') {
+      // A price line (the old approach) always spans the FULL chart in
+      // both directions — that's a "Horizontal Line," not the "Horizontal
+      // Ray" behavior asked for (start exactly at the tapped point,
+      // extend only forward). Built the same way a trend line is — two
+      // points on their own line series — anchored at the tap and
+      // stretched far to the right.
+      const anchor = { time: param.time, price };
+      const rayEnd = { time: anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price };
+      const raySeries = replayChart.addLineSeries({
+        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
       });
-      replayDrawings.push({ type: 'hline', handle: line, price });
+      raySeries.setData([anchor, rayEnd]);
+      replayDrawings.push({ type: 'ray', handle: raySeries, anchor });
       persistReplayDrawings();
       return;
     }
@@ -732,7 +748,7 @@ function buildReplayDrawRow(){
   const trendLabel = replayDrawMode==='trend' ? (replayPendingPoint ? 'Trend (tap 2nd point)' : 'Trend ✓') : 'Trend Line';
   row.innerHTML =
     `<div class="pill ${replayDrawMode==='trend'?'sel':''}" onclick="setReplayDrawMode('trend')">${trendLabel}</div>`+
-    `<div class="pill ${replayDrawMode==='hline'?'sel':''}" onclick="setReplayDrawMode('hline')">H-Line ✓</div>`+
+    `<div class="pill ${replayDrawMode==='ray'?'sel':''}" onclick="setReplayDrawMode('ray')">H-Ray ✓</div>`+
     `<div class="pill ${replayMagnetOn?'sel':''}" onclick="toggleReplayMagnet()">🧲 Magnet</div>`+
     `<div class="pill" onclick="clearReplayDrawings()">Clear All</div>`+
     (replaySelectedDrawing ? `<div class="pill" style="color:var(--bear); border-color:var(--bear-dim);" onclick="deleteSelectedReplayDrawing()">🗑 Delete Line</div>` : '');
@@ -785,6 +801,13 @@ function findReplayDrawingAt(x, y){
     if(d.type === 'hline'){
       const py = replaySeries.priceToCoordinate(d.price);
       if(py != null && Math.abs(py - y) <= HIT_TOLERANCE) return { drawing: d, part: 'hline' };
+    } else if(d.type === 'ray'){
+      const ax = replayChart.timeScale().timeToCoordinate(d.anchor.time);
+      const ay = replaySeries.priceToCoordinate(d.anchor.price);
+      if(ax!=null && ay!=null && Math.hypot(ax-x, ay-y) <= HIT_TOLERANCE) return { drawing: d, part: 'anchor' };
+      // Grabbing anywhere along the ray's body (to the right of its start)
+      // shifts just its price level, same as grabbing a horizontal line.
+      if(ax!=null && ay!=null && x >= ax - HIT_TOLERANCE && Math.abs(ay - y) <= HIT_TOLERANCE) return { drawing: d, part: 'ray-body' };
     } else if(d.type === 'trend'){
       const x1 = replayChart.timeScale().timeToCoordinate(d.p1.time);
       const y1 = replaySeries.priceToCoordinate(d.p1.price);
@@ -852,14 +875,18 @@ function persistReplayDrawings(){
   const trade = trades.find(t=>String(t.id)===String(replayOpenTradeId));
   if(!trade) return;
   trade.chartDrawings = replayDrawings.map(d=>{
-    if(d.type==='hline') return { type:'hline', price: d.price };
+    if(d.type==='hline') return { type:'hline', price: d.price }; // legacy full-width lines from before this fix
+    if(d.type==='ray') return { type:'ray', anchor: d.anchor };
     return { type:'trend', p1: d.p1, p2: d.p2 };
   });
   saveTrades(trades);
 }
 // Rebuilds saved drawings back onto the chart when a trade's replay is
 // reopened — recreating real price-line/line-series objects from the
-// plain saved data (the reverse of persistReplayDrawings above).
+// plain saved data (the reverse of persistReplayDrawings above). Old
+// trades saved before this fix may still have 'hline' entries (the old
+// full-width style) — those still restore correctly as full-width lines
+// rather than being silently dropped or misdrawn as rays.
 function restoreReplayDrawings(trade){
   const saved = trade.chartDrawings || [];
   saved.forEach(d=>{
@@ -869,6 +896,13 @@ function restoreReplayDrawings(trade){
         axisLabelVisible: true, title: d.price.toFixed(2),
       });
       replayDrawings.push({ type:'hline', handle: line, price: d.price });
+    } else if(d.type==='ray'){
+      const rayEnd = { time: d.anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price: d.anchor.price };
+      const raySeries = replayChart.addLineSeries({
+        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+      });
+      raySeries.setData([d.anchor, rayEnd]);
+      replayDrawings.push({ type:'ray', handle: raySeries, anchor: d.anchor });
     } else if(d.type==='trend'){
       const trendSeries = replayChart.addLineSeries({
         color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
@@ -920,7 +954,36 @@ function setupReplayDragHandlers(container){
       return;
     }
 
-    // Trend line endpoint — needs a valid time position too, not just price.
+    if(part === 'ray-body'){
+      // Dragged from somewhere along the line, not its start dot — shifts
+      // the price level only, same feel as dragging a horizontal line,
+      // while the ray keeps starting at the same candle it was anchored to.
+      if(replayMagnetOn && rawTime!=null){
+        const entry = nearestCandleEntry(rawTime);
+        if(entry) price = snapPriceToCandle(price, entry.candle);
+      }
+      drawing.anchor = { time: drawing.anchor.time, price };
+      const rayEnd = { time: drawing.anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price };
+      drawing.handle.setData([drawing.anchor, rayEnd]);
+      return;
+    }
+
+    if(part === 'anchor'){
+      // Dragged the ray's actual start dot — moves the whole ray to a new
+      // starting candle and/or price.
+      if(rawTime == null) return;
+      let time = rawTime;
+      if(replayMagnetOn){
+        const entry = nearestCandleEntry(rawTime);
+        if(entry){ time = entry.time; price = snapPriceToCandle(price, entry.candle); }
+      }
+      drawing.anchor = { time, price };
+      const rayEnd = { time: time + REPLAY_RAY_EXTENSION_SECONDS, price };
+      drawing.handle.setData([drawing.anchor, rayEnd]);
+      return;
+    }
+
+    // Trend line endpoint (p1/p2) — needs a valid time position too, not just price.
     if(rawTime == null) return;
     let time = rawTime;
     if(replayMagnetOn){
