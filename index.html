@@ -1016,9 +1016,22 @@ function handleReplayTap(x, y){
     return;
   }
 
-  const rawTime = replayChart.timeScale().coordinateToTime(x);
   let price = replaySeries.coordinateToPrice(y);
-  if(rawTime == null || price == null) return;
+  if(price == null) return; // truly outside the chart's plottable area
+
+  let rawTime = replayChart.timeScale().coordinateToTime(x);
+  if(rawTime == null){
+    // Tapped in the empty space beyond the last candle (or before the
+    // first) — coordinateToTime only resolves a time when x falls exactly
+    // within the plotted data, so a tap out there used to silently do
+    // nothing. This is exactly where an H-Ray naturally gets placed
+    // (anchored to recent price, near the right edge), so it's very
+    // likely what was actually happening. Falls back to the nearest edge
+    // candle's time instead of giving up.
+    const allTimes = [...replayCandleByTime.keys()];
+    if(!allTimes.length) return;
+    rawTime = x <= 0 ? Math.min(...allTimes) : Math.max(...allTimes);
+  }
   // Snap the tap onto the nearest actual candle's bar time, not wherever
   // between two bars the finger happened to land — keeps placement feeling
   // intentional even without Magnet on, same as the old click-based system did.
