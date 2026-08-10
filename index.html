@@ -550,6 +550,9 @@ let replayLastVisibleCandle = null; // the newest revealed candle — what the i
 let replayDrawMode = null; // null | 'trend' | 'hline' — which tool is currently active
 let replayPendingPoint = null; // first tap of a 2-tap trendline, waiting on the second tap
 let replayDrawings = []; // handles for everything currently drawn on the chart, so Clear can remove them all
+let replayMagnetOn = false; // when true, new points and drags snap to the nearest candle's O/H/L/C instead of the raw tapped price
+let replayDragTarget = null; // the drawing currently being dragged (and which part of it), or null when nothing's being dragged
+let replayOpenTradeId = null; // which trade's replay is currently open — needed so drawings get saved onto the right trade
 
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
@@ -628,15 +631,17 @@ function ensureReplayChart(){
   // behavior is untouched the rest of the time.
   replayChart.subscribeClick((param) => {
     if (!replayDrawMode || !param || !param.time || !param.point) return;
-    const price = replaySeries.coordinateToPrice(param.point.y);
+    let price = replaySeries.coordinateToPrice(param.point.y);
     if (price == null) return;
+    if (replayMagnetOn) price = snapPriceToCandle(price, replayCandleByTime.get(param.time));
 
     if (replayDrawMode === 'hline') {
       const line = replaySeries.createPriceLine({
         price, color: '#F2B94A', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true, title: price.toFixed(2),
       });
-      replayDrawings.push({ type: 'hline', handle: line });
+      replayDrawings.push({ type: 'hline', handle: line, price });
+      persistReplayDrawings();
       return;
     }
 
@@ -652,8 +657,9 @@ function ensureReplayChart(){
       });
       const points = [replayPendingPoint, { time: param.time, price }].sort((a,b)=> a.time - b.time);
       trendSeries.setData(points);
-      replayDrawings.push({ type: 'trend', handle: trendSeries });
+      replayDrawings.push({ type: 'trend', handle: trendSeries, p1: points[0], p2: points[1] });
       replayPendingPoint = null;
+      persistReplayDrawings();
     }
   });
   // There used to be a second, hand-built row of time labels drawn
@@ -674,6 +680,7 @@ function ensureReplayChart(){
   };
   window.addEventListener('resize', doResize);
   window.addEventListener('orientationchange', doResize);
+  setupReplayDragHandlers(container);
 }
 function openReplay(trade){
   if(!trade.replayData || !trade.replayData.candles || !trade.replayData.candles.length){
@@ -687,8 +694,12 @@ function openReplay(trade){
   ensureReplayChart(); // must run AFTER the modal is visible, so the container has real dimensions
   // The chart/series objects persist across different trades (ensureReplayChart
   // only builds them once) — so a fresh trade needs any previous trade's
-  // drawings actually removed from the chart, not just the tracking list reset.
-  clearReplayDrawings();
+  // drawings actually removed from the chart. Uses the non-saving clear
+  // here since this is a visual reset, not the user asking to delete the
+  // PREVIOUS trade's saved lines.
+  clearReplayDrawingsFromChart();
+  replayOpenTradeId = trade.id;
+  restoreReplayDrawings(trade);
   replayDrawMode = null;
   buildReplayDrawRow();
   buildReplaySpeedRow();
@@ -711,7 +722,36 @@ function buildReplayDrawRow(){
   row.innerHTML =
     `<div class="pill ${replayDrawMode==='trend'?'sel':''}" onclick="setReplayDrawMode('trend')">${trendLabel}</div>`+
     `<div class="pill ${replayDrawMode==='hline'?'sel':''}" onclick="setReplayDrawMode('hline')">H-Line ✓</div>`+
+    `<div class="pill ${replayMagnetOn?'sel':''}" onclick="toggleReplayMagnet()">🧲 Magnet</div>`+
     `<div class="pill" onclick="clearReplayDrawings()">Clear</div>`;
+}
+function toggleReplayMagnet(){
+  replayMagnetOn = !replayMagnetOn;
+  buildReplayDrawRow();
+}
+// Given a raw (un-snapped) price and the candle nearest to where the tap
+// or drag happened, returns whichever of that candle's Open/High/Low/Close
+// is numerically closest — this is what "magnet" actually does. Falls
+// back to the raw price if there's no candle to snap to (e.g. dragging
+// past the edge of the loaded data).
+function snapPriceToCandle(rawPrice, candle){
+  if(!candle) return rawPrice;
+  const options = [candle.open, candle.high, candle.low, candle.close];
+  return options.reduce((best,v)=> Math.abs(v-rawPrice) < Math.abs(best-rawPrice) ? v : best, options[0]);
+}
+// Dragging can land between two candles rather than exactly on one (the
+// map is keyed by exact bar time). This walks outward from the target
+// time to find the nearest actual candle to snap against, returning both
+// the candle and its exact bar time (needed to snap the dragged point's
+// horizontal position onto that bar, not just its price).
+function nearestCandleEntry(targetTime){
+  if(replayCandleByTime.has(targetTime)) return { time: targetTime, candle: replayCandleByTime.get(targetTime) };
+  let bestTime = null, bestCandle = null, bestDiff = Infinity;
+  replayCandleByTime.forEach((candle, t)=>{
+    const diff = Math.abs(t - targetTime);
+    if(diff < bestDiff){ bestDiff = diff; bestTime = t; bestCandle = candle; }
+  });
+  return bestTime==null ? null : { time: bestTime, candle: bestCandle };
 }
 // Cycles a tool on/off — tapping the already-active tool turns drawing
 // mode off again, same as tapping a selected timeframe pill wouldn't
@@ -722,13 +762,137 @@ function setReplayDrawMode(mode){
   replayPendingPoint = null; // starting/stopping a tool cancels any half-finished trendline
   buildReplayDrawRow();
 }
-function clearReplayDrawings(){
+function clearReplayDrawingsFromChart(){
   replayDrawings.forEach(d=>{
     if(d.type==='hline') replaySeries.removePriceLine(d.handle);
     if(d.type==='trend') replayChart.removeSeries(d.handle);
   });
   replayDrawings = [];
   replayPendingPoint = null;
+}
+function clearReplayDrawings(){
+  clearReplayDrawingsFromChart();
+  persistReplayDrawings();
+}
+// Saves the current drawings onto whichever trade's replay is open, using
+// only the plain data (price / points) — not the chart handles, which are
+// live chart objects and can't be saved to the phone's storage. Runs after
+// every add, drag, and clear, so nothing needs a separate "Save" step.
+function persistReplayDrawings(){
+  if(!replayOpenTradeId) return;
+  const trades = loadTrades();
+  const trade = trades.find(t=>String(t.id)===String(replayOpenTradeId));
+  if(!trade) return;
+  trade.chartDrawings = replayDrawings.map(d=>{
+    if(d.type==='hline') return { type:'hline', price: d.price };
+    return { type:'trend', p1: d.p1, p2: d.p2 };
+  });
+  saveTrades(trades);
+}
+// Rebuilds saved drawings back onto the chart when a trade's replay is
+// reopened — recreating real price-line/line-series objects from the
+// plain saved data (the reverse of persistReplayDrawings above).
+function restoreReplayDrawings(trade){
+  const saved = trade.chartDrawings || [];
+  saved.forEach(d=>{
+    if(d.type==='hline'){
+      const line = replaySeries.createPriceLine({
+        price: d.price, color: '#F2B94A', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true, title: d.price.toFixed(2),
+      });
+      replayDrawings.push({ type:'hline', handle: line, price: d.price });
+    } else if(d.type==='trend'){
+      const trendSeries = replayChart.addLineSeries({
+        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+      });
+      const sorted = [d.p1, d.p2].slice().sort((a,b)=>a.time-b.time);
+      trendSeries.setData(sorted);
+      replayDrawings.push({ type:'trend', handle: trendSeries, p1: d.p1, p2: d.p2 });
+    }
+  });
+}
+// Lets you grab an already-placed line and move it. This runs independently
+// of the tap-to-place tools above — it's active any time a finger comes
+// down close enough to an existing line, whether or not a drawing tool is
+// currently selected, same as most charting apps let you always move your
+// own lines. Uses raw pointer events (not the chart's own click/crosshair
+// system) because dragging needs continuous tracking, not single taps.
+function setupReplayDragHandlers(container){
+  const HIT_TOLERANCE = 14; // pixels — how close a touch needs to land to "grab" a line
+
+  function findDragTarget(x, y){
+    // Walk newest-to-oldest so an overlapping line drawn later wins the grab.
+    for(let i = replayDrawings.length - 1; i >= 0; i--){
+      const d = replayDrawings[i];
+      if(d.type === 'hline'){
+        const py = replaySeries.priceToCoordinate(d.price);
+        if(py != null && Math.abs(py - y) <= HIT_TOLERANCE) return { drawing: d, part: 'hline' };
+      } else if(d.type === 'trend'){
+        const x1 = replayChart.timeScale().timeToCoordinate(d.p1.time);
+        const y1 = replaySeries.priceToCoordinate(d.p1.price);
+        const x2 = replayChart.timeScale().timeToCoordinate(d.p2.time);
+        const y2 = replaySeries.priceToCoordinate(d.p2.price);
+        if(x1!=null && y1!=null && Math.hypot(x1-x, y1-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p1' };
+        if(x2!=null && y2!=null && Math.hypot(x2-x, y2-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p2' };
+      }
+    }
+    return null;
+  }
+  function localCoords(e){
+    const rect = container.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  function onDown(e){
+    const {x,y} = localCoords(e);
+    const target = findDragTarget(x,y);
+    if(!target) return; // nothing grabbed — leave this touch for the chart's normal pan/zoom/tap handling
+    replayDragTarget = target;
+    // Pan/zoom off for the duration of the drag, so moving your finger
+    // drags the line instead of scrolling the whole chart underneath it.
+    replayChart.applyOptions({ handleScroll: false, handleScale: false });
+    e.preventDefault();
+  }
+  function onMove(e){
+    if(!replayDragTarget) return;
+    e.preventDefault();
+    const {x,y} = localCoords(e);
+    let price = replaySeries.coordinateToPrice(y);
+    if(price == null) return;
+    const rawTime = replayChart.timeScale().coordinateToTime(x);
+    const { drawing, part } = replayDragTarget;
+
+    if(part === 'hline'){
+      if(replayMagnetOn && rawTime!=null){
+        const entry = nearestCandleEntry(rawTime);
+        if(entry) price = snapPriceToCandle(price, entry.candle);
+      }
+      drawing.price = price;
+      drawing.handle.applyOptions({ price, title: price.toFixed(2) });
+      return;
+    }
+
+    // Trend line endpoint — needs a valid time position too, not just price.
+    if(rawTime == null) return;
+    let time = rawTime;
+    if(replayMagnetOn){
+      const entry = nearestCandleEntry(rawTime);
+      if(entry){ time = entry.time; price = snapPriceToCandle(price, entry.candle); }
+    }
+    drawing[part] = { time, price };
+    const points = [drawing.p1, drawing.p2].slice().sort((a,b)=>a.time-b.time);
+    drawing.handle.setData(points);
+  }
+  function onUp(){
+    if(!replayDragTarget) return;
+    replayDragTarget = null;
+    replayChart.applyOptions({ handleScroll: true, handleScale: true });
+    persistReplayDrawings();
+  }
+
+  container.addEventListener('pointerdown', onDown, { passive: false });
+  container.addEventListener('pointermove', onMove, { passive: false });
+  container.addEventListener('pointerup', onUp);
+  container.addEventListener('pointercancel', onUp);
 }
 function buildReplaySpeedRow(){
   const row = document.getElementById('replaySpeedRow');
@@ -952,6 +1116,10 @@ function saveTrade(){
   // price — this keeps R:R tied to the actual risk decision made at entry,
   // independent of IV crush/theta skewing the option premium's behavior.
   const realizedRR = calcRealizedRR(dir, undEntry, undExit, stop);
+  // Editing a trade's details rebuilds this whole object — without this,
+  // any lines drawn on that trade's replay would silently disappear the
+  // next time its details were edited and saved.
+  const existingDrawings = editingTradeId ? (loadTrades().find(t=>t.id===editingTradeId)?.chartDrawings || []) : [];
 
   const trade = {
     id: editingTradeId || Date.now(),
@@ -967,6 +1135,7 @@ function saveTrade(){
     ftfc: {...currentTf}, ftfcRun: best, ftfcConfirmed,
     ftfcDirection: ftfcRunData.direction, ftfcTimeframesInRun: ftfcRunData.timeframesInRun,
     replayData: currentReplayData,
+    chartDrawings: existingDrawings,
     pnlDollar, pnlPercent,
     winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
     notes: document.getElementById('f_notes').value,
