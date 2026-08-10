@@ -160,7 +160,7 @@
     overflow:hidden;
   }
   .modal-box.fs .replay-canvas-wrap{flex:1; min-height:0; margin-top:6px;}
-  .modal-box.fs #replayChartContainer{width:100%; height:100%;}
+  .modal-box.fs #replayChartContainer{width:100%; height:100%; touch-action:none;}
   .replay-ohlc-overlay{
     position:absolute; top:6px; left:6px; z-index:2; pointer-events:none;
     background:rgba(11,15,20,0.72); border:1px solid var(--border); border-radius:5px;
@@ -991,10 +991,13 @@ function setupReplayDragHandlers(container){
     gestureStart = null;
   }
 
-  container.addEventListener('pointerdown', onDown, { passive: false });
-  container.addEventListener('pointermove', onMove, { passive: false });
-  container.addEventListener('pointerup', onUp);
-  container.addEventListener('pointercancel', onUp);
+  // capture:true — runs our detection BEFORE the chart library's own
+  // internal touch handling gets a chance to consume the event, so a tap
+  // can't get silently swallowed by the library's own pan/zoom logic.
+  container.addEventListener('pointerdown', onDown, { passive: false, capture: true });
+  container.addEventListener('pointermove', onMove, { passive: false, capture: true });
+  container.addEventListener('pointerup', onUp, { capture: true });
+  container.addEventListener('pointercancel', onUp, { capture: true });
 }
 // What a confirmed tap actually does — the same logic that used to live
 // in the chart library's click event, moved here so it only ever runs
