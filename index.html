@@ -552,6 +552,7 @@ let replayPendingPoint = null; // first tap of a 2-tap trendline, waiting on the
 let replayDrawings = []; // handles for everything currently drawn on the chart, so Clear can remove them all
 let replayMagnetOn = false; // when true, new points and drags snap to the nearest candle's O/H/L/C instead of the raw tapped price
 let replayDragTarget = null; // the drawing currently being dragged (and which part of it), or null when nothing's being dragged
+let replaySelectedDrawing = null; // the one drawing currently tapped/selected, shown highlighted with a Delete button available
 let replayOpenTradeId = null; // which trade's replay is currently open — needed so drawings get saved onto the right trade
 
 
@@ -626,18 +627,28 @@ function ensureReplayChart(){
       renderReplayOhlc(replayLastVisibleCandle, true);
     }
   });
-  // Handles taps while a drawing tool is active (see setReplayDrawMode).
-  // Does nothing when no tool is selected, so normal pan/zoom/crosshair
-  // behavior is untouched the rest of the time.
+  // Two jobs depending on whether a drawing tool is active:
+  // - a tool active (Trend Line / H-Line): places a new line, as before.
+  // - no tool active: taps now SELECT an existing line instead of doing
+  //   nothing — tapping a line highlights it and reveals a Delete button;
+  //   tapping empty space deselects it. This is what lets you remove one
+  //   specific line instead of only "Clear" (which removes all of them).
   replayChart.subscribeClick((param) => {
-    if (!replayDrawMode || !param || !param.time || !param.point) return;
+    if (!param || !param.point) { deselectReplayDrawing(); return; }
+
+    if (!replayDrawMode) {
+      const hit = findReplayDrawingAt(param.point.x, param.point.y);
+      if (hit) selectReplayDrawing(hit); else deselectReplayDrawing();
+      return;
+    }
+    if (!param.time) return;
     let price = replaySeries.coordinateToPrice(param.point.y);
     if (price == null) return;
     if (replayMagnetOn) price = snapPriceToCandle(price, replayCandleByTime.get(param.time));
 
     if (replayDrawMode === 'hline') {
       const line = replaySeries.createPriceLine({
-        price, color: '#F2B94A', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed,
+        price, color: '#F2B94A', lineWidth: 2,
         axisLabelVisible: true, title: price.toFixed(2),
       });
       replayDrawings.push({ type: 'hline', handle: line, price });
@@ -723,7 +734,8 @@ function buildReplayDrawRow(){
     `<div class="pill ${replayDrawMode==='trend'?'sel':''}" onclick="setReplayDrawMode('trend')">${trendLabel}</div>`+
     `<div class="pill ${replayDrawMode==='hline'?'sel':''}" onclick="setReplayDrawMode('hline')">H-Line ✓</div>`+
     `<div class="pill ${replayMagnetOn?'sel':''}" onclick="toggleReplayMagnet()">🧲 Magnet</div>`+
-    `<div class="pill" onclick="clearReplayDrawings()">Clear</div>`;
+    `<div class="pill" onclick="clearReplayDrawings()">Clear All</div>`+
+    (replaySelectedDrawing ? `<div class="pill" style="color:var(--bear); border-color:var(--bear-dim);" onclick="deleteSelectedReplayDrawing()">🗑 Delete Line</div>` : '');
 }
 function toggleReplayMagnet(){
   replayMagnetOn = !replayMagnetOn;
@@ -760,7 +772,62 @@ function nearestCandleEntry(targetTime){
 function setReplayDrawMode(mode){
   replayDrawMode = (replayDrawMode === mode) ? null : mode;
   replayPendingPoint = null; // starting/stopping a tool cancels any half-finished trendline
+  deselectReplayDrawing();
   buildReplayDrawRow();
+}
+// Finds whichever drawing (if any) sits under a given chart-pixel point —
+// shared by tap-to-select (subscribeClick) and drag-to-grab (pointerdown)
+// so both use identical hit-test logic.
+function findReplayDrawingAt(x, y){
+  const HIT_TOLERANCE = 14; // pixels
+  for(let i = replayDrawings.length - 1; i >= 0; i--){
+    const d = replayDrawings[i];
+    if(d.type === 'hline'){
+      const py = replaySeries.priceToCoordinate(d.price);
+      if(py != null && Math.abs(py - y) <= HIT_TOLERANCE) return { drawing: d, part: 'hline' };
+    } else if(d.type === 'trend'){
+      const x1 = replayChart.timeScale().timeToCoordinate(d.p1.time);
+      const y1 = replaySeries.priceToCoordinate(d.p1.price);
+      const x2 = replayChart.timeScale().timeToCoordinate(d.p2.time);
+      const y2 = replaySeries.priceToCoordinate(d.p2.price);
+      if(x1!=null && y1!=null && Math.hypot(x1-x, y1-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p1' };
+      if(x2!=null && y2!=null && Math.hypot(x2-x, y2-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p2' };
+    }
+  }
+  return null;
+}
+// Brightens/thickens whichever line is selected so it's visually obvious
+// which one the Delete button would remove; reverts everything else back
+// to the normal amber.
+function styleReplayDrawing(d, selected){
+  const color = selected ? '#FFD666' : '#F2B94A';
+  const lineWidth = selected ? 3 : 2;
+  if(d.type === 'hline') d.handle.applyOptions({ color, lineWidth, title: d.price.toFixed(2) });
+  else d.handle.applyOptions({ color, lineWidth });
+}
+function selectReplayDrawing(target){
+  if(replaySelectedDrawing && replaySelectedDrawing.drawing !== target.drawing){
+    styleReplayDrawing(replaySelectedDrawing.drawing, false);
+  }
+  replaySelectedDrawing = target;
+  styleReplayDrawing(target.drawing, true);
+  buildReplayDrawRow();
+}
+function deselectReplayDrawing(){
+  if(!replaySelectedDrawing) return;
+  styleReplayDrawing(replaySelectedDrawing.drawing, false);
+  replaySelectedDrawing = null;
+  buildReplayDrawRow();
+}
+function deleteSelectedReplayDrawing(){
+  if(!replaySelectedDrawing) return;
+  const d = replaySelectedDrawing.drawing;
+  if(d.type==='hline') replaySeries.removePriceLine(d.handle);
+  else replayChart.removeSeries(d.handle);
+  replayDrawings = replayDrawings.filter(x=>x!==d);
+  replaySelectedDrawing = null;
+  buildReplayDrawRow();
+  persistReplayDrawings();
 }
 function clearReplayDrawingsFromChart(){
   replayDrawings.forEach(d=>{
@@ -769,6 +836,7 @@ function clearReplayDrawingsFromChart(){
   });
   replayDrawings = [];
   replayPendingPoint = null;
+  replaySelectedDrawing = null;
 }
 function clearReplayDrawings(){
   clearReplayDrawingsFromChart();
@@ -797,7 +865,7 @@ function restoreReplayDrawings(trade){
   saved.forEach(d=>{
     if(d.type==='hline'){
       const line = replaySeries.createPriceLine({
-        price: d.price, color: '#F2B94A', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed,
+        price: d.price, color: '#F2B94A', lineWidth: 2,
         axisLabelVisible: true, title: d.price.toFixed(2),
       });
       replayDrawings.push({ type:'hline', handle: line, price: d.price });
@@ -818,34 +886,15 @@ function restoreReplayDrawings(trade){
 // own lines. Uses raw pointer events (not the chart's own click/crosshair
 // system) because dragging needs continuous tracking, not single taps.
 function setupReplayDragHandlers(container){
-  const HIT_TOLERANCE = 14; // pixels — how close a touch needs to land to "grab" a line
-
-  function findDragTarget(x, y){
-    // Walk newest-to-oldest so an overlapping line drawn later wins the grab.
-    for(let i = replayDrawings.length - 1; i >= 0; i--){
-      const d = replayDrawings[i];
-      if(d.type === 'hline'){
-        const py = replaySeries.priceToCoordinate(d.price);
-        if(py != null && Math.abs(py - y) <= HIT_TOLERANCE) return { drawing: d, part: 'hline' };
-      } else if(d.type === 'trend'){
-        const x1 = replayChart.timeScale().timeToCoordinate(d.p1.time);
-        const y1 = replaySeries.priceToCoordinate(d.p1.price);
-        const x2 = replayChart.timeScale().timeToCoordinate(d.p2.time);
-        const y2 = replaySeries.priceToCoordinate(d.p2.price);
-        if(x1!=null && y1!=null && Math.hypot(x1-x, y1-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p1' };
-        if(x2!=null && y2!=null && Math.hypot(x2-x, y2-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p2' };
-      }
-    }
-    return null;
-  }
   function localCoords(e){
     const rect = container.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
   function onDown(e){
     const {x,y} = localCoords(e);
-    const target = findDragTarget(x,y);
+    const target = findReplayDrawingAt(x,y);
     if(!target) return; // nothing grabbed — leave this touch for the chart's normal pan/zoom/tap handling
+    selectReplayDrawing(target); // grabbing a line also selects it, so Delete is available right after a drag too
     replayDragTarget = target;
     // Pan/zoom off for the duration of the drag, so moving your finger
     // drags the line instead of scrolling the whole chart underneath it.
