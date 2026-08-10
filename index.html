@@ -635,60 +635,16 @@ function ensureReplayChart(){
       renderReplayOhlc(replayLastVisibleCandle, true);
     }
   });
-  // Two jobs depending on whether a drawing tool is active:
-  // - a tool active (Trend Line / H-Line): places a new line, as before.
-  // - no tool active: taps now SELECT an existing line instead of doing
-  //   nothing — tapping a line highlights it and reveals a Delete button;
-  //   tapping empty space deselects it. This is what lets you remove one
-  //   specific line instead of only "Clear" (which removes all of them).
-  replayChart.subscribeClick((param) => {
-    if (!param || !param.point) { deselectReplayDrawing(); return; }
-
-    if (!replayDrawMode) {
-      const hit = findReplayDrawingAt(param.point.x, param.point.y);
-      if (hit) selectReplayDrawing(hit); else deselectReplayDrawing();
-      return;
-    }
-    if (!param.time) return;
-    let price = replaySeries.coordinateToPrice(param.point.y);
-    if (price == null) return;
-    if (replayMagnetOn) price = snapPriceToCandle(price, replayCandleByTime.get(param.time));
-
-    if (replayDrawMode === 'ray') {
-      // A price line (the old approach) always spans the FULL chart in
-      // both directions — that's a "Horizontal Line," not the "Horizontal
-      // Ray" behavior asked for (start exactly at the tapped point,
-      // extend only forward). Built the same way a trend line is — two
-      // points on their own line series — anchored at the tap and
-      // stretched far to the right.
-      const anchor = { time: param.time, price };
-      const rayEnd = { time: anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price };
-      const raySeries = replayChart.addLineSeries({
-        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-      });
-      raySeries.setData([anchor, rayEnd]);
-      replayDrawings.push({ type: 'ray', handle: raySeries, anchor });
-      persistReplayDrawings();
-      return;
-    }
-
-    if (replayDrawMode === 'trend') {
-      if (!replayPendingPoint) {
-        // First tap — remember it and wait for the second.
-        replayPendingPoint = { time: param.time, price };
-        return;
-      }
-      // Second tap — draw the line connecting both points.
-      const trendSeries = replayChart.addLineSeries({
-        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-      });
-      const points = [replayPendingPoint, { time: param.time, price }].sort((a,b)=> a.time - b.time);
-      trendSeries.setData(points);
-      replayDrawings.push({ type: 'trend', handle: trendSeries, p1: points[0], p2: points[1] });
-      replayPendingPoint = null;
-      persistReplayDrawings();
-    }
-  });
+  // Placing lines and selecting existing ones used to run through the
+  // chart library's own click event — but that event requires the library
+  // to decide, on its own, whether a touch was a "tap" or the start of a
+  // pan/drag. On a real finger (which is never perfectly still) that
+  // guess is unreliable: it would frequently read a tap as a pan attempt,
+  // so the click never fired at all — which is why lines sometimes
+  // wouldn't appear and the chart would shift unexpectedly instead. All
+  // of that logic now lives in setupReplayDragHandlers() below instead,
+  // using our own pointer tracking, so taps are detected the same
+  // reliable way dragging already is.
   // There used to be a second, hand-built row of time labels drawn
   // underneath the chart, on top of the chart library's own built-in time
   // labels (timeVisible:true above already draws these correctly on its
@@ -792,7 +748,7 @@ function setReplayDrawMode(mode){
   buildReplayDrawRow();
 }
 // Finds whichever drawing (if any) sits under a given chart-pixel point —
-// shared by tap-to-select (subscribeClick) and drag-to-grab (pointerdown)
+// shared by tap-to-select (handleReplayTap) and drag-to-grab (pointerdown)
 // so both use identical hit-test logic.
 function findReplayDrawingAt(x, y){
   const HIT_TOLERANCE = 14; // pixels
@@ -920,25 +876,44 @@ function restoreReplayDrawings(trade){
 // own lines. Uses raw pointer events (not the chart's own click/crosshair
 // system) because dragging needs continuous tracking, not single taps.
 function setupReplayDragHandlers(container){
+  const TAP_MOVE_TOLERANCE = 6; // pixels — a real finger is never perfectly still; anything under this still counts as a tap, not a pan
+  let gestureStart = null; // {x,y} where this touch began
+  let gestureMoved = false; // true once movement crosses the tolerance — rules out treating pointerup as a tap
+  let frozePan = false; // true while we've deliberately paused chart pan/zoom for this gesture
+
   function localCoords(e){
     const rect = container.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
   function onDown(e){
     const {x,y} = localCoords(e);
+    gestureStart = {x,y};
+    gestureMoved = false;
+
     const target = findReplayDrawingAt(x,y);
-    if(!target) return; // nothing grabbed — leave this touch for the chart's normal pan/zoom/tap handling
-    selectReplayDrawing(target); // grabbing a line also selects it, so Delete is available right after a drag too
-    replayDragTarget = target;
-    // Pan/zoom off for the duration of the drag, so moving your finger
-    // drags the line instead of scrolling the whole chart underneath it.
-    replayChart.applyOptions({ handleScroll: false, handleScale: false });
-    e.preventDefault();
+    if(target){
+      selectReplayDrawing(target); // grabbing a line also selects it, so Delete is available right after a drag too
+      replayDragTarget = target;
+      replayChart.applyOptions({ handleScroll: false, handleScale: false });
+      frozePan = true;
+      e.preventDefault();
+      return;
+    }
+    if(replayDrawMode){
+      // About to attempt placing a point — freeze pan/zoom for this touch
+      // so the chart can't shift underneath the tap while it's happening.
+      replayChart.applyOptions({ handleScroll: false, handleScale: false });
+      frozePan = true;
+      e.preventDefault();
+    }
   }
   function onMove(e){
-    if(!replayDragTarget) return;
-    e.preventDefault();
+    if(!gestureStart) return;
     const {x,y} = localCoords(e);
+    if(!gestureMoved && Math.hypot(x-gestureStart.x, y-gestureStart.y) > TAP_MOVE_TOLERANCE) gestureMoved = true;
+
+    if(!replayDragTarget) { if(frozePan) e.preventDefault(); return; }
+    e.preventDefault();
     let price = replaySeries.coordinateToPrice(y);
     if(price == null) return;
     const rawTime = replayChart.timeScale().coordinateToTime(x);
@@ -994,17 +969,89 @@ function setupReplayDragHandlers(container){
     const points = [drawing.p1, drawing.p2].slice().sort((a,b)=>a.time-b.time);
     drawing.handle.setData(points);
   }
-  function onUp(){
-    if(!replayDragTarget) return;
-    replayDragTarget = null;
-    replayChart.applyOptions({ handleScroll: true, handleScale: true });
-    persistReplayDrawings();
+  function onUp(e){
+    if(replayDragTarget){
+      replayDragTarget = null;
+      replayChart.applyOptions({ handleScroll: true, handleScale: true });
+      persistReplayDrawings();
+      gestureStart = null; frozePan = false;
+      return;
+    }
+    if(frozePan){ replayChart.applyOptions({ handleScroll: true, handleScale: true }); frozePan = false; }
+
+    // A genuine tap: pointer went down and came back up without enough
+    // movement to count as a pan attempt. Handles both placing a new
+    // point (a tool is active) and selecting/deselecting a line (no tool
+    // active) — the same two jobs the library's click event used to do,
+    // just detected reliably now instead of guessed at.
+    if(gestureStart && !gestureMoved){
+      const {x,y} = localCoords(e);
+      handleReplayTap(x,y);
+    }
+    gestureStart = null;
   }
 
   container.addEventListener('pointerdown', onDown, { passive: false });
   container.addEventListener('pointermove', onMove, { passive: false });
   container.addEventListener('pointerup', onUp);
   container.addEventListener('pointercancel', onUp);
+}
+// What a confirmed tap actually does — the same logic that used to live
+// in the chart library's click event, moved here so it only ever runs
+// once we're sure (via our own movement tracking) that this was really a
+// tap and not the start of a pan.
+function handleReplayTap(x, y){
+  if(!replayDrawMode){
+    const hit = findReplayDrawingAt(x,y);
+    if(hit) selectReplayDrawing(hit); else deselectReplayDrawing();
+    return;
+  }
+
+  const rawTime = replayChart.timeScale().coordinateToTime(x);
+  let price = replaySeries.coordinateToPrice(y);
+  if(rawTime == null || price == null) return;
+  // Snap the tap onto the nearest actual candle's bar time, not wherever
+  // between two bars the finger happened to land — keeps placement feeling
+  // intentional even without Magnet on, same as the old click-based system did.
+  const timeEntry = nearestCandleEntry(rawTime);
+  const time = timeEntry ? timeEntry.time : rawTime;
+  if(replayMagnetOn && timeEntry) price = snapPriceToCandle(price, timeEntry.candle);
+
+  if(replayDrawMode === 'ray'){
+    // A price line (the old approach) always spans the FULL chart in both
+    // directions — that's a "Horizontal Line," not the "Horizontal Ray"
+    // behavior asked for (start exactly at the tapped point, extend only
+    // forward). Built the same way a trend line is — two points on their
+    // own line series — anchored at the tap and stretched far to the right.
+    const anchor = { time, price };
+    const rayEnd = { time: anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price };
+    const raySeries = replayChart.addLineSeries({
+      color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+    });
+    raySeries.setData([anchor, rayEnd]);
+    replayDrawings.push({ type: 'ray', handle: raySeries, anchor });
+    persistReplayDrawings();
+    return;
+  }
+
+  if(replayDrawMode === 'trend'){
+    if(!replayPendingPoint){
+      // First tap — remember it and wait for the second.
+      replayPendingPoint = { time, price };
+      buildReplayDrawRow();
+      return;
+    }
+    // Second tap — draw the line connecting both points.
+    const trendSeries = replayChart.addLineSeries({
+      color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+    });
+    const points = [replayPendingPoint, { time, price }].sort((a,b)=> a.time - b.time);
+    trendSeries.setData(points);
+    replayDrawings.push({ type: 'trend', handle: trendSeries, p1: points[0], p2: points[1] });
+    replayPendingPoint = null;
+    persistReplayDrawings();
+    buildReplayDrawRow();
+  }
 }
 function buildReplaySpeedRow(){
   const row = document.getElementById('replaySpeedRow');
