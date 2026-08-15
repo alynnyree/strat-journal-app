@@ -562,6 +562,7 @@ let replayMagnetOn = false; // when true, new points and drags snap to the neare
 let replayDragTarget = null; // the drawing currently being dragged (and which part of it), or null when nothing's being dragged
 let replaySelectedDrawing = null; // the one drawing currently tapped/selected, shown highlighted with a Delete button available
 let replayOpenTradeId = null; // which trade's replay is currently open — needed so drawings get saved onto the right trade
+let replayLiveTrendDraw = false; // true while a trend line is being stretched out live from its anchor (click-drag-release)
 
 
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
@@ -603,7 +604,28 @@ function ensureReplayChart(){
     width: container.clientWidth, height: container.clientHeight,
     layout: { background: { color: '#070A0F' }, textColor: '#A8B6C6', fontSize: 12 },
     grid: { vertLines: { color: '#131a24' }, horzLines: { color: '#131a24' } },
-    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true, ticksVisible: true, rightOffset: 6 },
+    timeScale: {
+      timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true,
+      ticksVisible: true, rightOffset: 6,
+      // Minimum horizontal space each candle gets. Without this the chart
+      // is free to squeeze candles down to a few pixels wide when a lot of
+      // them are revealed — which is why they looked tiny on both phone
+      // and laptop. Setting a floor means the chart scrolls instead of
+      // shrinking, keeping candles a readable size at any count.
+      barSpacing: 12,
+      minBarSpacing: 8,
+      // Adds the month/day to axis labels (e.g. "13 Jul") instead of only
+      // showing a bare day number, so it's clear which month the candles
+      // belong to — the same way TradingView labels its axis.
+      tickMarkFormatter: (time, tickMarkType, locale) => {
+        const d = new Date(time * 1000);
+        // tickMarkType: 0=Year, 1=Month, 2=DayOfMonth, 3=Time, 4=TimeWithSeconds
+        if(tickMarkType === 0) return String(d.getFullYear());
+        if(tickMarkType === 1) return d.toLocaleDateString(locale, { month: 'short' });
+        if(tickMarkType === 2) return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+        return d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+      },
+    },
     rightPriceScale: { borderColor: '#3A4A5E' },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
   });
@@ -632,7 +654,7 @@ function ensureReplayChart(){
   // moment to settle.
   setTimeout(()=>{
     resizeReplayChartToContainer();
-    if(replayChart) replayChart.timeScale().fitContent();
+    if(replayChart) replayChart.timeScale().scrollToPosition(0, false);
   }, 150);
   // Dragging a finger across the chart moves Lightweight Charts' built-in
   // crosshair line automatically (that's what crosshair:{mode:Normal} in
@@ -909,6 +931,37 @@ function restoreReplayDrawings(trade){
 // currently selected, same as most charting apps let you always move your
 // own lines. Uses raw pointer events (not the chart's own click/crosshair
 // system) because dragging needs continuous tracking, not single taps.
+// Converts a screen x/y inside the chart into a {time, price} point,
+// applying magnet snapping when it's on. Shared by every placement path
+// (click, drag-draw, drag-move) so they all behave identically.
+function replayPointFromCoords(x, y){
+  let price = replaySeries.coordinateToPrice(y);
+  if(price == null) return null;
+  let rawTime = replayChart.timeScale().coordinateToTime(x);
+  if(rawTime == null){
+    // Pointer is in the empty space beyond the last candle (or before the
+    // first) — coordinateToTime only resolves within plotted data, so this
+    // falls back to the nearest edge candle instead of failing silently.
+    const allTimes = [...replayCandleByTime.keys()];
+    if(!allTimes.length) return null;
+    rawTime = x <= 0 ? Math.min(...allTimes) : Math.max(...allTimes);
+  }
+  const entry = nearestCandleEntry(rawTime);
+  const time = entry ? entry.time : rawTime;
+  if(replayMagnetOn && entry) price = snapPriceToCandle(price, entry.candle);
+  return { time, price };
+}
+// Creates a horizontal ray anchored at a point, extending only rightward.
+function createReplayRay(anchor){
+  const rayEnd = { time: anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price: anchor.price };
+  const raySeries = replayChart.addLineSeries({
+    color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+  });
+  raySeries.setData([anchor, rayEnd]);
+  const drawing = { type: 'ray', handle: raySeries, anchor };
+  replayDrawings.push(drawing);
+  return drawing;
+}
 function setupReplayDragHandlers(container){
   const TAP_MOVE_TOLERANCE = 6; // pixels — a real finger is never perfectly still; anything under this still counts as a tap, not a pan
   let gestureStart = null; // {x,y} where this touch began
@@ -934,11 +987,37 @@ function setupReplayDragHandlers(container){
       return;
     }
     if(replayDrawMode){
-      // About to attempt placing a point — freeze pan/zoom for this touch
-      // so the chart can't shift underneath the tap while it's happening.
       replayChart.applyOptions({ handleScroll: false, handleScale: false });
       frozePan = true;
       e.preventDefault();
+      // Draw on pointer-DOWN rather than waiting for pointer-up. The old
+      // approach only drew if the pointer came back up without moving,
+      // which fails with a mouse (you naturally drag a little) and made it
+      // look like the tools simply didn't work. Now the line appears the
+      // instant you press.
+      const pt = replayPointFromCoords(x,y);
+      if(!pt) return;
+
+      if(replayDrawMode === 'ray'){
+        createReplayRay(pt);
+        persistReplayDrawings();
+        return;
+      }
+      if(replayDrawMode === 'trend'){
+        // Start a live trend line anchored here. Moving the pointer
+        // stretches it in real time; releasing sets the end point —
+        // the click-drag-release flow. Tapping without dragging still
+        // works too: it leaves the line pending for a second tap.
+        const trendSeries = replayChart.addLineSeries({
+          color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+        });
+        trendSeries.setData([pt, {time: pt.time + 1, price: pt.price}]);
+        const drawing = { type:'trend', handle: trendSeries, p1: pt, p2: {time: pt.time + 1, price: pt.price} };
+        replayDrawings.push(drawing);
+        // Reuse the existing endpoint-drag machinery to stretch p2 live.
+        replayDragTarget = { drawing, part: 'p2' };
+        replayLiveTrendDraw = true;
+      }
     }
   }
   function onMove(e){
@@ -1005,8 +1084,24 @@ function setupReplayDragHandlers(container){
   }
   function onUp(e){
     if(replayDragTarget){
+      const wasLiveTrend = replayLiveTrendDraw;
+      const liveDrawing = replayDragTarget.drawing;
       replayDragTarget = null;
+      replayLiveTrendDraw = false;
       replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode });
+
+      // Click-without-drag while starting a trend line leaves a
+      // zero-length stub. Rather than saving that, remove it and fall back
+      // to the two-click flow (first click sets the start, second sets the
+      // end) so both interaction styles work.
+      if(wasLiveTrend && !gestureMoved){
+        replayChart.removeSeries(liveDrawing.handle);
+        replayDrawings = replayDrawings.filter(d=>d!==liveDrawing);
+        replayPendingPoint = liveDrawing.p1;
+        buildReplayDrawRow();
+        gestureStart = null; frozePan = false;
+        return;
+      }
       persistReplayDrawings();
       gestureStart = null; frozePan = false;
       return;
@@ -1033,69 +1128,24 @@ function setupReplayDragHandlers(container){
   container.addEventListener('pointerup', onUp, { capture: true });
   container.addEventListener('pointercancel', onUp, { capture: true });
 }
-// What a confirmed tap actually does — the same logic that used to live
-// in the chart library's click event, moved here so it only ever runs
-// once we're sure (via our own movement tracking) that this was really a
-// tap and not the start of a pan.
+// Handles a click/tap that wasn't a drag. Placement itself now happens on
+// pointer-DOWN (see onDown) so lines appear the instant you press — this
+// only covers what's left: selecting an existing line when no tool is
+// active, and completing a two-click trend line when the first click
+// didn't drag.
 function handleReplayTap(x, y){
   if(!replayDrawMode){
     const hit = findReplayDrawingAt(x,y);
     if(hit) selectReplayDrawing(hit); else deselectReplayDrawing();
     return;
   }
-
-  let price = replaySeries.coordinateToPrice(y);
-  if(price == null) return; // truly outside the chart's plottable area
-
-  let rawTime = replayChart.timeScale().coordinateToTime(x);
-  if(rawTime == null){
-    // Tapped in the empty space beyond the last candle (or before the
-    // first) — coordinateToTime only resolves a time when x falls exactly
-    // within the plotted data, so a tap out there used to silently do
-    // nothing. This is exactly where an H-Ray naturally gets placed
-    // (anchored to recent price, near the right edge), so it's very
-    // likely what was actually happening. Falls back to the nearest edge
-    // candle's time instead of giving up.
-    const allTimes = [...replayCandleByTime.keys()];
-    if(!allTimes.length) return;
-    rawTime = x <= 0 ? Math.min(...allTimes) : Math.max(...allTimes);
-  }
-  // Snap the tap onto the nearest actual candle's bar time, not wherever
-  // between two bars the finger happened to land — keeps placement feeling
-  // intentional even without Magnet on, same as the old click-based system did.
-  const timeEntry = nearestCandleEntry(rawTime);
-  const time = timeEntry ? timeEntry.time : rawTime;
-  if(replayMagnetOn && timeEntry) price = snapPriceToCandle(price, timeEntry.candle);
-
-  if(replayDrawMode === 'ray'){
-    // A price line (the old approach) always spans the FULL chart in both
-    // directions — that's a "Horizontal Line," not the "Horizontal Ray"
-    // behavior asked for (start exactly at the tapped point, extend only
-    // forward). Built the same way a trend line is — two points on their
-    // own line series — anchored at the tap and stretched far to the right.
-    const anchor = { time, price };
-    const rayEnd = { time: anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price };
-    const raySeries = replayChart.addLineSeries({
-      color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-    });
-    raySeries.setData([anchor, rayEnd]);
-    replayDrawings.push({ type: 'ray', handle: raySeries, anchor });
-    persistReplayDrawings();
-    return;
-  }
-
-  if(replayDrawMode === 'trend'){
-    if(!replayPendingPoint){
-      // First tap — remember it and wait for the second.
-      replayPendingPoint = { time, price };
-      buildReplayDrawRow();
-      return;
-    }
-    // Second tap — draw the line connecting both points.
+  if(replayDrawMode === 'trend' && replayPendingPoint){
+    const pt = replayPointFromCoords(x,y);
+    if(!pt) return;
     const trendSeries = replayChart.addLineSeries({
       color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
     });
-    const points = [replayPendingPoint, { time, price }].sort((a,b)=> a.time - b.time);
+    const points = [replayPendingPoint, pt].sort((a,b)=> a.time - b.time);
     trendSeries.setData(points);
     replayDrawings.push({ type: 'trend', handle: trendSeries, p1: points[0], p2: points[1] });
     replayPendingPoint = null;
@@ -1120,10 +1170,15 @@ function setReplayTimeframe(tf){
   updateReplayChart();
   // Sets the candle width/zoom ONCE, based on the full revealed set at
   // this timeframe. Play/scrub no longer re-fits every frame (see
-  // updateReplayChart) — this is the only place it happens, so candles
-  // keep a steady, readable width throughout playback instead of
-  // shrinking as more of them get revealed.
-  replayChart.timeScale().fitContent();
+  // updateReplayChart) — so candles keep a steady, readable width
+  // throughout playback instead of shrinking as more get revealed.
+  //
+  // Deliberately NOT fitContent() here: that forces every candle to fit
+  // on screen at once, which overrides the barSpacing minimum set in the
+  // chart options and is what made candles render only a few pixels wide.
+  // Scrolling to the latest candle instead keeps them full size and lets
+  // you pan back through history.
+  replayChart.timeScale().scrollToPosition(0, false);
 }
 function setReplaySpeed(s){
   replaySpeed = s;
