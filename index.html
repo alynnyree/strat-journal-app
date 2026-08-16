@@ -604,13 +604,13 @@ function ensureReplayChart(){
     timeScale: {
       timeVisible: true, secondsVisible: false, borderColor: '#3A4A5E', borderVisible: true,
       ticksVisible: true, rightOffset: 6,
-      // Minimum horizontal space each candle gets. Without this the chart
-      // is free to squeeze candles down to a few pixels wide when a lot of
-      // them are revealed — which is why they looked tiny on both phone
-      // and laptop. Setting a floor means the chart scrolls instead of
-      // shrinking, keeping candles a readable size at any count.
-      barSpacing: 12,
-      minBarSpacing: 8,
+      // Deliberately NOT forcing barSpacing/minBarSpacing here. Doing that
+      // (while also removing fitContent) left the chart unable to render at
+      // all with thousands of candles loaded — a blank screen with no
+      // gridlines or price scale. Candle width is fixed at the source
+      // instead: the backend now caps a replay to ~4 hours, so a normal
+      // trade loads a few hundred candles rather than thousands, and
+      // fitting them to the screen gives readable candles naturally.
       // Adds the month/day to axis labels (e.g. "13 Jul") instead of only
       // showing a bare day number, so it's clear which month the candles
       // belong to — the same way TradingView labels its axis.
@@ -708,15 +708,14 @@ function ensureReplayChart(){
 // a sliver) and a bare scrollToPosition (which could park the view somewhere
 // with no candles visible at all — a blank chart). Setting an explicit
 // logical range does both jobs: candles stay wide AND stay on screen.
-const REPLAY_VISIBLE_BARS = 120;
 function frameReplayView(){
   if(!replayChart) return;
-  const total = replayRevealCount || (replayAggregated ? replayAggregated.length : 0);
-  if(!total) return;
-  const from = Math.max(0, total - REPLAY_VISIBLE_BARS);
-  try{
-    replayChart.timeScale().setVisibleLogicalRange({ from, to: total + 4 });
-  }catch(e){ /* range can be briefly invalid mid-update; next call corrects it */ }
+  // fitContent() is what reliably renders. An earlier attempt to hand-set
+  // the visible range (to keep candles wide with 3000+ bars loaded) is what
+  // blanked the chart entirely. With the backend now capping the replay
+  // window, there are few enough candles that fitting them all is both
+  // correct and readable.
+  replayChart.timeScale().fitContent();
 }
 function resizeReplayChartToContainer(){
   if(!replayChart) return;
@@ -834,9 +833,19 @@ function setReplayDrawMode(mode){
 // around. Painting on top avoids the time scale entirely: we just convert
 // each saved {time, price} to pixels and draw.
 function redrawReplayDrawings(){
+  try{ redrawReplayDrawingsInner(); }
+  catch(err){
+    // The overlay is a nice-to-have; the chart underneath is not. If
+    // anything in here ever throws, swallow it rather than let it break
+    // chart rendering or playback.
+    console.log('Drawing overlay skipped:', err.message);
+  }
+}
+function redrawReplayDrawingsInner(){
   const cv = document.getElementById('replayDrawCanvas');
   if(!cv || !replayChart || !replaySeries) return;
   const ctx = cv.getContext('2d');
+  if(!ctx) return;
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
   if(!w || !h) return;
