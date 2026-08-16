@@ -651,7 +651,7 @@ function ensureReplayChart(){
   // moment to settle.
   setTimeout(()=>{
     resizeReplayChartToContainer();
-    if(replayChart) replayChart.timeScale().scrollToPosition(0, false);
+    frameReplayView();
   }, 150);
   // Dragging a finger across the chart moves Lightweight Charts' built-in
   // crosshair line automatically (that's what crosshair:{mode:Normal} in
@@ -703,6 +703,21 @@ function ensureReplayChart(){
 // here too, the chart kept rendering at its old (too-tall) size after the
 // toolbar grew, pushing the bottom of the chart — the volume bars, the
 // time-axis labels — outside the visible clipped area.
+// Frames the most recent candles at a readable width. Replaces both
+// fitContent() (which squeezed 3000+ candles into the screen until each was
+// a sliver) and a bare scrollToPosition (which could park the view somewhere
+// with no candles visible at all — a blank chart). Setting an explicit
+// logical range does both jobs: candles stay wide AND stay on screen.
+const REPLAY_VISIBLE_BARS = 120;
+function frameReplayView(){
+  if(!replayChart) return;
+  const total = replayRevealCount || (replayAggregated ? replayAggregated.length : 0);
+  if(!total) return;
+  const from = Math.max(0, total - REPLAY_VISIBLE_BARS);
+  try{
+    replayChart.timeScale().setVisibleLogicalRange({ from, to: total + 4 });
+  }catch(e){ /* range can be briefly invalid mid-update; next call corrects it */ }
+}
 function resizeReplayChartToContainer(){
   if(!replayChart) return;
   const container = document.getElementById('replayChartContainer');
@@ -1168,7 +1183,7 @@ function setReplayTimeframe(tf){
   // chart options and is what made candles render only a few pixels wide.
   // Scrolling to the latest candle instead keeps them full size and lets
   // you pan back through history.
-  replayChart.timeScale().scrollToPosition(0, false);
+  frameReplayView();
 }
 function setReplaySpeed(s){
   replaySpeed = s;
@@ -1252,7 +1267,7 @@ function updateReplayChart(){
   // during Play (it was re-squeezing the entire revealed history into the
   // same fixed space every single tick). This just pans forward instead,
   // the way a real live/replay chart does.
-  replayChart.timeScale().scrollToPosition(0, false);
+  frameReplayView();
 
   replayLastVisibleCandle = visible.length ? visible[visible.length-1] : null;
   renderReplayOhlc(replayLastVisibleCandle);
