@@ -161,6 +161,10 @@
   }
   .modal-box.fs .replay-canvas-wrap{flex:1; min-height:0; margin-top:6px;}
   .modal-box.fs #replayChartContainer{width:100%; height:100%; touch-action:none;}
+  /* Transparent layer painted on top of the chart where all user-drawn
+     lines live. pointer-events:none so taps/drags still reach the chart
+     container's own handlers underneath. */
+  .replay-draw-canvas{position:absolute; inset:0; z-index:1; pointer-events:none;}
   .replay-ohlc-overlay{
     position:absolute; top:6px; left:6px; z-index:2; pointer-events:none;
     background:rgba(11,15,20,0.72); border:1px solid var(--border); border-radius:5px;
@@ -403,6 +407,7 @@
       <div class="replay-canvas-wrap" id="replayCanvasWrap">
         <div class="replay-ohlc-overlay" id="replayOhlcOverlay">–</div>
         <div id="replayChartContainer"></div>
+        <canvas class="replay-draw-canvas" id="replayDrawCanvas"></canvas>
       </div>
       <div class="replay-legend">
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
@@ -534,14 +539,6 @@ function clearShot(which){
 // re-aggregated client-side when the user switches timeframes.
 const REPLAY_TIMEFRAMES = [1, 5, 15]; // minutes per candle
 const REPLAY_SPEEDS = [0.5, 1, 2, 4];
-// How far into the future (in seconds) a Horizontal Ray's second point sits.
-// Lightweight Charts has no built-in "extend forever in one direction" line
-// type (that's what price lines DO span the full width both ways, which is
-// the wrong behavior here) — so a ray is built as a 2-point line stretched
-// far enough right that it looks like it goes on forever for any zoom level
-// realistic on a single trade's replay window (60 days, vastly more than
-// any trade's candle span).
-const REPLAY_RAY_EXTENSION_SECONDS = 60 * 24 * 3600;
 let replayRaw = null;        // {candles, entryIndex, exitIndex} - the original 1m data for the open trade
 let replayAggregated = [];   // currently-displayed (possibly aggregated) candle array
 let replayEntryIdx = null;
@@ -662,6 +659,9 @@ function ensureReplayChart(){
   // box in the corner to follow it, the same way TradingView's does. When
   // the finger lifts (param.time is empty), it falls back to showing the
   // newest revealed candle instead of leaving stale numbers on screen.
+  // Any pan or zoom moves candles under the overlay — repaint the lines so
+  // they stay locked to the candles they were anchored to.
+  replayChart.timeScale().subscribeVisibleLogicalRangeChange(()=>{ redrawReplayDrawings(); });
   replayChart.subscribeCrosshairMove((param) => {
     if (param && param.time && replayCandleByTime.has(param.time)) {
       renderReplayOhlc(replayCandleByTime.get(param.time));
@@ -708,6 +708,9 @@ function resizeReplayChartToContainer(){
   const container = document.getElementById('replayChartContainer');
   if(!container) return;
   replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+  // The overlay canvas has to track the chart's size exactly or drawings
+  // would land at the wrong pixels after any layout change.
+  redrawReplayDrawings();
 }
 function openReplay(trade){
   if(!trade.replayData || !trade.replayData.candles || !trade.replayData.candles.length){
@@ -803,134 +806,180 @@ function setReplayDrawMode(mode){
   if(replayChart) replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode });
   buildReplayDrawRow();
 }
-// Finds whichever drawing (if any) sits under a given chart-pixel point —
-// shared by tap-to-select (handleReplayTap) and drag-to-grab (pointerdown)
-// so both use identical hit-test logic.
+// ===== Drawing overlay =====
+// Every user-drawn line is painted onto a transparent canvas sitting ON TOP
+// of the chart, rather than being added to the chart as a data series.
+//
+// This matters: Lightweight Charts positions everything by candle SLOT, not
+// by real elapsed time. A "ray" built as a series ending 60 days out didn't
+// stretch across the screen — it collapsed into the single slot after the
+// last candle. And a trend line's second point at "anchor + 1 second"
+// created a brand-new slot, physically shifting every candle sideways. That
+// was the real cause of both the invisible lines and the chart jumping
+// around. Painting on top avoids the time scale entirely: we just convert
+// each saved {time, price} to pixels and draw.
+function redrawReplayDrawings(){
+  const cv = document.getElementById('replayDrawCanvas');
+  if(!cv || !replayChart || !replaySeries) return;
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if(!w || !h) return;
+  if(cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const ts = replayChart.timeScale();
+
+  const drawAll = (d)=>{
+    const selected = replaySelectedDrawing && replaySelectedDrawing.drawing === d;
+    ctx.strokeStyle = selected ? '#FFD666' : '#F2B94A';
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.lineWidth = selected ? 3 : 2;
+
+    if(d.type === 'ray' || d.type === 'hline'){
+      const anchor = d.type === 'ray' ? d.anchor : { time: null, price: d.price };
+      const y = replaySeries.priceToCoordinate(anchor.price);
+      if(y == null) return;
+      // A legacy 'hline' spans the whole width; a ray starts at its anchor
+      // candle and runs only to the right edge.
+      let x0 = 0;
+      if(d.type === 'ray'){
+        const ax = ts.timeToCoordinate(d.anchor.time);
+        if(ax == null) return;
+        x0 = ax;
+      }
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(w, y); ctx.stroke();
+      if(d.type === 'ray'){
+        ctx.beginPath(); ctx.arc(x0, y, selected ? 5 : 4, 0, Math.PI*2); ctx.fill();
+      }
+      // Price tag on the right edge, same idea as the chart's own labels.
+      const label = anchor.price.toFixed(2);
+      ctx.font = '11px ui-monospace, Menlo, monospace';
+      const tw = ctx.measureText(label).width + 8;
+      ctx.fillRect(w - tw - 2, y - 8, tw, 16);
+      ctx.fillStyle = '#0B0F14';
+      ctx.fillText(label, w - tw + 2, y + 4);
+      return;
+    }
+
+    if(d.type === 'trend'){
+      const x1 = ts.timeToCoordinate(d.p1.time);
+      const y1 = replaySeries.priceToCoordinate(d.p1.price);
+      const x2 = ts.timeToCoordinate(d.p2.time);
+      const y2 = replaySeries.priceToCoordinate(d.p2.price);
+      if(x1==null||y1==null||x2==null||y2==null) return;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x1,y1, selected?5:4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x2,y2, selected?5:4, 0, Math.PI*2); ctx.fill();
+    }
+  };
+  replayDrawings.forEach(drawAll);
+
+  // A trend line waiting on its second click — show its anchor so it's
+  // obvious the first point registered.
+  if(replayPendingPoint){
+    const px = ts.timeToCoordinate(replayPendingPoint.time);
+    const py = replaySeries.priceToCoordinate(replayPendingPoint.price);
+    if(px!=null && py!=null){
+      ctx.fillStyle = '#F2B94A';
+      ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2); ctx.fill();
+    }
+  }
+}
+// Perpendicular distance from a point to a line segment — used to let you
+// grab a trend line anywhere along its length, not just at its endpoints.
+function distanceToSegment(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1;
+  const lenSq = dx*dx + dy*dy;
+  if(lenSq === 0) return Math.hypot(px-x1, py-y1);
+  let t = ((px-x1)*dx + (py-y1)*dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t*dx), py - (y1 + t*dy));
+}
+// Finds whichever drawing (if any) sits under a given chart-pixel point.
+// Endpoints win over line bodies so you can grab a specific end to reshape.
 function findReplayDrawingAt(x, y){
-  const HIT_TOLERANCE = 14; // pixels
+  const HIT = 14; // pixels
+  const ts = replayChart.timeScale();
   for(let i = replayDrawings.length - 1; i >= 0; i--){
     const d = replayDrawings[i];
     if(d.type === 'hline'){
       const py = replaySeries.priceToCoordinate(d.price);
-      if(py != null && Math.abs(py - y) <= HIT_TOLERANCE) return { drawing: d, part: 'hline' };
+      if(py != null && Math.abs(py - y) <= HIT) return { drawing: d, part: 'hline' };
     } else if(d.type === 'ray'){
-      const ax = replayChart.timeScale().timeToCoordinate(d.anchor.time);
+      const ax = ts.timeToCoordinate(d.anchor.time);
       const ay = replaySeries.priceToCoordinate(d.anchor.price);
-      if(ax!=null && ay!=null && Math.hypot(ax-x, ay-y) <= HIT_TOLERANCE) return { drawing: d, part: 'anchor' };
-      // Grabbing anywhere along the ray's body (to the right of its start)
-      // shifts just its price level, same as grabbing a horizontal line.
-      if(ax!=null && ay!=null && x >= ax - HIT_TOLERANCE && Math.abs(ay - y) <= HIT_TOLERANCE) return { drawing: d, part: 'ray-body' };
+      if(ax==null||ay==null) continue;
+      if(Math.hypot(ax-x, ay-y) <= HIT) return { drawing: d, part: 'anchor' };
+      if(x >= ax - HIT && Math.abs(ay - y) <= HIT) return { drawing: d, part: 'ray-body' };
     } else if(d.type === 'trend'){
-      const x1 = replayChart.timeScale().timeToCoordinate(d.p1.time);
+      const x1 = ts.timeToCoordinate(d.p1.time);
       const y1 = replaySeries.priceToCoordinate(d.p1.price);
-      const x2 = replayChart.timeScale().timeToCoordinate(d.p2.time);
+      const x2 = ts.timeToCoordinate(d.p2.time);
       const y2 = replaySeries.priceToCoordinate(d.p2.price);
-      if(x1!=null && y1!=null && Math.hypot(x1-x, y1-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p1' };
-      if(x2!=null && y2!=null && Math.hypot(x2-x, y2-y) <= HIT_TOLERANCE) return { drawing: d, part: 'p2' };
+      if(x1==null||y1==null||x2==null||y2==null) continue;
+      if(Math.hypot(x1-x, y1-y) <= HIT) return { drawing: d, part: 'p1' };
+      if(Math.hypot(x2-x, y2-y) <= HIT) return { drawing: d, part: 'p2' };
+      if(distanceToSegment(x,y,x1,y1,x2,y2) <= HIT) return { drawing: d, part: 'trend-body' };
     }
   }
   return null;
 }
-// Brightens/thickens whichever line is selected so it's visually obvious
-// which one the Delete button would remove; reverts everything else back
-// to the normal amber.
-function styleReplayDrawing(d, selected){
-  const color = selected ? '#FFD666' : '#F2B94A';
-  const lineWidth = selected ? 3 : 2;
-  if(d.type === 'hline') d.handle.applyOptions({ color, lineWidth, title: d.price.toFixed(2) });
-  else d.handle.applyOptions({ color, lineWidth });
-}
 function selectReplayDrawing(target){
-  if(replaySelectedDrawing && replaySelectedDrawing.drawing !== target.drawing){
-    styleReplayDrawing(replaySelectedDrawing.drawing, false);
-  }
   replaySelectedDrawing = target;
-  styleReplayDrawing(target.drawing, true);
+  redrawReplayDrawings();
   buildReplayDrawRow();
 }
 function deselectReplayDrawing(){
   if(!replaySelectedDrawing) return;
-  styleReplayDrawing(replaySelectedDrawing.drawing, false);
   replaySelectedDrawing = null;
+  redrawReplayDrawings();
   buildReplayDrawRow();
 }
 function deleteSelectedReplayDrawing(){
   if(!replaySelectedDrawing) return;
   const d = replaySelectedDrawing.drawing;
-  if(d.type==='hline') replaySeries.removePriceLine(d.handle);
-  else replayChart.removeSeries(d.handle);
   replayDrawings = replayDrawings.filter(x=>x!==d);
   replaySelectedDrawing = null;
+  redrawReplayDrawings();
   buildReplayDrawRow();
   persistReplayDrawings();
 }
 function clearReplayDrawingsFromChart(){
-  replayDrawings.forEach(d=>{
-    if(d.type==='hline') replaySeries.removePriceLine(d.handle);
-    if(d.type==='trend') replayChart.removeSeries(d.handle);
-  });
   replayDrawings = [];
   replayPendingPoint = null;
   replaySelectedDrawing = null;
+  redrawReplayDrawings();
 }
 function clearReplayDrawings(){
   clearReplayDrawingsFromChart();
   persistReplayDrawings();
 }
-// Saves the current drawings onto whichever trade's replay is open, using
-// only the plain data (price / points) — not the chart handles, which are
-// live chart objects and can't be saved to the phone's storage. Runs after
-// every add, drag, and clear, so nothing needs a separate "Save" step.
+// Drawings are already plain data now (no live chart objects), so saving
+// is a straight copy — nothing to convert.
 function persistReplayDrawings(){
   if(!replayOpenTradeId) return;
   const trades = loadTrades();
   const trade = trades.find(t=>String(t.id)===String(replayOpenTradeId));
   if(!trade) return;
   trade.chartDrawings = replayDrawings.map(d=>{
-    if(d.type==='hline') return { type:'hline', price: d.price }; // legacy full-width lines from before this fix
-    if(d.type==='ray') return { type:'ray', anchor: d.anchor };
-    return { type:'trend', p1: d.p1, p2: d.p2 };
+    if(d.type==='hline') return { type:'hline', price: d.price };
+    if(d.type==='ray') return { type:'ray', anchor: {...d.anchor} };
+    return { type:'trend', p1: {...d.p1}, p2: {...d.p2} };
   });
   saveTrades(trades);
 }
-// Rebuilds saved drawings back onto the chart when a trade's replay is
-// reopened — recreating real price-line/line-series objects from the
-// plain saved data (the reverse of persistReplayDrawings above). Old
-// trades saved before this fix may still have 'hline' entries (the old
-// full-width style) — those still restore correctly as full-width lines
-// rather than being silently dropped or misdrawn as rays.
 function restoreReplayDrawings(trade){
   const saved = trade.chartDrawings || [];
   saved.forEach(d=>{
-    if(d.type==='hline'){
-      const line = replaySeries.createPriceLine({
-        price: d.price, color: '#F2B94A', lineWidth: 2,
-        axisLabelVisible: true, title: d.price.toFixed(2),
-      });
-      replayDrawings.push({ type:'hline', handle: line, price: d.price });
-    } else if(d.type==='ray'){
-      const rayEnd = { time: d.anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price: d.anchor.price };
-      const raySeries = replayChart.addLineSeries({
-        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-      });
-      raySeries.setData([d.anchor, rayEnd]);
-      replayDrawings.push({ type:'ray', handle: raySeries, anchor: d.anchor });
-    } else if(d.type==='trend'){
-      const trendSeries = replayChart.addLineSeries({
-        color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-      });
-      const sorted = [d.p1, d.p2].slice().sort((a,b)=>a.time-b.time);
-      trendSeries.setData(sorted);
-      replayDrawings.push({ type:'trend', handle: trendSeries, p1: d.p1, p2: d.p2 });
-    }
+    if(d.type==='hline') replayDrawings.push({ type:'hline', price: d.price });
+    else if(d.type==='ray') replayDrawings.push({ type:'ray', anchor: {...d.anchor} });
+    else if(d.type==='trend') replayDrawings.push({ type:'trend', p1: {...d.p1}, p2: {...d.p2} });
   });
+  redrawReplayDrawings();
 }
-// Lets you grab an already-placed line and move it. This runs independently
-// of the tap-to-place tools above — it's active any time a finger comes
-// down close enough to an existing line, whether or not a drawing tool is
-// currently selected, same as most charting apps let you always move your
-// own lines. Uses raw pointer events (not the chart's own click/crosshair
-// system) because dragging needs continuous tracking, not single taps.
 // Converts a screen x/y inside the chart into a {time, price} point,
 // applying magnet snapping when it's on. Shared by every placement path
 // (click, drag-draw, drag-move) so they all behave identically.
@@ -939,9 +988,9 @@ function replayPointFromCoords(x, y){
   if(price == null) return null;
   let rawTime = replayChart.timeScale().coordinateToTime(x);
   if(rawTime == null){
-    // Pointer is in the empty space beyond the last candle (or before the
-    // first) — coordinateToTime only resolves within plotted data, so this
-    // falls back to the nearest edge candle instead of failing silently.
+    // Pointer is past the last candle (or before the first) — that's a
+    // normal place to anchor a ray, so fall back to the nearest edge
+    // candle rather than silently doing nothing.
     const allTimes = [...replayCandleByTime.keys()];
     if(!allTimes.length) return null;
     rawTime = x <= 0 ? Math.min(...allTimes) : Math.max(...allTimes);
@@ -951,22 +1000,11 @@ function replayPointFromCoords(x, y){
   if(replayMagnetOn && entry) price = snapPriceToCandle(price, entry.candle);
   return { time, price };
 }
-// Creates a horizontal ray anchored at a point, extending only rightward.
-function createReplayRay(anchor){
-  const rayEnd = { time: anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price: anchor.price };
-  const raySeries = replayChart.addLineSeries({
-    color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-  });
-  raySeries.setData([anchor, rayEnd]);
-  const drawing = { type: 'ray', handle: raySeries, anchor };
-  replayDrawings.push(drawing);
-  return drawing;
-}
 function setupReplayDragHandlers(container){
-  const TAP_MOVE_TOLERANCE = 6; // pixels — a real finger is never perfectly still; anything under this still counts as a tap, not a pan
-  let gestureStart = null; // {x,y} where this touch began
-  let gestureMoved = false; // true once movement crosses the tolerance — rules out treating pointerup as a tap
-  let frozePan = false; // true while we've deliberately paused chart pan/zoom for this gesture
+  const TAP_MOVE_TOLERANCE = 6; // pixels of slop still counted as a click, not a drag
+  let gestureStart = null;
+  let gestureMoved = false;
+  let frozePan = false;
 
   function localCoords(e){
     const rect = container.getBoundingClientRect();
@@ -979,44 +1017,42 @@ function setupReplayDragHandlers(container){
 
     const target = findReplayDrawingAt(x,y);
     if(target){
-      selectReplayDrawing(target); // grabbing a line also selects it, so Delete is available right after a drag too
+      selectReplayDrawing(target);
       replayDragTarget = target;
-      replayChart.applyOptions({ handleScroll: false, handleScale: false });
+      if(target.part === 'trend-body' || target.part === 'ray-body'){
+        // Moving a whole line rather than one end — remember where the
+        // grab started so the shape keeps its size as it moves.
+        replayDragTarget.grabPoint = replayPointFromCoords(x,y);
+        replayDragTarget.original = JSON.parse(JSON.stringify(target.drawing));
+      }
+      replayChart.applyOptions({ handleScroll:false, handleScale:false });
       frozePan = true;
       e.preventDefault();
       return;
     }
     if(replayDrawMode){
-      replayChart.applyOptions({ handleScroll: false, handleScale: false });
+      replayChart.applyOptions({ handleScroll:false, handleScale:false });
       frozePan = true;
       e.preventDefault();
-      // Draw on pointer-DOWN rather than waiting for pointer-up. The old
-      // approach only drew if the pointer came back up without moving,
-      // which fails with a mouse (you naturally drag a little) and made it
-      // look like the tools simply didn't work. Now the line appears the
-      // instant you press.
       const pt = replayPointFromCoords(x,y);
       if(!pt) return;
 
       if(replayDrawMode === 'ray'){
-        createReplayRay(pt);
+        // Appears the instant you press — no waiting for release.
+        replayDrawings.push({ type:'ray', anchor: pt });
+        redrawReplayDrawings();
         persistReplayDrawings();
         return;
       }
       if(replayDrawMode === 'trend'){
-        // Start a live trend line anchored here. Moving the pointer
-        // stretches it in real time; releasing sets the end point —
-        // the click-drag-release flow. Tapping without dragging still
-        // works too: it leaves the line pending for a second tap.
-        const trendSeries = replayChart.addLineSeries({
-          color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-        });
-        trendSeries.setData([pt, {time: pt.time + 1, price: pt.price}]);
-        const drawing = { type:'trend', handle: trendSeries, p1: pt, p2: {time: pt.time + 1, price: pt.price} };
+        // Anchor here; dragging stretches the far end live, releasing
+        // sets it. A click without dragging leaves the anchor pending
+        // for a second click instead.
+        const drawing = { type:'trend', p1: pt, p2: {...pt} };
         replayDrawings.push(drawing);
-        // Reuse the existing endpoint-drag machinery to stretch p2 live.
         replayDragTarget = { drawing, part: 'p2' };
         replayLiveTrendDraw = true;
+        redrawReplayDrawings();
       }
     }
   }
@@ -1025,62 +1061,28 @@ function setupReplayDragHandlers(container){
     const {x,y} = localCoords(e);
     if(!gestureMoved && Math.hypot(x-gestureStart.x, y-gestureStart.y) > TAP_MOVE_TOLERANCE) gestureMoved = true;
 
-    if(!replayDragTarget) { if(frozePan) e.preventDefault(); return; }
+    if(!replayDragTarget){ if(frozePan) e.preventDefault(); return; }
     e.preventDefault();
-    let price = replaySeries.coordinateToPrice(y);
-    if(price == null) return;
-    const rawTime = replayChart.timeScale().coordinateToTime(x);
+    const pt = replayPointFromCoords(x,y);
+    if(!pt) return;
     const { drawing, part } = replayDragTarget;
 
-    if(part === 'hline'){
-      if(replayMagnetOn && rawTime!=null){
-        const entry = nearestCandleEntry(rawTime);
-        if(entry) price = snapPriceToCandle(price, entry.candle);
+    if(part === 'hline'){ drawing.price = pt.price; }
+    else if(part === 'anchor'){ drawing.anchor = pt; }
+    else if(part === 'ray-body'){ drawing.anchor = { time: drawing.anchor.time, price: pt.price }; }
+    else if(part === 'p1' || part === 'p2'){ drawing[part] = pt; }
+    else if(part === 'trend-body'){
+      // Shift both ends by how far the pointer has moved from the grab
+      // point, so the line keeps its angle and length.
+      const g = replayDragTarget.grabPoint, o = replayDragTarget.original;
+      if(g && o){
+        const dPrice = pt.price - g.price;
+        const dTime = pt.time - g.time;
+        drawing.p1 = { time: o.p1.time + dTime, price: o.p1.price + dPrice };
+        drawing.p2 = { time: o.p2.time + dTime, price: o.p2.price + dPrice };
       }
-      drawing.price = price;
-      drawing.handle.applyOptions({ price, title: price.toFixed(2) });
-      return;
     }
-
-    if(part === 'ray-body'){
-      // Dragged from somewhere along the line, not its start dot — shifts
-      // the price level only, same feel as dragging a horizontal line,
-      // while the ray keeps starting at the same candle it was anchored to.
-      if(replayMagnetOn && rawTime!=null){
-        const entry = nearestCandleEntry(rawTime);
-        if(entry) price = snapPriceToCandle(price, entry.candle);
-      }
-      drawing.anchor = { time: drawing.anchor.time, price };
-      const rayEnd = { time: drawing.anchor.time + REPLAY_RAY_EXTENSION_SECONDS, price };
-      drawing.handle.setData([drawing.anchor, rayEnd]);
-      return;
-    }
-
-    if(part === 'anchor'){
-      // Dragged the ray's actual start dot — moves the whole ray to a new
-      // starting candle and/or price.
-      if(rawTime == null) return;
-      let time = rawTime;
-      if(replayMagnetOn){
-        const entry = nearestCandleEntry(rawTime);
-        if(entry){ time = entry.time; price = snapPriceToCandle(price, entry.candle); }
-      }
-      drawing.anchor = { time, price };
-      const rayEnd = { time: time + REPLAY_RAY_EXTENSION_SECONDS, price };
-      drawing.handle.setData([drawing.anchor, rayEnd]);
-      return;
-    }
-
-    // Trend line endpoint (p1/p2) — needs a valid time position too, not just price.
-    if(rawTime == null) return;
-    let time = rawTime;
-    if(replayMagnetOn){
-      const entry = nearestCandleEntry(rawTime);
-      if(entry){ time = entry.time; price = snapPriceToCandle(price, entry.candle); }
-    }
-    drawing[part] = { time, price };
-    const points = [drawing.p1, drawing.p2].slice().sort((a,b)=>a.time-b.time);
-    drawing.handle.setData(points);
+    redrawReplayDrawings();
   }
   function onUp(e){
     if(replayDragTarget){
@@ -1090,29 +1092,24 @@ function setupReplayDragHandlers(container){
       replayLiveTrendDraw = false;
       replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode });
 
-      // Click-without-drag while starting a trend line leaves a
-      // zero-length stub. Rather than saving that, remove it and fall back
-      // to the two-click flow (first click sets the start, second sets the
-      // end) so both interaction styles work.
       if(wasLiveTrend && !gestureMoved){
-        replayChart.removeSeries(liveDrawing.handle);
+        // Clicked without dragging — drop the zero-length stub and switch
+        // to the two-click flow (click start, then click end).
         replayDrawings = replayDrawings.filter(d=>d!==liveDrawing);
         replayPendingPoint = liveDrawing.p1;
+        replaySelectedDrawing = null;
+        redrawReplayDrawings();
         buildReplayDrawRow();
         gestureStart = null; frozePan = false;
         return;
       }
+      redrawReplayDrawings();
       persistReplayDrawings();
       gestureStart = null; frozePan = false;
       return;
     }
     if(frozePan){ replayChart.applyOptions({ handleScroll: !replayDrawMode, handleScale: !replayDrawMode }); frozePan = false; }
 
-    // A genuine tap: pointer went down and came back up without enough
-    // movement to count as a pan attempt. Handles both placing a new
-    // point (a tool is active) and selecting/deselecting a line (no tool
-    // active) — the same two jobs the library's click event used to do,
-    // just detected reliably now instead of guessed at.
     if(gestureStart && !gestureMoved){
       const {x,y} = localCoords(e);
       handleReplayTap(x,y);
@@ -1120,19 +1117,16 @@ function setupReplayDragHandlers(container){
     gestureStart = null;
   }
 
-  // capture:true — runs our detection BEFORE the chart library's own
-  // internal touch handling gets a chance to consume the event, so a tap
-  // can't get silently swallowed by the library's own pan/zoom logic.
-  container.addEventListener('pointerdown', onDown, { passive: false, capture: true });
-  container.addEventListener('pointermove', onMove, { passive: false, capture: true });
-  container.addEventListener('pointerup', onUp, { capture: true });
-  container.addEventListener('pointercancel', onUp, { capture: true });
+  // capture:true — sees the event before the chart library's own touch
+  // handling can consume it.
+  container.addEventListener('pointerdown', onDown, { passive:false, capture:true });
+  container.addEventListener('pointermove', onMove, { passive:false, capture:true });
+  container.addEventListener('pointerup', onUp, { capture:true });
+  container.addEventListener('pointercancel', onUp, { capture:true });
 }
-// Handles a click/tap that wasn't a drag. Placement itself now happens on
-// pointer-DOWN (see onDown) so lines appear the instant you press — this
-// only covers what's left: selecting an existing line when no tool is
-// active, and completing a two-click trend line when the first click
-// didn't drag.
+// A click that wasn't a drag. Placement happens on pointer-down (see
+// onDown), so this only handles selecting an existing line, and finishing
+// a two-click trend line.
 function handleReplayTap(x, y){
   if(!replayDrawMode){
     const hit = findReplayDrawingAt(x,y);
@@ -1142,13 +1136,9 @@ function handleReplayTap(x, y){
   if(replayDrawMode === 'trend' && replayPendingPoint){
     const pt = replayPointFromCoords(x,y);
     if(!pt) return;
-    const trendSeries = replayChart.addLineSeries({
-      color: '#F2B94A', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-    });
-    const points = [replayPendingPoint, pt].sort((a,b)=> a.time - b.time);
-    trendSeries.setData(points);
-    replayDrawings.push({ type: 'trend', handle: trendSeries, p1: points[0], p2: points[1] });
+    replayDrawings.push({ type:'trend', p1: replayPendingPoint, p2: pt });
     replayPendingPoint = null;
+    redrawReplayDrawings();
     persistReplayDrawings();
     buildReplayDrawRow();
   }
@@ -1266,6 +1256,7 @@ function updateReplayChart(){
 
   replayLastVisibleCandle = visible.length ? visible[visible.length-1] : null;
   renderReplayOhlc(replayLastVisibleCandle);
+  redrawReplayDrawings();
 }
 // Draws the price info box in the corner for one candle — shared by both
 // the default "latest revealed candle" view and by the crosshair, so
