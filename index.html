@@ -703,19 +703,26 @@ function ensureReplayChart(){
 // here too, the chart kept rendering at its old (too-tall) size after the
 // toolbar grew, pushing the bottom of the chart — the volume bars, the
 // time-axis labels — outside the visible clipped area.
-// Frames the most recent candles at a readable width. Replaces both
-// fitContent() (which squeezed 3000+ candles into the screen until each was
-// a sliver) and a bare scrollToPosition (which could park the view somewhere
-// with no candles visible at all — a blank chart). Setting an explicit
-// logical range does both jobs: candles stay wide AND stay on screen.
+// Fits the full revealed set for the current timeframe — this is what
+// reliably renders (an earlier attempt to hand-set the visible range, to
+// keep candles wide with thousands of bars loaded, is what blanked the
+// chart entirely with no error). Called once per timeframe change (see
+// setReplayTimeframe) to set the candle width/zoom, NOT on every playback
+// frame — see scrollReplayToLatest() below for the pan-only version Play/
+// scrub/step actually use, so candles don't shrink as more get revealed.
 function frameReplayView(){
   if(!replayChart) return;
-  // fitContent() is what reliably renders. An earlier attempt to hand-set
-  // the visible range (to keep candles wide with 3000+ bars loaded) is what
-  // blanked the chart entirely. With the backend now capping the replay
-  // window, there are few enough candles that fitting them all is both
-  // correct and readable.
   replayChart.timeScale().fitContent();
+}
+// Pans to keep the newest revealed candle in view during playback, WITHOUT
+// touching zoom. Calling fitContent() (frameReplayView()) here instead
+// would re-fit the entire revealed history into the same fixed width on
+// every tick, shrinking candles as more of them get revealed during Play —
+// the zoom is set once by frameReplayView() when the timeframe changes,
+// and this only scrolls from there.
+function scrollReplayToLatest(){
+  if(!replayChart) return;
+  replayChart.timeScale().scrollToPosition(0, false);
 }
 function resizeReplayChartToContainer(){
   if(!replayChart) return;
@@ -1182,16 +1189,10 @@ function setReplayTimeframe(tf){
   document.getElementById('replayScrub').value = replayRevealCount;
   buildReplayTfRow();
   updateReplayChart();
-  // Sets the candle width/zoom ONCE, based on the full revealed set at
-  // this timeframe. Play/scrub no longer re-fits every frame (see
-  // updateReplayChart) — so candles keep a steady, readable width
-  // throughout playback instead of shrinking as more get revealed.
-  //
-  // Deliberately NOT fitContent() here: that forces every candle to fit
-  // on screen at once, which overrides the barSpacing minimum set in the
-  // chart options and is what made candles render only a few pixels wide.
-  // Scrolling to the latest candle instead keeps them full size and lets
-  // you pan back through history.
+  // Fits the full revealed set for this timeframe ONCE, setting the candle
+  // width/zoom. updateReplayChart() only pans (scrollReplayToLatest) during
+  // playback from here on, so candles keep this same width instead of
+  // shrinking as more get revealed.
   frameReplayView();
 }
 function setReplaySpeed(s){
@@ -1270,13 +1271,13 @@ function updateReplayChart(){
     markers.push({ time: formatted[replayExitIdx].time, position: 'aboveBar', color: '#E5484D', shape: 'arrowDown', size: 0.6 });
   }
   replaySeries.setMarkers(markers);
-  // Scrolls to keep the newest revealed candle in view WITHOUT changing
-  // candle width — fitContent() used to run here every frame, which is
-  // what caused candles to keep shrinking as more of them got revealed
-  // during Play (it was re-squeezing the entire revealed history into the
-  // same fixed space every single tick). This just pans forward instead,
-  // the way a real live/replay chart does.
-  frameReplayView();
+  // Pans forward to keep the newest revealed candle in view WITHOUT
+  // touching zoom — the width is set once by frameReplayView() in
+  // setReplayTimeframe(). Calling fitContent() here on every frame (it
+  // used to) re-fits the entire revealed history into the same fixed
+  // width each tick, which is what made candles shrink as more of them
+  // got revealed during Play.
+  scrollReplayToLatest();
 
   replayLastVisibleCandle = visible.length ? visible[visible.length-1] : null;
   renderReplayOhlc(replayLastVisibleCandle);
