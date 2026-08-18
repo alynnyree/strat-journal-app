@@ -10,9 +10,15 @@ ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
 1. **Fix 403 error on `/media/pending`.**
-   **Status: Open.** The App Key entered in the app doesn't match the
-   backend's `APP_SECRET` value. Small fix, and it blocks task 6
-   (screenshot pipeline) below.
+   **Status: Blocked on owner (2026-08-18).** Diagnosed: both sides of the
+   code are correct (the app sends the App Key correctly; the server's
+   check is a correct exact match) — this is purely two settings not
+   matching, not a code bug. Only the owner has the Render login where the
+   real `APP_SECRET` value lives, so this can't be fixed from here. Fix:
+   Render dashboard → strat-journal-backend service → Environment →
+   `APP_SECRET` → copy its value → paste into the App Key box on the
+   Journal tab in the app → save. Once done, blocks on task 6 (screenshot
+   pipeline) are cleared.
 
 2. **Build AI strategy auto-classification.**
    **Status: Open.** Highest-value task on this list: as of 2026-08-17 the
