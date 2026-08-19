@@ -225,6 +225,7 @@
   </div>
   <div id="connBadge" style="font-size:11px; color:var(--text-dim);"><span class="conn-dot off"></span>Not connected</div>
 </div>
+<div id="setupDebug" style="font-size:10.5px; color:var(--text-dim); padding:2px 16px 6px 16px;"></div>
 <div class="ladder" id="heroLadder"></div>
 
 <main>
@@ -1944,19 +1945,51 @@ async function autoCheckFtfc(ticker, entryDate, entryTime){
   // key only ever lives in that bookmark on the trader's own device —
   // never written into this file — so it's not exposed by view-source on
   // this public page.
+  //
+  // The on-screen "setupDebug" line below exists because two rounds of
+  // fixes here failed for the owner in ways that couldn't be diagnosed
+  // remotely — no way to see his real device's console or storage. It
+  // answers, in plain sight, on his own screen: did this exact page load
+  // actually receive the backend/key values in its address bar; did
+  // saving them into on-device storage work or throw an error; and is
+  // this page even running in standalone (home-screen icon) mode at all,
+  // via the iOS-specific navigator.standalone flag. No more guessing from
+  // outside what a real iPhone is actually doing.
   const params = new URLSearchParams(location.search);
   const urlParam = params.get('backend');
   const keyParam = params.get('key');
-  if(urlParam) localStorage.setItem('strat_backend_url', urlParam);
-  if(keyParam) localStorage.setItem('strat_app_key', keyParam);
+  const debugParts = [];
+  debugParts.push('link had backend: ' + (urlParam ? 'yes' : 'no'));
+  debugParts.push('link had key: ' + (keyParam ? 'yes' : 'no'));
+
+  let saveError = null;
+  try{
+    if(urlParam) localStorage.setItem('strat_backend_url', urlParam);
+    if(keyParam) localStorage.setItem('strat_app_key', keyParam);
+  }catch(e){
+    saveError = e.message;
+  }
   if(urlParam || keyParam){
-    // Strip them from the visible address bar/history right after saving
-    // so the key doesn't sit around in plain text there too.
-    history.replaceState(null, '', location.pathname + location.hash);
+    try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){ /* non-fatal — cosmetic only */ }
   }
 
-  const url = localStorage.getItem('strat_backend_url');
-  const key = localStorage.getItem('strat_app_key');
+  let url = null, key = null, readError = null;
+  try{
+    url = localStorage.getItem('strat_backend_url');
+    key = localStorage.getItem('strat_app_key');
+  }catch(e){
+    readError = e.message;
+  }
+
+  debugParts.push('backend saved: ' + (url ? ('yes, '+url.length+' chars') : 'no'));
+  debugParts.push('key saved: ' + (key ? ('yes, '+key.length+' chars') : 'no'));
+  if(saveError) debugParts.push('SAVE ERROR: '+saveError);
+  if(readError) debugParts.push('READ ERROR: '+readError);
+  debugParts.push('mode: ' + (window.navigator.standalone ? 'standalone (home-screen icon)' : 'browser tab'));
+
+  const dbg = document.getElementById('setupDebug');
+  if(dbg) dbg.textContent = debugParts.join(' · ');
+
   if(key) document.getElementById('f_appKey').value = key;
   if(url){ document.getElementById('f_backendUrl').value = url; connectBackend(); }
 })();
