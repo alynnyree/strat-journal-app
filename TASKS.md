@@ -10,17 +10,33 @@ ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
 1. **Fix 403 error on `/media/pending`.**
-   **Status: Open.** The App Key entered in the app doesn't match the
-   backend's `APP_SECRET` value. Small fix, and it blocks task 6
-   (screenshot pipeline) below.
+   **Status: Blocked on owner (2026-08-18).** Diagnosed: both sides of the
+   code are correct (the app sends the App Key correctly; the server's
+   check is a correct exact match) — this is purely two settings not
+   matching, not a code bug. Only the owner has the Render login where the
+   real `APP_SECRET` value lives, so this can't be fixed from here. Fix:
+   Render dashboard → strat-journal-backend service → Environment →
+   `APP_SECRET` → copy its value → paste into the App Key box on the
+   Journal tab in the app → save. Once done, blocks on task 6 (screenshot
+   pipeline) are cleared.
 
 2. **Build AI strategy auto-classification.**
-   **Status: Open.** Highest-value task on this list: as of 2026-08-17 the
-   journal has ~200 logged trades, ~199 of them unclassified by setup, a
-   48% win rate, and roughly −$814 net (owner-reported figures, not
-   independently checked against the data here). Without classification
-   the journal can't show which of the three Strat setups actually makes
-   money — which is the whole point of keeping it.
+   **Status: Fixed, unconfirmed on phone (2026-08-18).** Correction: the
+   classifier itself, and the Dashboard's "which setup makes money"
+   breakdown, already existed in the code (since 2026-08-09) — this
+   list's "not built" note was stale, not accurate. The real gap was that
+   it only ran automatically on trades synced *after* it existed, so the
+   ~199 already-logged trades from before that never got tagged. Added:
+   a "Classify Trades" button on the Dashboard (only appears when trades
+   are untagged) that sends each untagged trade to a new backend route
+   (`POST /ai/classify`) one at a time, tags it if the AI is highly
+   confident, and leaves it as "Needs Setup" otherwise. Verified: the new
+   backend route was tested with a stand-in (fake) AI response and
+   correctly handles a wrong App Key, a missing trade, a confident match,
+   an unsure match, and a server error — and the app's on-page code was
+   checked for typos/syntax errors. NOT verified: an actual classification
+   run against his real ~199 trades, or how it looks/behaves on his
+   iPhone — both need the owner to tap the new button and check results.
 
 3. **Fix blank Bar Replay chart.**
    **Status: Open, but weakened by new evidence.** Originally: reproduces

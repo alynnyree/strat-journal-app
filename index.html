@@ -241,6 +241,7 @@
     <div class="card" style="margin-top:14px;">
       <h3>Setup Performance</h3>
       <div id="setupBreakdown"><div class="empty">Log trades to see which Strat setups actually make you money.</div></div>
+      <div id="classifyRow" style="margin-top:10px;"></div>
     </div>
 
     <div class="card">
@@ -1518,6 +1519,16 @@ function renderDashboard(){
     }).join('');
   }
 
+  const cr = document.getElementById('classifyRow');
+  const unclassifiedCount = trades.filter(t=>!t.strat).length;
+  if(classifyInProgress){
+    cr.innerHTML = `<div class="empty"><span class="spin"></span> Classifying trades with AI — this can take a few minutes, feel free to keep using the app.</div>`;
+  } else if(unclassifiedCount > 0){
+    cr.innerHTML = `<button class="primary" id="classifyBtn" onclick="classifyUnclassifiedTrades()" style="margin-top:0; width:100%;">Classify ${unclassifiedCount} Trade${unclassifiedCount===1?'':'s'} with AI</button>`;
+  } else {
+    cr.innerHTML = '';
+  }
+
   const fb = document.getElementById('ftfcBreakdown');
   if(!count){ fb.innerHTML = '<div class="empty">No data yet.</div>'; }
   else {
@@ -1627,6 +1638,71 @@ async function runAnalysis(){
     out.innerHTML = `<div class="ai-msg"><div class="tag">Error</div>Couldn't complete analysis (${e.message}). Try again.</div>`;
   }
   btn.disabled = false;
+}
+
+// ---- AI Strategy Classification ----
+// Tags each trade still showing "Needs Setup" with one of the trader's own
+// defined Strat setups (2-2 Reversal, FTFC Continuation, Broadening
+// Reversal), using the same server-side Gemini call the backend already
+// runs automatically on newly-synced trades — this is what lets it also
+// catch up on trades that were logged before that automatic tagging
+// existed, or that it wasn't confident enough to tag at the time.
+//
+// Sent one trade per request, in sequence, with a short pause between each
+// — not as one big batch request. A single request that takes minutes to
+// answer is exactly the pattern that reliably times out in iOS Safari (see
+// CLAUDE.md's known traps), and pacing the requests keeps well under
+// Gemini's free-tier rate limit. Progress is saved after every trade, so
+// closing the app mid-run loses nothing — it just picks up the remaining
+// untagged trades next time.
+async function classifyUnclassifiedTrades(){
+  if(classifyInProgress) return;
+  const url = backendUrl();
+  if(!url){ showStatus('err', 'Connect your backend first (Journal tab) before classifying trades.'); return; }
+  const targets = loadTrades().filter(t=>!t.strat);
+  if(!targets.length) return;
+
+  classifyInProgress = true;
+  renderDashboard();
+  showStatus('info', `Classifying ${targets.length} trade(s) with AI — this can take a few minutes...`);
+  log('syncLog', `Starting AI classification of ${targets.length} trade(s)`);
+
+  let tagged = 0, checked = 0, authFailed = false;
+  for(const trade of targets){
+    try{
+      const r = await fetch(url+'/ai/classify?key='+encodeURIComponent(appKey()), {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trade })
+      });
+      if(r.status === 403){ authFailed = true; break; }
+      if(r.ok){
+        const { result } = await r.json();
+        if(result && result.strategy){
+          const live = loadTrades();
+          const idx = live.findIndex(t=>String(t.id)===String(trade.id));
+          if(idx !== -1 && !live[idx].strat){
+            live[idx].strat = result.strategy;
+            live[idx].stratConfidence = result.confidence;
+            live[idx].stratReasoning = result.reasoning;
+            saveTrades(live);
+            tagged++;
+          }
+        }
+      }
+    }catch(e){ /* skip this trade on a network hiccup — it stays "Needs Setup" and gets retried next run */ }
+    checked++;
+    await new Promise(res=>setTimeout(res, 800));
+  }
+
+  classifyInProgress = false;
+  if(authFailed){
+    showStatus('err', 'Classification stopped: the App Key doesn\'t match the backend (see task 1 — 403 error). Fix that first, then try again.');
+    log('syncLog', 'AI classification stopped: App Key mismatch (403)');
+  } else {
+    showStatus('ok', `Classification finished — ${tagged} of ${checked} trade(s) tagged. The rest weren't confident matches and still show "Needs Setup".`);
+    log('syncLog', `AI classification finished: ${tagged}/${checked} trades tagged`);
+  }
+  renderDashboard();
+  renderJournal();
 }
 
 // ---- Schwab backend sync ----
@@ -1873,6 +1949,10 @@ async function autoCheckFtfc(ticker, entryDate, entryTime){
 // browser tab or a closed app doesn't get silently polled, both to save
 // battery/data and because iOS suspends timers in the background anyway.
 let autoPollTimer = null;
+// Guards against the 30-second auto-poll (below) re-rendering the Dashboard
+// mid-classification and putting a second, clickable "Classify" button back
+// on screen while one run is already in progress.
+let classifyInProgress = false;
 function startAutoPoll(){
   if(autoPollTimer) return;
   autoPollTimer = setInterval(()=>{
