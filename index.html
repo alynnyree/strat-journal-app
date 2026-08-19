@@ -1936,6 +1936,25 @@ async function autoCheckFtfc(ticker, entryDate, entryTime){
   }
 }
 (function initBackend(){
+  // A link opened with ?backend=...&key=... re-saves those values on the
+  // spot — meant for a home-screen bookmark built with those params baked
+  // in, so a launch that finds local storage wiped (iOS clears an
+  // infrequently-opened home-screen icon's storage after about a week)
+  // silently re-fills itself instead of showing blank setup boxes. The
+  // key only ever lives in that bookmark on the trader's own device —
+  // never written into this file — so it's not exposed by view-source on
+  // this public page.
+  const params = new URLSearchParams(location.search);
+  const urlParam = params.get('backend');
+  const keyParam = params.get('key');
+  if(urlParam) localStorage.setItem('strat_backend_url', urlParam);
+  if(keyParam) localStorage.setItem('strat_app_key', keyParam);
+  if(urlParam || keyParam){
+    // Strip them from the visible address bar/history right after saving
+    // so the key doesn't sit around in plain text there too.
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+
   const url = localStorage.getItem('strat_backend_url');
   const key = localStorage.getItem('strat_app_key');
   if(key) document.getElementById('f_appKey').value = key;
