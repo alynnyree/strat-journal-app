@@ -38,8 +38,22 @@ via the `TASKS.md` commit log.
    imported them earlier), so backfill kept finding 0 new trades even
    though Schwab genuinely had 188 real fills in the last 90 days.
    "Reset & Re-import Trades" clears that memory and fixed it — trades
-   are now showing up. NOT yet verified: the owner tapping "Classify
-   Trades" itself and checking the results make sense.
+   are now showing up. First real run: 0 of 103 tagged — expected, not a
+   bug, since most of those 103 trades predate Schwab's ~30-35 day
+   minute-data window (see task 4's note below) and the classifier
+   deliberately won't guess without that candle data to look at.
+
+   Owner also corrected the AI's setup definitions to match his actual
+   rules (2026-08-19): the "2-2 Reversal" description now spells out the
+   real mechanics (a candle breaks one side of the *previous* candle's
+   range, fails, retraces to that candle's 50% level, then is expected to
+   reverse and take out the opposite side); "FTFC Continuation" now
+   states its target types (setup completion/gap fill/pivot) and defines
+   FTFC itself (4+ consecutive timeframes aligned) directly in the
+   prompt instead of leaving the model to infer it. "Broadening Reversal"
+   confirmed accurate as-is, left unchanged. NOT yet verified: how this
+   changes the tag rate/accuracy on a real run — needs trades with actual
+   candle data to test against (see task 4).
 
 3. **Get the App Key/Backend URL to stay saved on the iPhone home-screen
    icon specifically** (added 2026-08-19, mid-investigation).
