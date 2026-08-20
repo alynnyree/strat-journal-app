@@ -80,6 +80,24 @@ via the `TASKS.md` commit log.
    does not confirm or rule out the original phone report with real trade
    data — that's a different browser, different device, different data.
 
+   Related, separate fix (2026-08-19): the Replay button was silently
+   missing on a real trade the owner held 29 days (a legitimate hold, not
+   a mismatch — confirmed via the OCC symbol's real, not-yet-expired
+   expiration date). Cause: `getReplayCandles` only ever requested a
+   single 10-day window and additionally capped any request at 4 hours,
+   both meant to guard against a *different*, now-fixed bug (a mis-paired
+   trade producing a multi-week replay) — but they also blocked any
+   genuinely long real hold. Rewrote it to walk backward in 10-day pages
+   (same chunking pattern already used for pulling trade fills) and
+   stitch them into the full entry-to-exit window, however long. Tested
+   with a mocked Schwab response covering the owner's exact 29-day
+   scenario plus edge cases (trade entirely past Schwab's ~30-35 day
+   1-minute-data retention, a hold straddling that retention edge, a
+   still-open trade) — 11/11 checks passed. NOT verified against a real
+   Schwab response, since the owner has no trade within the last 30 days
+   to test against right now — will self-confirm the next time he logs
+   one within that window.
+
 5. **Test and fix drawing tools** (Trend Line, H-Ray, Magnet).
    **Status: Open.**
 
