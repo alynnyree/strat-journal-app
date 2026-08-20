@@ -239,6 +239,11 @@
       <div class="stat"><div class="label">Trades Logged</div><div class="val num" id="statCount">0</div></div>
     </div>
 
+    <div class="card" style="margin-top:14px;" id="riskTrackingCard">
+      <h3>Risk Rules</h3>
+      <div id="riskTrackingBody"><div class="empty">Set your risk rules on the Journal tab to track this.</div></div>
+    </div>
+
     <div class="card" style="margin-top:14px;">
       <h3>Setup Performance</h3>
       <div id="setupBreakdown"><div class="empty">Log trades to see which Strat setups actually make you money.</div></div>
@@ -294,6 +299,25 @@
     </div>
 
     <div class="card">
+      <h3>Risk Rules</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:8px;">
+        Since every trade here is bought to open (never sold to open), the
+        worst case on any single trade is always exactly what was paid for
+        it — contracts × 100 × entry price. These settings check new
+        trades and your running P&L against that.
+      </div>
+      <div class="row2">
+        <div><label>Account Size ($)</label><input id="f_accountSize" class="num" type="number" step="1" placeholder="10000"></div>
+        <div><label>Max Risk % Per Trade</label><input id="f_riskPct" class="num" type="number" step="0.1" placeholder="2"></div>
+      </div>
+      <div class="row2">
+        <div><label>Daily Max Loss ($)</label><input id="f_dailyMaxLoss" class="num" type="number" step="1" placeholder="500"></div>
+        <div><label>Weekly Max Loss ($)</label><input id="f_weeklyMaxLoss" class="num" type="number" step="1" placeholder="1500"></div>
+      </div>
+      <button class="secondary" onclick="saveRiskSettings()">Save Risk Rules</button>
+    </div>
+
+    <div class="card">
       <h3>Data</h3>
       <button class="secondary" onclick="exportData()">Export All Trades (JSON)</button>
       <button class="secondary" onclick="exportCsvSheet()">Export Journal (CSV)</button>
@@ -324,7 +348,7 @@
       <input id="f_occ" placeholder="SPY  260918C00560000">
 
       <div class="row2">
-        <div><label>Option Entry Price</label><input id="f_optEntry" class="num" type="number" step="0.01" placeholder="1.85"></div>
+        <div><label>Option Entry Price</label><input id="f_optEntry" class="num" type="number" step="0.01" placeholder="1.85" oninput="updateRiskCheck()"></div>
         <div><label>Option Exit Price</label><input id="f_optExit" class="num" type="number" step="0.01" placeholder="2.60"></div>
       </div>
       <div class="row2">
@@ -334,10 +358,11 @@
       <button class="secondary" style="margin-top:8px;" onclick="autoFillEnrichment()">Auto-Fill Underlying Price + Replay Data</button>
       <div class="status-banner" id="newTradeStatus"></div>
       <div class="row3">
-        <div><label>Contracts</label><input id="f_contracts" class="num" type="number" value="1" min="1"></div>
+        <div><label>Contracts</label><input id="f_contracts" class="num" type="number" value="1" min="1" oninput="updateRiskCheck()"></div>
         <div><label>Stop Loss (Strat-based)</label><input id="f_stop" class="num" type="number" step="0.01" placeholder="557.80"></div>
         <div><label>Planned R:R</label><input id="f_rr" class="num" type="number" step="0.1" placeholder="2.5"></div>
       </div>
+      <div class="status-banner" id="riskCheckBanner" style="margin-top:8px;"></div>
     </div>
 
     <div class="card">
@@ -1479,6 +1504,101 @@ function calcRealizedRR(dir, undEntry, undExit, stop){
   return reward / risk;
 }
 
+// ---- Risk Rules ----
+// Since every trade here is always bought to open (never sold to open,
+// per how this trader works), the worst-case dollar loss on any single
+// trade is always exactly what was paid for it — contracts * 100 * entry
+// price. Both the per-trade check and the daily/weekly tracking below are
+// built entirely on that fact, so none of this needs live options data
+// (deltas, IV, etc.) to be accurate.
+function loadRiskSettings(){
+  const accountSize = localStorage.getItem('strat_account_size');
+  const riskPct = localStorage.getItem('strat_risk_pct');
+  const dailyMaxLoss = localStorage.getItem('strat_daily_max_loss');
+  const weeklyMaxLoss = localStorage.getItem('strat_weekly_max_loss');
+  if(accountSize) document.getElementById('f_accountSize').value = accountSize;
+  if(riskPct) document.getElementById('f_riskPct').value = riskPct;
+  if(dailyMaxLoss) document.getElementById('f_dailyMaxLoss').value = dailyMaxLoss;
+  if(weeklyMaxLoss) document.getElementById('f_weeklyMaxLoss').value = weeklyMaxLoss;
+}
+function saveRiskSettings(){
+  localStorage.setItem('strat_account_size', document.getElementById('f_accountSize').value.trim());
+  localStorage.setItem('strat_risk_pct', document.getElementById('f_riskPct').value.trim());
+  localStorage.setItem('strat_daily_max_loss', document.getElementById('f_dailyMaxLoss').value.trim());
+  localStorage.setItem('strat_weekly_max_loss', document.getElementById('f_weeklyMaxLoss').value.trim());
+  showStatus('ok', 'Risk rules saved.');
+  renderDashboard();
+}
+// Live per-trade check on the New Trade form — recalculates on every
+// Contracts / Option Entry Price keystroke, so the risk is visible before
+// the trade is even saved.
+function updateRiskCheck(){
+  const banner = document.getElementById('riskCheckBanner');
+  if(!banner) return;
+  const contracts = parseFloat(document.getElementById('f_contracts').value) || 0;
+  const optEntry = parseFloat(document.getElementById('f_optEntry').value) || 0;
+  if(!contracts || !optEntry){
+    banner.className = 'status-banner';
+    banner.textContent = '';
+    return;
+  }
+  const definedRisk = contracts * 100 * optEntry;
+  const accountSize = parseFloat(localStorage.getItem('strat_account_size'));
+  const riskPct = parseFloat(localStorage.getItem('strat_risk_pct'));
+  banner.className = 'status-banner show';
+  if(accountSize && riskPct){
+    const pctOfAccount = (definedRisk / accountSize) * 100;
+    const maxAllowed = accountSize * riskPct / 100;
+    if(definedRisk > maxAllowed){
+      banner.classList.add('err');
+      banner.textContent = `⚠ Defined risk ${fmtMoney(definedRisk)} (${pctOfAccount.toFixed(1)}% of account) is over your ${riskPct}% per-trade limit (max ${fmtMoney(maxAllowed)}).`;
+    } else {
+      banner.classList.add('ok');
+      banner.textContent = `Defined risk: ${fmtMoney(definedRisk)} (${pctOfAccount.toFixed(1)}% of account) — within your ${riskPct}% limit.`;
+    }
+  } else {
+    banner.classList.add('info');
+    banner.textContent = `Defined risk: ${fmtMoney(definedRisk)} (max possible loss on this trade, since it's bought to open). Set Account Size + Max Risk % on the Journal tab to check this against a limit.`;
+  }
+}
+// Monday-based week start — the standard trading-week boundary, so a
+// Sunday counts as the tail end of the PREVIOUS week, not a new one.
+function startOfWeek(d){
+  const date = new Date(d);
+  const day = date.getDay(); // 0=Sun,1=Mon,...,6=Sat
+  const diff = (day === 0 ? -6 : 1) - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0,0,0,0);
+  return date;
+}
+function renderRiskTracking(trades){
+  const el = document.getElementById('riskTrackingBody');
+  if(!el) return;
+  const dailyMax = parseFloat(localStorage.getItem('strat_daily_max_loss'));
+  const weeklyMax = parseFloat(localStorage.getItem('strat_weekly_max_loss'));
+  if(!dailyMax && !weeklyMax){
+    el.innerHTML = '<div class="empty">Set your risk rules on the Journal tab to track this.</div>';
+    return;
+  }
+  const todayStr = new Date().toISOString().slice(0,10);
+  const weekStartStr = startOfWeek(new Date()).toISOString().slice(0,10);
+  let todayPnl = 0, weekPnl = 0;
+  trades.forEach(t=>{
+    if(t.pnlDollar == null || !t.exitDate) return; // still-open trades don't count toward realized loss yet
+    if(t.exitDate === todayStr) todayPnl += t.pnlDollar;
+    if(t.exitDate >= weekStartStr) weekPnl += t.pnlDollar;
+  });
+  const row = (label, pnl, max)=>{
+    if(!max) return '';
+    const over = pnl < 0 && Math.abs(pnl) >= max;
+    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+      <span>${label}${over ? ' <span style="color:var(--bear); font-weight:700;">⚠ AT/OVER LIMIT</span>' : ''}</span>
+      <span class="num ${pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(pnl)} <span style="color:var(--text-dim); font-weight:400;">/ -${fmtMoney(max)} limit</span></span>
+    </div>`;
+  };
+  el.innerHTML = row('Today', todayPnl, dailyMax) + row('This week', weekPnl, weeklyMax);
+}
+
 function renderDashboard(){
   const trades = loadTrades();
   const count = trades.length;
@@ -1492,12 +1612,14 @@ function renderDashboard(){
   document.getElementById('statRR').textContent = avgRR.toFixed(1);
   document.getElementById('statCount').textContent = count;
 
+  renderRiskTracking(trades);
+
   const ladder = document.getElementById('heroLadder');
   ladder.innerHTML = '';
   const last = trades[0];
   TIMEFRAMES.forEach(tf=>{
     const seg = document.createElement('div');
-    seg.className = 'seg' + (last && last.ftfc[tf] ? ' '+last.ftfc[tf] : '');
+    seg.className = 'seg' + (last && last.ftfc && last.ftfc[tf] ? ' '+last.ftfc[tf] : '');
     ladder.appendChild(seg);
   });
 
@@ -2106,6 +2228,7 @@ function wipeData(){
   }
 }
 
+loadRiskSettings();
 renderDashboard();
 </script>
 </body>
