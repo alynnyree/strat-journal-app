@@ -134,8 +134,47 @@ via the `TASKS.md` commit log.
    before this is scoped or started.
 
 7. **Complete the screenshot capture pipeline.**
-   **Status: Open, unblocked (2026-08-19).** Task 1 (403 fix) is now done,
-   so nothing is blocking this one from starting.
+   **Status: All code done and tested; one phone-side setup step left
+   for the owner (2026-08-19).**
+
+   Found the backend's upload/pending/delete side (`media.js`) was
+   already fully built and correct — functionally tested (mocked Redis,
+   no real network call): wrong key, missing timestamp, missing image,
+   a valid upload round-tripping through to `/pending` and then
+   deleting cleanly, multiple screenshots at once. 12/12 checks passed.
+
+   Found and built the actual missing piece: `PUSHCUT_NOTIFICATION_NAME`
+   and `PUSHCUT_API_KEY` were sitting configured as environment variables
+   with nothing in the code ever using them — the connection between "a
+   trade closes" and "phone gets told to screenshot it" didn't exist.
+   Added `pushcut.js` (`notifyTradeClosed`), wired into the *live*
+   5-minute auto-sync only — never into a historical backfill, which
+   would otherwise fire a notification for every one of 100+ old trades
+   at once. Functionally tested (mocked network call): correct
+   URL/headers/title, win/loss P&L formatting, doesn't crash on a
+   still-open trade, and a failed Pushcut call is caught rather than
+   breaking the sync it runs from. 10/10 checks passed.
+
+   **What's left needs the owner's phone specifically — not more code:**
+   1. In the **Pushcut** app: create a notification named *exactly*
+      whatever `PUSHCUT_NOTIFICATION_NAME` is set to on Render, and set
+      its default action to run the Shortcut from step 2 (Pushcut's own
+      UI handles this — nothing to configure here).
+   2. In the **Shortcuts** app: build a Shortcut that grabs the most
+      recent screenshot (Photos → Screenshots album, most recent item)
+      and uploads it with:
+      `POST {backendUrl}/media/upload?key=YOUR_APP_KEY&timestamp=<unix seconds, e.g. "Now" converted to Unix Time>`,
+      as a Form-type request body with one File field named exactly
+      `image` set to the screenshot.
+   3. Take a screenshot near a trade's entry/exit as normal (side +
+      volume-up button) — that's the "one tap" this pipeline was always
+      going to need (confirmed not zero-tap, per the existing note
+      below); the notification should follow within 5 minutes of the
+      trade closing.
+
+   Not verified: whether Pushcut's actual notification delivery and the
+   Shortcut itself work end-to-end — needs the owner's phone and his own
+   Pushcut/Shortcuts accounts, which aren't reachable from here.
 
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
