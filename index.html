@@ -773,9 +773,10 @@ function buildReplayTfRow(){
 function buildReplayDrawRow(){
   const row = document.getElementById('replayDrawRow');
   const trendLabel = replayDrawMode==='trend' ? (replayPendingPoint ? 'Trend (tap 2nd point)' : 'Trend ✓') : 'Trend Line';
+  const rayLabel = replayDrawMode==='ray' ? 'H-Ray ✓' : 'H-Ray';
   row.innerHTML =
     `<div class="pill ${replayDrawMode==='trend'?'sel':''}" onclick="setReplayDrawMode('trend')">${trendLabel}</div>`+
-    `<div class="pill ${replayDrawMode==='ray'?'sel':''}" onclick="setReplayDrawMode('ray')">H-Ray ✓</div>`+
+    `<div class="pill ${replayDrawMode==='ray'?'sel':''}" onclick="setReplayDrawMode('ray')">${rayLabel}</div>`+
     `<div class="pill ${replayMagnetOn?'sel':''}" onclick="toggleReplayMagnet()">🧲 Magnet</div>`+
     `<div class="pill" onclick="clearReplayDrawings()">Clear All</div>`+
     (replaySelectedDrawing ? `<div class="pill" style="color:var(--bear); border-color:var(--bear-dim);" onclick="deleteSelectedReplayDrawing()">🗑 Delete Line</div>` : '');
