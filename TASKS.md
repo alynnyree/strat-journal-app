@@ -113,7 +113,21 @@ via the `TASKS.md` commit log.
    one within that window.
 
 5. **Test and fix drawing tools** (Trend Line, H-Ray, Magnet).
-   **Status: Open.**
+   **Status: One real bug fixed, rest verified as far as possible from
+   here (2026-08-19).** Full read-through of the drawing-tool code plus
+   isolated logic testing (candle-snapping, line hit-testing/selection
+   priority, save/restore round-trip for all three drawing types — 26/26
+   checks passed, no other bugs found). Found and fixed one real bug: the
+   H-Ray button's label always showed a checkmark ("H-Ray ✓") even when
+   the tool was off, unlike the Trend Line button next to it which
+   correctly changes text with state — now matches that pattern.
+   **Hard limit, not something to work around:** this environment's
+   network policy blocks the charting library itself
+   (`unpkg.com/lightweight-charts`), so the chart and drawing tools
+   cannot actually be rendered or touched from here — no way to confirm
+   on-screen appearance or drag/tap behavior. Needs the owner to actually
+   draw a Trend Line, an H-Ray, drag one, and delete one on a real trade
+   replay to fully close this out.
 
 6. **Improve Bar Replay data quality.**
    **Status: Blocked.** Owner needs to describe what he actually wants
