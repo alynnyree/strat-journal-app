@@ -178,10 +178,24 @@ via the `TASKS.md` commit log.
 
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
-   **Status: Open.** Not urgent, but currently nothing in the journal
-   enforces or even records a risk-per-trade or max-loss rule — a real gap
-   in knowing whether the overall system is sound, separate from whether
-   any one setup is profitable.
+   **Status: Built and tested (2026-08-19).** New "Risk Rules" card on
+   the Journal tab (Account Size, Max Risk % Per Trade, Daily Max Loss,
+   Weekly Max Loss). The New Trade form now shows a live defined-risk
+   check as Contracts/Option Entry Price are filled in — contracts × 100
+   × entry price is always the exact worst-case loss here, since every
+   trade is bought to open, never sold to open, so this needed no live
+   options data to be accurate. Dashboard has a new "Risk Rules" card
+   showing today's and this week's net P&L against the configured
+   limits, flagging "AT/OVER LIMIT" when hit (Monday-based week).
+   Also fixed a small pre-existing crash risk found along the way: the
+   FTFC ladder would throw (and silently kill the rest of the Dashboard
+   render) if the most recent trade was ever missing its `ftfc` object.
+   Verified with a full browser test: settings round-trip, per-trade
+   banner math for over/within-limit/empty cases, Dashboard tracking
+   under and over the daily limit with exact dollar totals, and the
+   empty-state when no limits are set — 21/21 checks passed, zero
+   uncaught errors. NOT verified: how it actually looks/feels on a real
+   phone — worth a glance next time the app's open.
 
 9. **Build backtesting** (hypothetical entries/stops/targets run against
    historical replay data).
