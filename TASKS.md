@@ -250,3 +250,67 @@ via the `TASKS.md` commit log.
     2026-08-21 by actually looking at the rendered chart (now that task 4
     is fixed) through several playback steps — candle width visibly held
     steady. Not yet confirmed on a real iPhone with real trade data.
+
+12. **Replace the 3 broad Strat Setup labels with the owner's real combo
+    list, and separate FTFC/Broadening Formation from being "strategies"
+    of their own** (added 2026-08-21, from a full spreadsheet-vs-app
+    comparison the owner asked for).
+    **Status: Built and tested (2026-08-21).** The app previously had
+    exactly 3 tags — "2-2 Reversal," "FTFC Continuation," "Broadening
+    Reversal" — and the first of those was wrong: what it described (one
+    candle retracing to the previous candle's 50% level, then reversing)
+    is actually called a "1 Bar Rev Strat." FTFC and Broadening Formation
+    were never their own strategies either — they're context that can
+    apply on top of any real pattern.
+
+    Replaced the picker with the owner's real 9-pattern combo list:
+    2-1-2 Continuation, 2-1-2 Reversal, 3-1-2 Reversal, 2-2 Continuation,
+    2-2 Reversal, 3-2-2 Reversal, 1-2-2 Rev Strat, 1 Bar Rev Strat, and
+    PMG (Pivot Machine Gun) — each usable Long or Short via the trade's
+    existing direction field, so no separate "Bullish"/"Bearish" version
+    of each was needed. The automatic AI tagging (task 2) was updated to
+    match — same conservative "only tag when confident" behavior, just
+    against the real pattern list and told explicitly that FTFC/Broadening
+    are context, not choices to pick from.
+
+    Added a new, separate **Broadening Formation** yes/no toggle on the
+    trade form — a simple manual toggle, not AI-detected. The owner
+    walked through the real mechanics in detail (a Broadening Formation is
+    a compound outside bar, drawn right-to-left off the previous range,
+    redrawn as new candles form, tied to a timeframe's color flipping) —
+    confirmed this is a genuine multi-step judgment call, not something
+    with a hard number the app could check on its own, so automatic
+    detection is intentionally NOT attempted here. Teaching the app to
+    actually draw and detect these on its own is a real, separate future
+    project, not part of this change.
+
+    A related, bigger idea surfaced along the way and was deliberately
+    NOT built: the owner's source material describes FTFC in more depth
+    than the app currently uses — a "Control" hierarchy (monthly = biggest
+    picture, weekly, daily, down to the 60-minute candle for "right now"),
+    "Conflict" (when 1-2 timeframes disagree), and "Change/Override" (a
+    timeframe's color flipping, sometimes overriding a bigger timeframe
+    temporarily). The app's FTFC check today is simpler (any 4+ consecutive
+    timeframes aligned). Left as-is for now — flagged as its own possible
+    future task rather than folded in silently.
+
+    Also confirmed and NOT yet built: the owner wants the AI's auto-tagging
+    to eventually also look at the actual screenshot/video captured at
+    trade execution (task 7's screenshot pipeline), not just candle price
+    data — both to help the AI decide, and for the owner's own later
+    review. Deliberately sequenced after task 7's remaining phone-side
+    setup, since there's nothing to look at yet.
+
+    Tested end-to-end in an automated browser: all 9 patterns render and
+    are individually selectable, the Broadening toggle can be turned on
+    and off without accidentally clearing whichever pattern is selected
+    (a real bug caught and fixed while building this — both controls
+    share the same visual styling and almost shared the same
+    "clear selection" logic), a full save saves both fields correctly, the
+    Journal shows a new "📐 Broadening" badge on tagged trades, and
+    reopening a saved trade for editing correctly re-shows both the
+    right pattern and the right toggle state. The stand-in (fake) AI
+    response test also confirmed the classifier now accepts the new
+    pattern names and still correctly rejects anything not on the list or
+    below high confidence. NOT verified: how the new picker actually looks
+    and feels tapping through it on a real phone.
