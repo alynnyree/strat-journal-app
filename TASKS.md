@@ -294,12 +294,13 @@ via the `TASKS.md` commit log.
     timeframes aligned). Left as-is for now — flagged as its own possible
     future task rather than folded in silently.
 
-    Also confirmed and NOT yet built: the owner wants the AI's auto-tagging
-    to eventually also look at the actual screenshot/video captured at
-    trade execution (task 7's screenshot pipeline), not just candle price
-    data — both to help the AI decide, and for the owner's own later
-    review. Deliberately sequenced after task 7's remaining phone-side
-    setup, since there's nothing to look at yet.
+    Also confirmed and NOT yet built at the time: the owner wants the AI's
+    auto-tagging to eventually also look at the actual screenshot/video
+    captured at trade execution (task 7's screenshot pipeline, and
+    eventually task 10's video), not just candle price data — both to help
+    the AI decide, and for the owner's own later review. Sequenced after
+    task 7's remaining phone-side setup at the time. The screenshot half of
+    this is now built — see task 13.
 
     Tested end-to-end in an automated browser: all 9 patterns render and
     are individually selectable, the Broadening toggle can be turned on
@@ -314,3 +315,49 @@ via the `TASKS.md` commit log.
     pattern names and still correctly rejects anything not on the list or
     below high confidence. NOT verified: how the new picker actually looks
     and feels tapping through it on a real phone.
+
+13. **Have the AI look at a trade's actual screenshot as extra evidence
+    when auto-tagging its Strat Setup**, once one exists (added 2026-08-21,
+    a promised follow-up from task 2/12).
+    **Status: Built and tested (2026-08-21).** Only reaches trades the
+    frontend already holds a screenshot for locally (`shotEntry`, or
+    `shotExit` as a fallback if no entry shot exists) — the backend's own
+    fully-automatic tagging that runs the instant a trade closes (task 2)
+    still can't use this, since a screenshot only exists after the owner's
+    phone actually captures and uploads one, which can take anywhere from
+    seconds to several minutes after the trade closes. Two places now use
+    it, both already screenshot-aware without needing to be told to look:
+
+    1. **The manual "Classify Trades" button** (task 2) — was already
+       sending the whole trade to the AI, so once a trade has a screenshot
+       attached, this automatically includes it now with no separate
+       change needed there.
+    2. **New:** the moment a screenshot lands and gets auto-attached to a
+       trade that's still "Needs Setup," the app now immediately asks the
+       AI to try again with that screenshot included — rather than the
+       owner having to notice and tap "Classify Trades" themselves.
+       Skipped while a manual bulk classification is already running, so
+       the two never overlap on the same trade.
+
+    On the AI side: when a screenshot is present, it's sent to Gemini
+    alongside the candle-price data as a real image, with instructions to
+    treat it as supporting visual evidence (the pattern's shape, any lines
+    the owner drew) rather than something that overrides the candle data.
+    Same conservative rule as always — only tags when confident. A trade
+    tagged this way now shows a small camera icon next to its Setup badge
+    in the Journal, so it's visible after the fact which tags had a real
+    screenshot behind them versus candle data alone.
+
+    Tested with a stand-in (fake) AI response and a stand-in (fake)
+    backend server: confirmed the image actually reaches the request in
+    the right format when a screenshot exists, confirmed the request
+    correctly has no image and says so in the prompt when one doesn't,
+    confirmed the entry-screenshot-preferred / exit-screenshot-fallback
+    logic, confirmed a malformed screenshot value is skipped rather than
+    crashing the request, and ran the full path end-to-end in an automated
+    browser (screenshot arrives → gets attached → AI re-tries and tags it
+    using that screenshot → Journal badge shows the camera icon) — all
+    checks passed. NOT verified: a real screenshot from the owner's actual
+    phone once task 7's remaining setup step is done, and whether the
+    screenshot genuinely improves the AI's accuracy in practice (only
+    something a real run over time can show).
