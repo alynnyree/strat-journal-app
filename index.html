@@ -460,7 +460,7 @@
   <div class="item" data-view="ai" onclick="showView('ai')"><span class="ic">✦</span>AI</div>
 </div>
 
-<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="lightweight-charts.standalone.production.js"></script>
 <script>
 const TIMEFRAMES = ['6M','3M','1M','1W','1D','4H','2H','1H','30m','15m','5m','3m','1m'];
 let currentTf = {}; // {tf: 'bull'|'bear'|'neutral'}
@@ -1104,6 +1104,19 @@ function setupReplayDragHandlers(container){
         return;
       }
       if(replayDrawMode === 'trend'){
+        if(replayPendingPoint){
+          // Second tap of a two-tap trend line — finish it here rather
+          // than starting a new drag stub. Without this check, every tap
+          // (including this one) fell into the "start a new line" branch
+          // below, so the second tap silently restarted the anchor at
+          // the new spot instead of ever completing the line.
+          replayDrawings.push({ type:'trend', p1: replayPendingPoint, p2: pt });
+          replayPendingPoint = null;
+          redrawReplayDrawings();
+          persistReplayDrawings();
+          buildReplayDrawRow();
+          return;
+        }
         // Anchor here; dragging stretches the far end live, releasing
         // sets it. A click without dragging leaves the anchor pending
         // for a second click instead.

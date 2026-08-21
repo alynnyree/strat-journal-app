@@ -57,42 +57,52 @@ via the `TASKS.md` commit log.
 
 3. **Get the App Key/Backend URL to stay saved on the iPhone home-screen
    icon specifically** (added 2026-08-19, mid-investigation).
-   **Status: Open, evidence gathered, one attempt not yet confirmed.**
-   The home-screen icon kept losing its saved settings while a regular
-   Safari tab of the same page never did. Found and fixed a real bug
-   along the way: `manifest.json` and the icon PNG files that
-   `index.html` has always linked to didn't exist in this repo at all —
-   they'd been committed to the sibling `strat-journal-backend` repo by
-   mistake in an earlier session. Without a real, reachable manifest,
-   iOS had no reliable way to treat "Add to Home Screen" as a genuine
-   installed app. Fixed by moving those files to this repo.
-   Also confirmed directly (via an on-screen diagnostic line added to
-   `index.html`, screenshotted by the owner): the home-screen icon *is*
-   now correctly recognized as standalone/installed (`mode: standalone`)
-   — but iOS strips `?backend=...&key=...` query parameters when it
-   captures a home-screen icon, so a link-based auto-fill can never reach
-   it; that whole approach (several attempts) was chasing something
-   structurally impossible on iOS, not a bug to keep patching. Current
-   recommendation, not yet confirmed by the owner: type the two values in
-   directly, once, on the icon's own screen (not Safari, not a link) —
-   should now actually persist since the underlying "not a real installed
-   app" problem is fixed. If it doesn't hold, the fallback discussed is
-   hard-coding the real App Key into the app's public code for 100%
-   reliability, at the cost of that key being visible to anyone who views
-   the page's source (flagged to the owner, not yet decided).
+   **Status: Done — confirmed by owner (2026-08-19).** The home-screen
+   icon kept losing its saved settings while a regular Safari tab of the
+   same page never did. Found and fixed a real bug along the way:
+   `manifest.json` and the icon PNG files that `index.html` has always
+   linked to didn't exist in this repo at all — they'd been committed to
+   the sibling `strat-journal-backend` repo by mistake in an earlier
+   session. Without a real, reachable manifest, iOS had no reliable way
+   to treat "Add to Home Screen" as a genuine installed app. Fixed by
+   moving those files to this repo. Also confirmed directly (via an
+   on-screen diagnostic line added to `index.html`) that iOS strips
+   `?backend=...&key=...` query parameters when it captures a home-screen
+   icon, so the several earlier link-based auto-fill attempts were
+   chasing something structurally impossible on iOS, not a bug to keep
+   patching. Fix: typed the two values in directly, once, on the icon's
+   own screen (not Safari, not a link) — owner confirmed it held after
+   fully closing and reopening the app.
 
 4. **Fix blank Bar Replay chart.**
-   **Status: Open, but weakened by new evidence.** Originally: reproduces
-   in Claude Code's own automated preview at `localhost:8934` — the chart
-   area rendered as a blank white rectangle in a screenshot taken there,
-   which was assumed at the time to be a quirk of the automated screenshot
-   tool rather than a real bug. New evidence (2026-08-17): the owner opened
-   that same address, with the same leftover test data, directly in his
-   own Chrome browser — and saw real candles render correctly. That
-   suggests the blank screenshot probably was a testing-tool artifact, not
-   an app bug, at least on desktop with this test data. Still open: this
-   does not confirm or rule out the original phone report with real trade
-   data — that's a different browser, different device, different data.
+   **Status: Closed — chart confirmed rendering correctly (2026-08-21).**
+   Originally: reproduced in Claude Code's own automated preview at
+   `localhost:8934` — the chart area rendered as a blank white rectangle
+   in a screenshot taken there. New evidence (2026-08-17): the owner
+   opened the same address directly in his own Chrome browser and saw
+   real candles render correctly, suggesting the blank screenshot was a
+   testing-tool artifact, not an app bug.
+
+   Root cause of that artifact found and fixed (2026-08-21): the earlier
+   automated screenshots were blank because the chart library itself
+   (loaded from `unpkg.com`) couldn't reach this environment's network —
+   nothing to do with the app's own code. Downloaded the identical file
+   through npm instead (a channel that *is* reachable here) and now
+   loads it from this repo directly rather than that outside address —
+   this also means the live app no longer depends on that outside address
+   being reachable at all, one less thing that could ever go wrong for
+   real users. With the chart able to load, ran it end-to-end in an
+   automated phone-sized (390×844-ish) browser window: seeded a fake
+   3-hour trade and opened its replay — candles, the volume bars
+   underneath, the price scale, and the time axis all drew correctly on
+   the first try, confirmed both by reading the picture the browser
+   actually drew (not just checking for errors) and by a saved screenshot.
+   This directly answers the original phone report: the chart does draw
+   candles correctly; it was never structurally broken. NOT verified: the
+   owner's exact real trade data or his physical phone, which still can't
+   be reached from here — but the mechanism that made this untestable
+   before is now fixed, so this can be re-checked instantly if a similar
+   report ever comes up again.
 
    Related, separate fix (2026-08-19): the Replay button was silently
    missing on a real trade the owner held 29 days (a legitimate hold, not
@@ -113,21 +123,40 @@ via the `TASKS.md` commit log.
    one within that window.
 
 5. **Test and fix drawing tools** (Trend Line, H-Ray, Magnet).
-   **Status: One real bug fixed, rest verified as far as possible from
-   here (2026-08-19).** Full read-through of the drawing-tool code plus
-   isolated logic testing (candle-snapping, line hit-testing/selection
-   priority, save/restore round-trip for all three drawing types — 26/26
-   checks passed, no other bugs found). Found and fixed one real bug: the
-   H-Ray button's label always showed a checkmark ("H-Ray ✓") even when
-   the tool was off, unlike the Trend Line button next to it which
-   correctly changes text with state — now matches that pattern.
-   **Hard limit, not something to work around:** this environment's
-   network policy blocks the charting library itself
-   (`unpkg.com/lightweight-charts`), so the chart and drawing tools
-   cannot actually be rendered or touched from here — no way to confirm
-   on-screen appearance or drag/tap behavior. Needs the owner to actually
-   draw a Trend Line, an H-Ray, drag one, and delete one on a real trade
-   replay to fully close this out.
+   **Status: Done — actually drawn and tested on screen, two real bugs
+   found and fixed (2026-08-21).** Previously this could only be checked
+   by reading the code, because the chart library it depends on couldn't
+   load here (see task 4) — that's now fixed, which made real, on-screen
+   testing possible for the first time.
+
+   Drove the actual drawing tools in an automated browser exactly the way
+   a finger would: pressed and dragged out a Trend Line, tapped once to
+   place an H-Ray, tapped an existing line to select it, and tapped
+   "Delete Line" to remove it — all confirmed both by checking the app's
+   own saved state and by looking at the resulting picture, which showed
+   the H-Ray's price line and label drawn exactly where placed.
+
+   Found and fixed two real bugs this way:
+   - The H-Ray button's label always showed a checkmark ("H-Ray ✓") even
+     when the tool was off, unlike the Trend Line button next to it —
+     now matches that pattern (found 2026-08-19 by reading the code).
+   - A genuine, previously un-findable bug: placing a Trend Line by
+     *tapping twice* (tap to start, tap again to finish — what the
+     button itself instructs, "tap 2nd point") never actually completed
+     the line. The second tap silently moved the starting point instead
+     of finishing it, forever. Dragging one continuous motion (press,
+     drag, release) already worked fine and was the only way a Trend
+     Line could actually be placed. Fixed so a second tap now correctly
+     finishes the line where the two-tap flow was always meant to.
+
+   Also re-ran the candle-width-stays-constant check from task 11 inside
+   this same real render (not just reading the chart's internal numbers)
+   — confirmed stable through several playback steps.
+
+   NOT verified: the owner's own hands on his own phone — worth a quick
+   real check next time the app's open, though the two-tap bug above was
+   likely the actual cause of any past frustration trying to draw a
+   Trend Line by tapping rather than dragging.
 
 6. **Improve Bar Replay data quality.**
    **Status: Blocked.** Owner needs to describe what he actually wants
@@ -214,10 +243,10 @@ via the `TASKS.md` commit log.
 11. **Fix candle-shrinking during playback.** The chart view was re-fitting
     itself every single frame, so candles got thinner and thinner as more
     of them appeared during Play.
-    **Status: Fixed, unconfirmed on phone.** Fixed and saved permanently on
-    2026-08-17 (commit `2f707e6` in `strat-journal-app`). Verified against
-    the chart's internal numbers (not by looking at the picture — the
-    screenshot came back blank at the time, see task 4 above): candle
-    width stays constant during Play/step/scrub and only changes once when
-    the timeframe is switched. Not yet confirmed by actually looking at
-    the chart, on desktop or on a real iPhone with real trade data.
+    **Status: Fixed, unconfirmed on real phone.** Fixed and saved
+    permanently on 2026-08-17 (commit `2f707e6` in `strat-journal-app`).
+    Originally verified only against the chart's internal numbers, since
+    the screenshot came back blank at the time (see task 4). Re-verified
+    2026-08-21 by actually looking at the rendered chart (now that task 4
+    is fixed) through several playback steps — candle width visibly held
+    steady. Not yet confirmed on a real iPhone with real trade data.
