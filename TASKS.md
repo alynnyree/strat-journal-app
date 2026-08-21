@@ -205,6 +205,55 @@ via the `TASKS.md` commit log.
    Shortcut itself work end-to-end — needs the owner's phone and his own
    Pushcut/Shortcuts accounts, which aren't reachable from here.
 
+   **Extended 2026-08-21 — automatic capture at both ends of a trade,
+   video for short ones:** the owner's real ask was bigger than a single
+   screenshot at exit — a picture at entry AND exit (plus maybe one in
+   between) for longer trades, and a full screen recording for short ones
+   (his cutoff: under 15 minutes). Backend groundwork for this is built
+   and tested:
+   - The backend now notices the moment a position *opens*, not just when
+     one closes, and fires a new notification for it (`notifyTradeOpened`
+     in `pushcut.js`) — this didn't exist before; only closes were ever
+     detected.
+   - A one-time check fires automatically 15 minutes after a position
+     opens: if it's still open at that point, a second notification
+     (`notifyTradeStillOpen`) prompts stopping and discarding the
+     recording — this is the manual "stop recording" safety net the owner
+     agreed to, since a fully automatic timer on the phone itself
+     couldn't be verified as reliable from here.
+   - The existing close notification now carries a `video` vs
+     `screenshot` flag based on how long the trade was actually held
+     (matches the 15-minute cutoff), so one Shortcut can branch instead of
+     needing a separate notification for the close event.
+   - Confirmed while building this: the backend's real-time connection to
+     Schwab already reacts to a fill within ~2 seconds, not the slower
+     5-minute check — meaning the exit-side timing is already fast enough
+     for this to work well on a short trade. Tested with a mocked
+     Schwab/Pushcut layer end-to-end: open → quick close correctly fires
+     video mode; open → never closes correctly fires the 15-minute
+     safety net and no close notification; a historical backfill never
+     triggers any of this (would otherwise flood notifications for old
+     trades).
+
+   **Deliberately not built yet: the actual video upload/storage.** A
+   screenshot is small and already has a home (the same fast database
+   used for everything else); a video is far too big for that same
+   approach. This needs a real file-storage service — recommended
+   Cloudflare R2 (10GB free, no time limit, plenty for a personal trade
+   archive) — which needs the owner to create a free account and provide
+   an API key, same pattern as Schwab/Gemini. Waiting on that before
+   finishing the upload side.
+
+   **New phone-side setup this adds, once the storage question is
+   settled:** two more Pushcut notifications (open, still-open) beyond
+   the original one from earlier in this task, each pointing to its own
+   Shortcut step (start recording; stop-and-discard-then-screenshot), plus
+   two new environment variables to set on Render:
+   `PUSHCUT_NOTIFICATION_NAME_OPENED` and
+   `PUSHCUT_NOTIFICATION_NAME_STILL_OPEN` (pick any names, same rule as
+   the original — whatever's set here must exactly match the notification
+   names created in the Pushcut app).
+
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
    **Status: Built and tested (2026-08-19).** New "Risk Rules" card on
