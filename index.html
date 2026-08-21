@@ -1752,7 +1752,7 @@ function renderJournal(){
     const pnlKnown = t.pnlDollar!=null;
     const pnlClass = !pnlKnown ? '' : (t.pnlDollar>=0?'pos':'neg');
     const setupBadge = t.strat
-      ? `<span class="badge setup">${t.strat}</span>`
+      ? `<span class="badge setup">${t.strat}${t.stratUsedScreenshot ? ' 📷' : ''}</span>`
       : `<span class="badge" style="background:var(--panel); color:var(--amber); border:1px solid var(--amber);">⚠ Needs Setup</span>`;
     const ftfcBadge = t.ftfcConfirmed
       ? `<span class="badge win">✅ FTFC ${(t.ftfcTimeframesInRun||[]).join('→')}</span>`
@@ -1847,6 +1847,44 @@ async function runAnalysis(){
 // Gemini's free-tier rate limit. Progress is saved after every trade, so
 // closing the app mid-run loses nothing — it just picks up the remaining
 // untagged trades next time.
+// Classifies one trade against the backend's AI and, if it comes back
+// confident, applies the tag to that trade's current saved copy (re-reads
+// from storage right before writing, in case something else changed it
+// mid-request) and persists it. Shared by the manual "Classify Trades"
+// button below and by the automatic re-classify that fires the moment a
+// screenshot lands on a still-untagged trade (see matchPendingScreenshots).
+// If the trade object passed in carries a shotEntry/shotExit screenshot,
+// the backend uses it as extra visual evidence alongside the candle data
+// — nothing extra needs sending here, the trade object already has it.
+// Returns 'tagged', 'unclear' (checked, not confident), 'authFailed', or
+// 'error' (network/server problem — caller should treat like 'unclear'
+// and let it get retried later).
+async function classifyOneTrade(trade){
+  const url = backendUrl();
+  if(!url) return 'error';
+  try{
+    const r = await fetch(url+'/ai/classify?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trade })
+    });
+    if(r.status === 403) return 'authFailed';
+    if(!r.ok) return 'error';
+    const { result } = await r.json();
+    if(result && result.strategy){
+      const live = loadTrades();
+      const idx = live.findIndex(t=>String(t.id)===String(trade.id));
+      if(idx !== -1 && !live[idx].strat){
+        live[idx].strat = result.strategy;
+        live[idx].stratConfidence = result.confidence;
+        live[idx].stratReasoning = result.reasoning;
+        live[idx].stratUsedScreenshot = !!result.usedScreenshot;
+        saveTrades(live);
+        return 'tagged';
+      }
+    }
+    return 'unclear';
+  }catch(e){ return 'error'; }
+}
+
 async function classifyUnclassifiedTrades(){
   if(classifyInProgress) return;
   const url = backendUrl();
@@ -1861,26 +1899,9 @@ async function classifyUnclassifiedTrades(){
 
   let tagged = 0, checked = 0, authFailed = false;
   for(const trade of targets){
-    try{
-      const r = await fetch(url+'/ai/classify?key='+encodeURIComponent(appKey()), {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trade })
-      });
-      if(r.status === 403){ authFailed = true; break; }
-      if(r.ok){
-        const { result } = await r.json();
-        if(result && result.strategy){
-          const live = loadTrades();
-          const idx = live.findIndex(t=>String(t.id)===String(trade.id));
-          if(idx !== -1 && !live[idx].strat){
-            live[idx].strat = result.strategy;
-            live[idx].stratConfidence = result.confidence;
-            live[idx].stratReasoning = result.reasoning;
-            saveTrades(live);
-            tagged++;
-          }
-        }
-      }
-    }catch(e){ /* skip this trade on a network hiccup — it stays "Needs Setup" and gets retried next run */ }
+    const outcome = await classifyOneTrade(trade);
+    if(outcome === 'authFailed'){ authFailed = true; break; }
+    if(outcome === 'tagged') tagged++;
     checked++;
     await new Promise(res=>setTimeout(res, 800));
   }
@@ -2226,6 +2247,7 @@ async function matchPendingScreenshots(){
 
   const trades = loadTrades();
   let changed = false;
+  const readyToClassify = []; // trades that just gained a screenshot and are still "Needs Setup"
 
   for(const shot of screenshots){
     let best = null; // {trade, field, diff}
@@ -2246,6 +2268,7 @@ async function matchPendingScreenshots(){
       changed = true;
       try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* worst case it's offered again and just gets re-matched harmlessly */ }
       log('syncLog', `Auto-attached ${best.field==='shotEntry'?'entry':'exit'} screenshot to ${best.trade.ticker} (${best.trade.entryDate}).`);
+      if(!best.trade.strat && !readyToClassify.includes(best.trade)) readyToClassify.push(best.trade);
     }
     // No match yet (e.g. the trade hasn't synced into the Journal as
     // closed yet) — left in place on the backend, tried again next cycle.
@@ -2253,6 +2276,26 @@ async function matchPendingScreenshots(){
 
   if(changed){
     saveTrades(trades);
+    renderJournal();
+  }
+
+  // A screenshot just became available for these — worth a fresh AI pass
+  // right away rather than waiting for the owner to notice and tap
+  // "Classify Trades" themselves, since the screenshot is the extra
+  // evidence that might tip an "unclear" candle-only read into a
+  // confident one. Skipped while the manual bulk button is already
+  // running, to avoid two classification passes overlapping on the same
+  // trade. Not folded into the classifyInProgress-guarded flow above
+  // since this is a small, incidental batch (usually one trade), not a
+  // full backlog run — no progress banner needed for it.
+  if(readyToClassify.length && !classifyInProgress){
+    for(const trade of readyToClassify){
+      const outcome = await classifyOneTrade(trade);
+      if(outcome === 'authFailed') break; // App Key problem — let the next manual run surface it clearly
+      if(outcome === 'tagged') log('syncLog', `Screenshot-assisted AI tag: ${trade.ticker} (${trade.entryDate}).`);
+      await new Promise(res=>setTimeout(res, 800));
+    }
+    renderDashboard();
     renderJournal();
   }
 }
