@@ -235,24 +235,44 @@ via the `TASKS.md` commit log.
      triggers any of this (would otherwise flood notifications for old
      trades).
 
-   **Deliberately not built yet: the actual video upload/storage.** A
-   screenshot is small and already has a home (the same fast database
-   used for everything else); a video is far too big for that same
-   approach. This needs a real file-storage service — recommended
-   Cloudflare R2 (10GB free, no time limit, plenty for a personal trade
-   archive) — which needs the owner to create a free account and provide
-   an API key, same pattern as Schwab/Gemini. Waiting on that before
-   finishing the upload side.
+   **Video storage — built and tested (2026-08-22).** The owner created a
+   free Cloudflare R2 account and a storage "bucket" named
+   `strat-journal-videos`. The backend now talks to it using the same
+   toolkit Amazon's own cloud storage uses (R2 speaks the identical
+   protocol), added as new files/routes rather than reusing the
+   screenshot-database approach — a video is far too big for that. New:
+   `videoStorage.js` (upload a video, and hand out a temporary link to
+   watch one — the storage is private, not a public web address, so
+   nothing can play a video without one of these short-lived links), plus
+   three new addresses on the backend: one for the phone to upload a
+   video to, one for the app to check what's waiting to be matched to a
+   trade, one to fetch a watch-link. Tested with a stand-in (fake) version
+   of the storage connection — wrong key, storage not yet configured,
+   missing file, missing timestamp, a real upload going through
+   correctly, and the watch-link request all checked out; 14/14 passed.
+   NOT verified against the owner's real Cloudflare account — the code
+   never touches real cloud storage during automated testing, on purpose,
+   so this still needs a real phone test once the Shortcuts below exist.
 
-   **New phone-side setup this adds, once the storage question is
-   settled:** two more Pushcut notifications (open, still-open) beyond
-   the original one from earlier in this task, each pointing to its own
-   Shortcut step (start recording; stop-and-discard-then-screenshot), plus
-   two new environment variables to set on Render:
-   `PUSHCUT_NOTIFICATION_NAME_OPENED` and
-   `PUSHCUT_NOTIFICATION_NAME_STILL_OPEN` (pick any names, same rule as
-   the original — whatever's set here must exactly match the notification
-   names created in the Pushcut app).
+   **What's left needs the owner's phone and Render's settings — not more
+   code:**
+   1. On **Render**, add four new settings (same place `APP_SECRET` etc.
+      already live): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+      `R2_SECRET_ACCESS_KEY` (the three values from creating the storage
+      key), and `R2_BUCKET_NAME` set to `strat-journal-videos`.
+   2. Two more Pushcut notifications beyond the original one from earlier
+      in this task (one for "trade opened," one for "still open after 15
+      minutes"), plus two more Render settings so the backend knows their
+      exact names: `PUSHCUT_NOTIFICATION_NAME_OPENED` and
+      `PUSHCUT_NOTIFICATION_NAME_STILL_OPEN` (pick any names — whatever's
+      set here must exactly match the notification names created in the
+      Pushcut app, same rule as the original).
+   3. Three Shortcuts to build: start recording (runs off the "opened"
+      notification), stop-and-discard-then-screenshot (runs off the
+      "still open" notification), and stop-recording-and-upload-video
+      (runs off the existing "closed" notification, reading the `mode`
+      value passed to it to decide whether to upload a video or fall back
+      to a screenshot).
 
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
