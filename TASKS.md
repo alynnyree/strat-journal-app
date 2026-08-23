@@ -11,13 +11,13 @@ via the `TASKS.md` commit log.
 
 **Standing reminders from the owner — check before ever calling this
 project "complete":**
-- Install and live-test the browser extension (task 13) on a real
+- Install and live-test the browser extension (task 12) on a real
   computer — owner said "make sure to remind me of this build out before
   we call this project complete" (2026-08-23). Not yet done as of this
   note.
 - Revisit capturing entry/exit moments when trading from a laptop, not
-  just a phone (task 13) — originally asked 2026-08-22, before the
-  browser extension existed; now superseded by task 13 itself, kept here
+  just a phone (task 12) — originally asked 2026-08-22, before the
+  browser extension existed; now superseded by task 12 itself, kept here
   only as the origin of that request.
 
 1. **Fix 403 error on `/media/pending`.**
@@ -160,7 +160,7 @@ project "complete":**
      Line could actually be placed. Fixed so a second tap now correctly
      finishes the line where the two-tap flow was always meant to.
 
-   Also re-ran the candle-width-stays-constant check from task 10 inside
+   Also re-ran the candle-width-stays-constant check from task 9 inside
    this same real render (not just reading the chart's internal numbers)
    — confirmed stable through several playback steps.
 
@@ -173,7 +173,7 @@ project "complete":**
    **Status: Automatic phone pictures (Path 1) fully built, fixed, and
    verified against real image content (2026-08-23) — only a real live
    trade left to confirm the whole pipeline end to end. Automatic video
-   (Path 2) confirmed impossible via Shortcuts, split out to task 14 as
+   (Path 2) confirmed impossible via Shortcuts, split out to task 13 as
    its own native-app effort.** (Original 2026-08-19 status line below
    kept for history; superseded by everything after it in this section.)
 
@@ -273,7 +273,7 @@ project "complete":**
    — no amount of searching or configuring unlocks it. That means true
    automatic *video* capture is not achievable through Pushcut+Shortcuts
    at all; it needs a real, separately-installed iPhone app with its own
-   one-time recording permission (see task 14, newly split out below).
+   one-time recording permission (see task 13, newly split out below).
    The video storage/backend pieces above stay built and untouched —
    they're exactly what that future app will use once it exists.
 
@@ -487,7 +487,7 @@ project "complete":**
    phone or a computer — the code comments describing it that way were
    the actual evidence for this, not a guess. Discussed and decided to
    keep it anyway even now that real automatic capture exists (see task
-   6 for phone, task 13 for computer): screenshots/video show what the
+   6 for phone, task 12 for computer): screenshots/video show what the
    owner actually saw (his own drawings, indicators, decision-making at
    the time); Bar Replay/backtesting works from precise, scrubbable
    market data and doesn't depend on a screenshot having been captured
@@ -500,16 +500,7 @@ project "complete":**
    Propose an approach and get sign-off before writing any code — nothing
    here is built yet.
 
-9. **Build native iOS app for zero-tap session recording.**
-    **Status: Open, explicitly deferred (2026-08-19).** Owner chose to
-    leave this as a future task for now rather than start it, after this
-    session spent significant effort on iOS's home-screen web-app
-    limitations (see task 3) — a real native app would sidestep those
-    entirely. See CLAUDE.md's Feature Status section for the existing
-    design notes (Control Center tile, ReplayKit consent, Personal Team
-    signing re-signs roughly weekly).
-
-10. **Fix candle-shrinking during playback.** The chart view was re-fitting
+9. **Fix candle-shrinking during playback.** The chart view was re-fitting
     itself every single frame, so candles got thinner and thinner as more
     of them appeared during Play.
     **Status: Fixed, unconfirmed on real phone.** Fixed and saved
@@ -520,7 +511,7 @@ project "complete":**
     is fixed) through several playback steps — candle width visibly held
     steady. Not yet confirmed on a real iPhone with real trade data.
 
-11. **Replace the 3 broad Strat Setup labels with the owner's real combo
+10. **Replace the 3 broad Strat Setup labels with the owner's real combo
     list, and separate FTFC/Broadening Formation from being "strategies"
     of their own** (added 2026-08-21, from a full spreadsheet-vs-app
     comparison the owner asked for).
@@ -566,10 +557,10 @@ project "complete":**
     Also confirmed and NOT yet built at the time: the owner wants the AI's
     auto-tagging to eventually also look at the actual screenshot/video
     captured at trade execution (task 6's screenshot pipeline, and
-    eventually task 9's video), not just candle price data — both to help
+    eventually task 13's video), not just candle price data — both to help
     the AI decide, and for the owner's own later review. Sequenced after
     task 6's remaining phone-side setup at the time. The screenshot half of
-    this is now built — see task 12.
+    this is now built — see task 11.
 
     Tested end-to-end in an automated browser: all 9 patterns render and
     are individually selectable, the Broadening toggle can be turned on
@@ -585,9 +576,9 @@ project "complete":**
     below high confidence. NOT verified: how the new picker actually looks
     and feels tapping through it on a real phone.
 
-12. **Have the AI look at a trade's actual screenshot as extra evidence
+11. **Have the AI look at a trade's actual screenshot as extra evidence
     when auto-tagging its Strat Setup**, once one exists (added 2026-08-21,
-    a promised follow-up from task 2/11).
+    a promised follow-up from task 2/10).
     **Status: Built and tested (2026-08-21).** Only reaches trades the
     frontend already holds a screenshot for locally (`shotEntry`, or
     `shotExit` as a fallback if no entry shot exists) — the backend's own
@@ -631,7 +622,7 @@ project "complete":**
     screenshot genuinely improves the AI's accuracy in practice (only
     something a real run over time can show).
 
-13. **Capture the exact entry/exit moment when trading from a laptop, not
+12. **Capture the exact entry/exit moment when trading from a laptop, not
     just a phone** (added 2026-08-22, owner's own note to revisit).
     **Status: Built 2026-08-23, not yet installed/tested on a real
     computer.** Phone and laptop are different problems: everything task 6
@@ -707,29 +698,39 @@ project "complete":**
     the one-time permission, and a live test to confirm a real capture
     actually works end to end.
 
-14. **Build a real iPhone app for automatic video recording** (split out
-    from task 6 on 2026-08-22, once real-device testing confirmed iOS
-    Shortcuts cannot start or stop screen recording at all — a deliberate
-    Apple privacy restriction, not something more configuration fixes).
-    **Status: Not started — this is the "native iOS app" idea already
-    noted in CLAUDE.md's Feature Status section, now confirmed to be the
-    only real path to automatic video** (the automatic-photo half of the
-    original ask doesn't need this — see task 6). The mechanism: a real,
-    separately-installed app (not a website) can ask the owner once,
-    ever, for permission to record the screen; after that one-time
-    consent, the app can start and stop recording in code on its own,
-    woken by a signal from the backend using the same trade-open/close
-    detection already built for task 6. The finished recording would
-    upload to the same R2 video storage already built and tested. Real
-    scope, not to be underestimated: a separate codebase in Swift/Xcode
-    on the owner's Mac, a decision on paying Apple's $99/year developer
-    fee vs. re-signing a free app roughly weekly, setting up push
-    notifications so the backend can wake the app, and live testing to
-    confirm the wake-and-record step is actually reliable. Owner's own
-    sequencing: get task 6's automatic photos fully working and confirmed
-    first, then start this as its own dedicated effort.
+13. **Build a real iPhone app for automatic video recording — combined
+    2026-08-23 with the earlier "native app for zero-tap session
+    recording" idea, previously tracked as two separate items.** First
+    proposed 2026-08-19 and left deferred at the time (after that session
+    spent significant effort on iOS's home-screen web-app limitations —
+    see task 3 — since a real, separately-installed app sidesteps those
+    entirely), then independently split out again on 2026-08-22 from
+    task 6, once real-device testing confirmed iOS Shortcuts cannot start
+    or stop screen recording at all — a deliberate Apple privacy
+    restriction, not something more configuration fixes. Both entries
+    were the same underlying idea described at two different points;
+    merged into one.
+    **Status: Not started — this is the "native iOS app" idea noted in
+    CLAUDE.md's Feature Status section (Control Center tile, ReplayKit
+    consent, Personal Team signing re-signs roughly weekly), now
+    confirmed to be the only real path to automatic video** (the
+    automatic-photo half of the original ask doesn't need this — see
+    task 6). The mechanism: a real, separately-installed app (not a
+    website) can ask the owner once, ever, for permission to record the
+    screen; after that one-time consent, the app can start and stop
+    recording in code on its own, woken by a signal from the backend
+    using the same trade-open/close detection already built for task 6.
+    The finished recording would upload to the same R2 video storage
+    already built and tested. Real scope, not to be underestimated: a
+    separate codebase in Swift/Xcode on the owner's Mac, a decision on
+    paying Apple's $99/year developer fee vs. re-signing a free app
+    roughly weekly, setting up push notifications so the backend can wake
+    the app, and live testing to confirm the wake-and-record step is
+    actually reliable. Owner's own sequencing: get task 6's automatic
+    photos fully working and confirmed first, then start this as its own
+    dedicated effort.
 
-15. **Track stock share trades (buying/selling shares of a company), not
+14. **Track stock share trades (buying/selling shares of a company), not
     just options** (added 2026-08-23, owner's own question). **Status: Not
     started — real gap confirmed by reading the actual code, not yet
     designed.** Right now, share trades are completely invisible to this
