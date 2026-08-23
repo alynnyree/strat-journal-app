@@ -306,7 +306,10 @@ via the `TASKS.md` commit log.
       Opened" once by hand on 2026-08-23 (screen visibly flashed as
       expected) but had no way to see whether the picture actually
       arrived, since a manual test has no real trade to auto-attach to
-      inside the Journal itself.
+      inside the Journal itself. **Confirmed working 2026-08-23** — owner
+      checked the new preview page below and the picture was there and
+      accurate. "Trade Opened" is done. Next: duplicate it into "Trade
+      Still Open" and connect both to their Pushcut notifications.
 
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
