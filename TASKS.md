@@ -393,9 +393,37 @@ via the `TASKS.md` commit log.
       popup appears the first time each shortcut runs this new step —
       tap Always Allow, doesn't ask again.)
 
-      Path 1 (automatic photos) is now fully built, fixed, and
-      polished. All that's left is a real live trade to confirm the
-      whole pipeline end to end outside of manual testing.
+      **Real bug found right after the above, same day — the captured
+      pictures didn't actually show TradingView.** Every test up to this
+      point had only confirmed the server accepted the upload, never
+      actually looked at the image content. Owner checked the preview
+      page and none of the pictures showed TradingView — they showed the
+      Shortcuts/Pushcut screen instead. Root cause: opening a
+      `shortcuts://` address always switches the foreground app to
+      Shortcuts *before* any of the shortcut's own steps run, so "Take
+      Screenshot" — sitting near the start of each shortcut — was
+      capturing that switch-over screen, not TradingView. The end-of-
+      shortcut "Open App" from the earlier polish fix only returned to
+      TradingView *after* the (wrong) picture was already taken.
+
+      **Fix:** reordered all three Shortcuts to open TradingView *first*,
+      wait 2 seconds for it to fully render, then take the screenshot —
+      instead of taking the screenshot first and returning to TradingView
+      after. Final order in all three: Open App (TradingView) → Wait (2s)
+      → Take Screenshot → Get Contents of URL (upload). Also removed the
+      "Show Alert"/"Stop and Output" debug steps that were still present
+      on "Trade opened" (missed in the earlier cleanup pass). **Confirmed
+      2026-08-23 by directly inspecting the uploaded images on the
+      preview page** (not just a success response) — all three now show
+      the actual TradingView chart. Lesson: a server "ok:true" response
+      only proves the upload worked, never proves the picture shows the
+      right thing — always check the actual image content after any
+      change to what app is on screen when a Shortcut runs.
+
+      Path 1 (automatic photos) is now fully built, fixed, polished, and
+      verified against actual image content. All that's left is a real
+      live trade to confirm the whole pipeline end to end outside of
+      manual testing.
 
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
