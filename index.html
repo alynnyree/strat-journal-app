@@ -453,6 +453,43 @@
       <button class="primary" id="analyzeBtn" onclick="runAnalysis()" style="margin-top:0;">Analyze My Trades</button>
     </div>
     <div id="aiOutput"></div>
+
+    <div class="card">
+      <h3>Test Classification</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
+        Try the AI on a made-up chart — drawn, AI-generated, pulled from the internet, or just described in words. Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
+      </div>
+
+      <label>Chart picture (optional)</label>
+      <div class="shot-row">
+        <div class="shot-box" id="testShotBox" onclick="document.getElementById('testShotInput').click()">+ Add picture</div>
+      </div>
+      <input type="file" id="testShotInput" accept="image/*" style="display:none;" onchange="handleTestShot(this)">
+
+      <label style="margin-top:10px;">Describe the setup (optional)</label>
+      <textarea id="testDescription" placeholder="e.g. inside bar, then a directional bar breaking up, then another directional bar breaking down..."></textarea>
+
+      <label style="margin-top:10px;">Direction</label>
+      <select id="testDir"><option value="">(not specified)</option><option value="Long">Long</option><option value="Short">Short</option></select>
+
+      <div style="margin-top:10px;">
+        <div class="strat-opt" id="testFtfcToggle" onclick="toggleTestFlag('testFtfcToggle')">
+          <div class="t">FTFC Confirmed: No</div>
+        </div>
+        <div class="strat-opt broadening-opt" id="testBroadeningToggle" onclick="toggleTestFlag('testBroadeningToggle')">
+          <div class="t">Off Broadening Formation: No</div>
+        </div>
+      </div>
+
+      <button class="primary" id="testClassifyBtn" onclick="runTestClassification()" style="margin-top:14px;">Classify This Chart</button>
+      <div id="testClassifyOutput"></div>
+    </div>
+
+    <div class="card">
+      <h3>Past Test Feedback</h3>
+      <button class="secondary" style="margin-top:0;" onclick="loadTestFeedbackHistory()">Refresh History</button>
+      <div id="testFeedbackHistory"><div class="empty">Tap Refresh to load past test results.</div></div>
+    </div>
   </div>
 
   <!-- BAR REPLAY MODAL -->
@@ -1916,6 +1953,158 @@ async function classifyUnclassifiedTrades(){
   }
   renderDashboard();
   renderJournal();
+}
+
+// ---- Test Classification (sandbox, no real trade involved) ----
+// Lets the owner try the AI classifier against a made-up chart — a drawn
+// picture, an AI-generated image, something pulled from the internet, or
+// just a typed description — while he isn't currently in any real trades.
+// Talks to a separate backend route (/ai/test-classify) that reuses the
+// exact same classifier, but always returns its real answer (even
+// "unclear" or low confidence) instead of hiding it, since the whole point
+// here is to see what the AI actually thinks. Nothing here is saved as a
+// trade; feedback (correct/incorrect) is stored separately for the owner
+// to review later, so the classifier's real-world accuracy can be judged
+// over time.
+let currentTestShot = null;
+let testFtfcConfirmed = false;
+let testBroadeningFormation = false;
+let lastTestClassifyResult = null; // {strategy, confidence, reasoning} — needed when submitting feedback
+
+function handleTestShot(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    currentTestShot = e.target.result;
+    document.getElementById('testShotBox').innerHTML = `<img src="${e.target.result}"><div class="close-x" onclick="event.stopPropagation(); clearTestShot()">✕</div>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearTestShot(){
+  currentTestShot = null;
+  document.getElementById('testShotBox').innerHTML = '+ Add picture';
+}
+
+function toggleTestFlag(elId){
+  const isFtfc = elId === 'testFtfcToggle';
+  const newVal = isFtfc ? !testFtfcConfirmed : !testBroadeningFormation;
+  if(isFtfc) testFtfcConfirmed = newVal; else testBroadeningFormation = newVal;
+  const el = document.getElementById(elId);
+  el.classList.toggle('sel', newVal);
+  el.querySelector('.t').textContent = (isFtfc ? 'FTFC Confirmed: ' : 'Off Broadening Formation: ') + (newVal ? 'Yes' : 'No');
+}
+
+async function runTestClassification(){
+  const url = backendUrl();
+  const out = document.getElementById('testClassifyOutput');
+  if(!url){ out.innerHTML = `<div class="ai-msg"><div class="tag">Not connected</div>Connect your backend on the Journal tab first.</div>`; return; }
+
+  const description = document.getElementById('testDescription').value.trim();
+  if(!currentTestShot && !description){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing to test</div>Add a picture, type a description, or both.</div>`;
+    return;
+  }
+
+  const btn = document.getElementById('testClassifyBtn');
+  btn.disabled = true;
+  out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Classifying...</div>`;
+  lastTestClassifyResult = null;
+
+  const payload = {
+    image: currentTestShot || undefined,
+    description: description || undefined,
+    dir: document.getElementById('testDir').value || undefined,
+    ftfcConfirmed: testFtfcConfirmed,
+    offBroadeningFormation: testBroadeningFormation,
+  };
+
+  try{
+    const r = await fetch(url+'/ai/test-classify?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error || `Server responded with status ${r.status}`); }
+    const { result } = await r.json();
+    lastTestClassifyResult = result;
+    const confBadge = result.confidence === 'high' ? 'pos' : (result.confidence === 'medium' ? '' : 'neg');
+    out.innerHTML = `
+      <div class="ai-msg">
+        <div class="tag">${result.strategy}${result.usedScreenshot ? ' 📷' : ''}</div>
+        <div class="num ${confBadge}" style="font-weight:700; margin-bottom:4px;">Confidence: ${result.confidence}</div>
+        ${result.reasoning}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="secondary" style="margin-top:0;" onclick="submitTestFeedback(true)">✓ Correct</button>
+        <button class="secondary" style="margin-top:0; color:var(--bear); border-color:var(--bear-dim);" onclick="showTestIncorrectForm()">✕ Incorrect</button>
+      </div>
+      <div id="testIncorrectForm"></div>
+    `;
+  }catch(e){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Error</div>Couldn't classify (${e.message}). Try again.</div>`;
+  }
+  btn.disabled = false;
+}
+
+function showTestIncorrectForm(){
+  const strats = ['2-1-2 Continuation','2-1-2 Reversal','3-1-2 Reversal','2-2 Continuation','2-2 Reversal','3-2-2 Reversal','1-2-2 Rev Strat','1 Bar Rev Strat','PMG'];
+  document.getElementById('testIncorrectForm').innerHTML = `
+    <label style="margin-top:10px;">What was it actually?</label>
+    <select id="testActualStrat">${strats.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+    <label style="margin-top:8px;">Notes (optional)</label>
+    <textarea id="testFeedbackNotes" placeholder="Anything about why it got this wrong..."></textarea>
+    <button class="primary" style="margin-top:8px;" onclick="submitTestFeedback(false)">Submit Feedback</button>
+  `;
+}
+
+async function submitTestFeedback(wasCorrect){
+  const url = backendUrl();
+  if(!url || !lastTestClassifyResult) return;
+  const payload = {
+    wasCorrect,
+    predictedStrategy: lastTestClassifyResult.strategy,
+    predictedConfidence: lastTestClassifyResult.confidence,
+    predictedReasoning: lastTestClassifyResult.reasoning,
+    image: currentTestShot || undefined,
+    description: document.getElementById('testDescription').value.trim() || undefined,
+    dir: document.getElementById('testDir').value || undefined,
+  };
+  if(!wasCorrect){
+    payload.actualStrategy = document.getElementById('testActualStrat').value;
+    payload.userNotes = document.getElementById('testFeedbackNotes').value.trim() || undefined;
+  }
+  try{
+    await fetch(url+'/ai/test-classify-feedback?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    showStatus('ok', 'Feedback saved.');
+    loadTestFeedbackHistory();
+  }catch(e){
+    showStatus('err', 'Could not save feedback — try again.');
+  }
+}
+
+async function loadTestFeedbackHistory(){
+  const url = backendUrl();
+  const el = document.getElementById('testFeedbackHistory');
+  if(!url){ el.innerHTML = '<div class="empty">Connect your backend on the Journal tab first.</div>'; return; }
+  el.innerHTML = '<div class="empty"><span class="spin"></span> Loading...</div>';
+  try{
+    const r = await fetch(url+'/ai/test-classify-feedback?key='+encodeURIComponent(appKey()));
+    if(!r.ok) throw new Error('status '+r.status);
+    const { feedback } = await r.json();
+    if(!feedback.length){ el.innerHTML = '<div class="empty">No test feedback saved yet.</div>'; return; }
+    el.innerHTML = feedback.sort((a,b)=>b.timestamp-a.timestamp).map(f=>`
+      <div style="border-bottom:1px solid var(--border); padding:8px 0; font-size:12.5px;">
+        ${f.image ? `<img src="${f.image}" style="max-width:100%; border-radius:6px; margin-bottom:6px;">` : ''}
+        <div><span class="badge ${f.wasCorrect?'win':'loss'}">${f.wasCorrect?'Correct':'Incorrect'}</span> Predicted: ${f.predictedStrategy || '—'}${f.wasCorrect===false && f.actualStrategy ? ` · Actual: ${f.actualStrategy}` : ''}</div>
+        ${f.userNotes ? `<div style="color:var(--text-dim); margin-top:4px;">${f.userNotes}</div>` : ''}
+        <div style="color:var(--text-dim); margin-top:2px;">${new Date(f.timestamp).toLocaleString()}</div>
+      </div>
+    `).join('');
+  }catch(e){
+    el.innerHTML = '<div class="empty">Could not load history — try again.</div>';
+  }
 }
 
 // ---- Schwab backend sync ----
