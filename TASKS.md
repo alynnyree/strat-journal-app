@@ -595,10 +595,10 @@ via the `TASKS.md` commit log.
 
 14. **Capture the exact entry/exit moment when trading from a laptop, not
     just a phone** (added 2026-08-22, owner's own note to revisit).
-    **Status: Scoping in progress (2026-08-23), not yet built.** Phone and
-    laptop are different problems: everything task 7 relies on (Pushcut
-    notifications, iOS Shortcuts, screen recording) is iPhone-only and has
-    no equivalent trigger mechanism on a computer.
+    **Status: Built 2026-08-23, not yet installed/tested on a real
+    computer.** Phone and laptop are different problems: everything task 7
+    relies on (Pushcut notifications, iOS Shortcuts, screen recording) is
+    iPhone-only and has no equivalent trigger mechanism on a computer.
 
     Key advantage over the phone: unlike iOS, a computer does NOT have
     Apple's restriction requiring a person to physically tap something
@@ -609,24 +609,65 @@ via the `TASKS.md` commit log.
     specific MacBook) was **dropped 2026-08-23 — owner does not always
     trade from the same computer, and travels between locations/machines
     a lot**, so anything tied to one specific computer's operating system
-    is the wrong shape. Current direction: a **browser extension**
-    instead of an OS-level program, since it works identically across
-    Windows/Mac/Linux (any Chrome-based browser) rather than being tied
-    to macOS specifically — a much better fit for someone who switches
-    computers, even though it still requires installing it once on each
-    computer actually used for this (no way to add automation to a
-    machine never set up in advance — e.g. a public/borrowed computer
-    still couldn't get this). Design (not yet built): the extension
-    listens quietly in the background (while the browser is open) for
-    the same trade-open/still-open/closed signal the backend already
-    generates for the phone notifications, and on each one, captures the
-    current browser tab and uploads it to the same `/media/upload`
-    endpoint already built and tested for task 7 — no backend upload
-    logic to redo, only a new way to notify a browser instead of a
-    phone. Needs a one-time browser permission grant per computer,
-    similar in spirit to the phone's App Key/Screen Recording one-time
-    setups. Not yet built — this is the current plan being discussed
-    with the owner, not a decided/started build.
+    is the wrong shape. Built instead as a **browser extension**, since it
+    works identically across Windows/Mac/Linux (any Chrome-based browser)
+    rather than being tied to macOS specifically — a much better fit for
+    someone who switches computers, even though it still requires
+    installing it once on each computer actually used for this (no way to
+    add automation to a machine never set up in advance — e.g. a
+    public/borrowed computer still couldn't get this).
+
+    **Backend half — built, tested, merged (PR #13 on strat-journal-
+    backend):** a new `browserEvents.js` queue (`GET`/`DELETE
+    /browser/events`), wired into `cron.js` at the exact same three points
+    the Pushcut notifications already fire (trade opened / still open
+    after 15 min / closed), using the trade's real timestamp, not "now."
+    Tested (21/21 checks total): the queue routes directly, and the
+    `cron.js` wiring end-to-end with the real matcher and every other
+    dependency mocked (including intercepting the 15-minute safety-net
+    timer so the test doesn't wait 15 real minutes).
+
+    **Extension half — built, not yet installed anywhere real:** lives in
+    the frontend repo under `browser-extension/`. A small Chrome extension
+    (Manifest V3) with:
+    - `background.js` — once a minute (Chrome's alarm system won't go
+      faster than that), polls `/browser/events`, and for each one
+      captures whatever browser tab is currently active and uploads it to
+      the same `/media/upload` endpoint the phone already uses, then
+      deletes the event so it isn't captured twice.
+    - `options.html`/`options.js` — a settings page for the same Backend
+      URL and App Key the Journal app itself uses.
+    - `popup.html`/`popup.js` — a small toolbar-icon status view (last
+      checked, last error, how many events were found/captured) so the
+      owner can see it's working without needing developer tools.
+    - Icons generated from the app's own existing icon.
+    Tested (6/6 checks) on the pure address-building logic (the pieces
+    with no dependency on an actual browser); the browser-specific parts
+    (`chrome.tabs.captureVisibleTab`, `chrome.alarms`, the install flow
+    itself) **cannot be tested from here — no browser available** and
+    need real-device verification the same way the phone Shortcuts did.
+
+    **Honest limits to know before testing:**
+    - Requires the **`<all_urls>`** permission (needed so the extension
+      can capture a tab automatically, without a click, regardless of
+      what site is showing) — Chrome will show a broad-sounding warning
+      ("Read and change all your data on all websites") when installing.
+      Expected for what this needs to do, not a red flag.
+    - Captures **whatever tab is currently active** — same requirement as
+      the phone had with TradingView needing to be the on-screen app.
+    - Up to about a **minute of lag** between the real trade event and the
+      extension noticing it (Chrome's alarm system's fastest setting),
+      versus the phone's near-instant push notification.
+    - Only works while that **browser window is open** on that computer —
+      expected, not a bug.
+    - Only exists on computers where it's been installed ahead of time —
+      cannot add itself to an unfamiliar/borrowed machine.
+
+    **Not yet done:** loading it into a real browser (`chrome://extensions`
+    → Developer mode → "Load unpacked" → select the `browser-extension`
+    folder), entering the Backend URL/App Key in its settings, granting
+    the one-time permission, and a live test to confirm a real capture
+    actually works end to end.
 
 15. **Build a real iPhone app for automatic video recording** (split out
     from task 7 on 2026-08-22, once real-device testing confirmed iOS
