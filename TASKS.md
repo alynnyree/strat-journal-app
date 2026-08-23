@@ -308,8 +308,22 @@ via the `TASKS.md` commit log.
       arrived, since a manual test has no real trade to auto-attach to
       inside the Journal itself. **Confirmed working 2026-08-23** — owner
       checked the new preview page below and the picture was there and
-      accurate. "Trade Opened" is done. Next: duplicate it into "Trade
-      Still Open" and connect both to their Pushcut notifications.
+      accurate. "Trade Opened" is done.
+
+      **Pushcut connection quirk found 2026-08-23**: Pushcut's own
+      "Run Shortcut" picker (Default Action → Shortcut → pick from list)
+      did not list "Trade opened" at all, even after fully closing and
+      reopening Pushcut, even though the shortcut existed, was saved, and
+      already worked when run by hand. Cause not confirmed (Pushcut's
+      internal shortcut list appears to go stale for newly-created
+      shortcuts). **Fix that worked:** set the Default Action's type to
+      "URL" instead of "Shortcut," with the address
+      `shortcuts://run-shortcut?name=Trade%20opened` (iOS's own built-in
+      "run a shortcut by name" address — %20 stands in for the space).
+      Confirmed working end-to-end: tapping the Pushcut notification
+      opened Shortcuts and ran "Trade opened" (spinner then a screen
+      flash). Same fix needed for "Trade Still Open" once that shortcut
+      exists — same URL pattern with its own name.
 
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
