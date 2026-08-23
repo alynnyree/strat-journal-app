@@ -347,6 +347,16 @@ via the `TASKS.md` commit log.
       alert showed the real server response, `{"ok":true,"id":"..."}`,
       confirming the picture was accepted.
 
+      **"Trade Still Open" built and confirmed working 2026-08-23,
+      same session** — duplicated from "Trade opened," Pushcut's Default
+      Action set to the URL-scheme fix the same way, worked on the first
+      try (`{"ok":true,...}`). Both automatic-photo Shortcuts are now
+      built and proven. What's left for Path 1 (automatic photos):
+      confirm the pre-existing "Trade Closed" Shortcut (from earlier in
+      this task, untouched by any of the above) still works, then the
+      whole pipeline just needs a real live trade to confirm it end to
+      end outside of manual testing.
+
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
    app), that shows every screenshot/video still waiting to be matched —
