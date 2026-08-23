@@ -351,11 +351,33 @@ via the `TASKS.md` commit log.
       same session** — duplicated from "Trade opened," Pushcut's Default
       Action set to the URL-scheme fix the same way, worked on the first
       try (`{"ok":true,...}`). Both automatic-photo Shortcuts are now
-      built and proven. What's left for Path 1 (automatic photos):
-      confirm the pre-existing "Trade Closed" Shortcut (from earlier in
-      this task, untouched by any of the above) still works, then the
-      whole pipeline just needs a real live trade to confirm it end to
-      end outside of manual testing.
+      built and proven.
+
+      **Turned out the pre-existing "Trade Closed" Shortcut ("Take Trade
+      Screenshot") did need changes after all** — the "needs no changes"
+      assumption above was wrong. Two real problems found and fixed
+      2026-08-23: (1) it had no Default Action at all (relied on
+      expanding the notification and tapping a separate button — an
+      extra step, inconsistent with the other two and with the owner's
+      zero-friction goal), fixed the same way as the other two
+      (`shortcuts://run-shortcut?name=Take%20Trade%20Screenshot`); (2)
+      its timestamp was wired to "Shortcut Input" (expecting something
+      handed in from outside) instead of generating its own "Current
+      Date" like the other two — swapped to match.
+
+      **Second real bug found across all three Shortcuts, same day:**
+      the "Current Date" chip has its own separate **"ISO 8601 Time"**
+      toggle, off by default — with it off, the timestamp sent is a bare
+      date with no time of day (e.g. "2026-09-15"), which would silently
+      break the app's 10-minute entry/exit matching window for every
+      screenshot. Confirmed and turned ON for all three Shortcuts. Worth
+      remembering for any future Shortcut that sends a timestamp this
+      way: always check this toggle specifically, it's easy to miss.
+
+      What's left for Path 1 (automatic photos): all three Shortcuts are
+      now built, fixed, and individually test-confirmed. The whole
+      pipeline just needs a real live trade to confirm it end to end
+      outside of manual testing.
 
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
