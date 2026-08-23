@@ -11,20 +11,20 @@ via the `TASKS.md` commit log.
 
 **Standing reminders from the owner — check before ever calling this
 project "complete":**
-- Install and live-test the browser extension (task 14) on a real
+- Install and live-test the browser extension (task 13) on a real
   computer — owner said "make sure to remind me of this build out before
   we call this project complete" (2026-08-23). Not yet done as of this
   note.
 - Revisit capturing entry/exit moments when trading from a laptop, not
-  just a phone (task 14) — originally asked 2026-08-22, before the
-  browser extension existed; now superseded by task 14 itself, kept here
+  just a phone (task 13) — originally asked 2026-08-22, before the
+  browser extension existed; now superseded by task 13 itself, kept here
   only as the origin of that request.
 
 1. **Fix 403 error on `/media/pending`.**
    **Status: Done (2026-08-19).** Owner confirmed: pasted the real
    `APP_SECRET` value into the App Key box, "Not connected" turned to a
    green "Connected," and "Check for New Trades" now works with no error.
-   Unblocks task 7 (screenshot pipeline).
+   Unblocks task 6 (screenshot pipeline).
 
 2. **Build AI strategy auto-classification.**
    **Status: Fixed, unconfirmed on phone (2026-08-19).** Correction: the
@@ -160,7 +160,7 @@ project "complete":**
      Line could actually be placed. Fixed so a second tap now correctly
      finishes the line where the two-tap flow was always meant to.
 
-   Also re-ran the candle-width-stays-constant check from task 11 inside
+   Also re-ran the candle-width-stays-constant check from task 10 inside
    this same real render (not just reading the chart's internal numbers)
    — confirmed stable through several playback steps.
 
@@ -169,15 +169,11 @@ project "complete":**
    likely the actual cause of any past frustration trying to draw a
    Trend Line by tapping rather than dragging.
 
-6. **Improve Bar Replay data quality.**
-   **Status: Blocked.** Owner needs to describe what he actually wants
-   before this is scoped or started.
-
-7. **Complete the screenshot capture pipeline.**
+6. **Complete the screenshot capture pipeline.**
    **Status: Automatic phone pictures (Path 1) fully built, fixed, and
    verified against real image content (2026-08-23) — only a real live
    trade left to confirm the whole pipeline end to end. Automatic video
-   (Path 2) confirmed impossible via Shortcuts, split out to task 15 as
+   (Path 2) confirmed impossible via Shortcuts, split out to task 14 as
    its own native-app effort.** (Original 2026-08-19 status line below
    kept for history; superseded by everything after it in this section.)
 
@@ -277,7 +273,7 @@ project "complete":**
    — no amount of searching or configuring unlocks it. That means true
    automatic *video* capture is not achievable through Pushcut+Shortcuts
    at all; it needs a real, separately-installed iPhone app with its own
-   one-time recording permission (see task 15, newly split out below).
+   one-time recording permission (see task 14, newly split out below).
    The video storage/backend pieces above stay built and untouched —
    they're exactly what that future app will use once it exists.
 
@@ -451,7 +447,7 @@ project "complete":**
    counts, images render, video "Play" links work, newest-first order,
    and a deliberately malicious stored value can't break the page.
 
-8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
+7. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
    **Status: Built and tested (2026-08-19).** New "Risk Rules" card on
    the Journal tab (Account Size, Max Risk % Per Trade, Daily Max Loss,
@@ -472,12 +468,39 @@ project "complete":**
    uncaught errors. NOT verified: how it actually looks/feels on a real
    phone — worth a glance next time the app's open.
 
-9. **Build backtesting** (hypothetical entries/stops/targets run against
+8. **Backtesting, including improving Bar Replay's underlying data
+   quality — combined into one task 2026-08-23, previously tracked as two
+   separate items** (hypothetical entries/stops/targets run against
    historical replay data).
-   **Status: Needs proposal first.** Propose an approach and get sign-off
-   before writing any code.
+   **Status: Needs proposal first.** Owner pointed out these aren't
+   actually separate efforts: Bar Replay's reconstructed candle data is
+   the same raw material backtesting would need to run hypothetical
+   entries/stops/targets against, so "improve Bar Replay data quality"
+   (the old task 6) was really a prerequisite piece of backtesting, not
+   its own independent task. Merged so they get proposed and built
+   together.
 
-10. **Build native iOS app for zero-tap session recording.**
+   Also confirmed 2026-08-23, from an earlier conversation not visible in
+   this codebase (predates this Claude Code project): Bar Replay was
+   originally built as a substitute for automatic screen recording,
+   before real automatic picture/video capture existed for either the
+   phone or a computer — the code comments describing it that way were
+   the actual evidence for this, not a guess. Discussed and decided to
+   keep it anyway even now that real automatic capture exists (see task
+   6 for phone, task 13 for computer): screenshots/video show what the
+   owner actually saw (his own drawings, indicators, decision-making at
+   the time); Bar Replay/backtesting works from precise, scrubbable
+   market data and doesn't depend on a screenshot having been captured
+   correctly at all — a real, independent safety net given how many
+   genuine capture bugs were found and fixed the same night this
+   decision was made. Worth the owner honestly checking whether he
+   actually opens Bar Replay in practice before investing further in it,
+   but the technical case for keeping it stands on its own regardless.
+
+   Propose an approach and get sign-off before writing any code — nothing
+   here is built yet.
+
+9. **Build native iOS app for zero-tap session recording.**
     **Status: Open, explicitly deferred (2026-08-19).** Owner chose to
     leave this as a future task for now rather than start it, after this
     session spent significant effort on iOS's home-screen web-app
@@ -486,7 +509,7 @@ project "complete":**
     design notes (Control Center tile, ReplayKit consent, Personal Team
     signing re-signs roughly weekly).
 
-11. **Fix candle-shrinking during playback.** The chart view was re-fitting
+10. **Fix candle-shrinking during playback.** The chart view was re-fitting
     itself every single frame, so candles got thinner and thinner as more
     of them appeared during Play.
     **Status: Fixed, unconfirmed on real phone.** Fixed and saved
@@ -497,7 +520,7 @@ project "complete":**
     is fixed) through several playback steps — candle width visibly held
     steady. Not yet confirmed on a real iPhone with real trade data.
 
-12. **Replace the 3 broad Strat Setup labels with the owner's real combo
+11. **Replace the 3 broad Strat Setup labels with the owner's real combo
     list, and separate FTFC/Broadening Formation from being "strategies"
     of their own** (added 2026-08-21, from a full spreadsheet-vs-app
     comparison the owner asked for).
@@ -542,11 +565,11 @@ project "complete":**
 
     Also confirmed and NOT yet built at the time: the owner wants the AI's
     auto-tagging to eventually also look at the actual screenshot/video
-    captured at trade execution (task 7's screenshot pipeline, and
-    eventually task 10's video), not just candle price data — both to help
+    captured at trade execution (task 6's screenshot pipeline, and
+    eventually task 9's video), not just candle price data — both to help
     the AI decide, and for the owner's own later review. Sequenced after
-    task 7's remaining phone-side setup at the time. The screenshot half of
-    this is now built — see task 13.
+    task 6's remaining phone-side setup at the time. The screenshot half of
+    this is now built — see task 12.
 
     Tested end-to-end in an automated browser: all 9 patterns render and
     are individually selectable, the Broadening toggle can be turned on
@@ -562,9 +585,9 @@ project "complete":**
     below high confidence. NOT verified: how the new picker actually looks
     and feels tapping through it on a real phone.
 
-13. **Have the AI look at a trade's actual screenshot as extra evidence
+12. **Have the AI look at a trade's actual screenshot as extra evidence
     when auto-tagging its Strat Setup**, once one exists (added 2026-08-21,
-    a promised follow-up from task 2/12).
+    a promised follow-up from task 2/11).
     **Status: Built and tested (2026-08-21).** Only reaches trades the
     frontend already holds a screenshot for locally (`shotEntry`, or
     `shotExit` as a fallback if no entry shot exists) — the backend's own
@@ -604,14 +627,14 @@ project "complete":**
     browser (screenshot arrives → gets attached → AI re-tries and tags it
     using that screenshot → Journal badge shows the camera icon) — all
     checks passed. NOT verified: a real screenshot from the owner's actual
-    phone once task 7's remaining setup step is done, and whether the
+    phone once task 6's remaining setup step is done, and whether the
     screenshot genuinely improves the AI's accuracy in practice (only
     something a real run over time can show).
 
-14. **Capture the exact entry/exit moment when trading from a laptop, not
+13. **Capture the exact entry/exit moment when trading from a laptop, not
     just a phone** (added 2026-08-22, owner's own note to revisit).
     **Status: Built 2026-08-23, not yet installed/tested on a real
-    computer.** Phone and laptop are different problems: everything task 7
+    computer.** Phone and laptop are different problems: everything task 6
     relies on (Pushcut notifications, iOS Shortcuts, screen recording) is
     iPhone-only and has no equivalent trigger mechanism on a computer.
 
@@ -684,29 +707,29 @@ project "complete":**
     the one-time permission, and a live test to confirm a real capture
     actually works end to end.
 
-15. **Build a real iPhone app for automatic video recording** (split out
-    from task 7 on 2026-08-22, once real-device testing confirmed iOS
+14. **Build a real iPhone app for automatic video recording** (split out
+    from task 6 on 2026-08-22, once real-device testing confirmed iOS
     Shortcuts cannot start or stop screen recording at all — a deliberate
     Apple privacy restriction, not something more configuration fixes).
     **Status: Not started — this is the "native iOS app" idea already
     noted in CLAUDE.md's Feature Status section, now confirmed to be the
     only real path to automatic video** (the automatic-photo half of the
-    original ask doesn't need this — see task 7). The mechanism: a real,
+    original ask doesn't need this — see task 6). The mechanism: a real,
     separately-installed app (not a website) can ask the owner once,
     ever, for permission to record the screen; after that one-time
     consent, the app can start and stop recording in code on its own,
     woken by a signal from the backend using the same trade-open/close
-    detection already built for task 7. The finished recording would
+    detection already built for task 6. The finished recording would
     upload to the same R2 video storage already built and tested. Real
     scope, not to be underestimated: a separate codebase in Swift/Xcode
     on the owner's Mac, a decision on paying Apple's $99/year developer
     fee vs. re-signing a free app roughly weekly, setting up push
     notifications so the backend can wake the app, and live testing to
     confirm the wake-and-record step is actually reliable. Owner's own
-    sequencing: get task 7's automatic photos fully working and confirmed
+    sequencing: get task 6's automatic photos fully working and confirmed
     first, then start this as its own dedicated effort.
 
-16. **Track stock share trades (buying/selling shares of a company), not
+15. **Track stock share trades (buying/selling shares of a company), not
     just options** (added 2026-08-23, owner's own question). **Status: Not
     started — real gap confirmed by reading the actual code, not yet
     designed.** Right now, share trades are completely invisible to this
