@@ -595,12 +595,38 @@ via the `TASKS.md` commit log.
 
 14. **Capture the exact entry/exit moment when trading from a laptop, not
     just a phone** (added 2026-08-22, owner's own note to revisit).
-    **Status: Not started — a conversation to have once task 7's phone-side
-    capture (screenshot + video) is confirmed actually working.** Phone and
+    **Status: Scoping in progress (2026-08-23), not yet built.** Phone and
     laptop are different problems: everything task 7 relies on (Pushcut
     notifications, iOS Shortcuts, screen recording) is iPhone-only and has
-    no equivalent trigger mechanism on a Mac. Needs its own scoping
-    conversation rather than assuming the phone approach carries over.
+    no equivalent trigger mechanism on a computer.
+
+    Key advantage over the phone: unlike iOS, a computer does NOT have
+    Apple's restriction requiring a person to physically tap something
+    before a screenshot can be taken — true zero-click automatic capture
+    is genuinely possible here, not just a nicer manual step.
+
+    First design (a background helper program installed on the owner's
+    specific MacBook) was **dropped 2026-08-23 — owner does not always
+    trade from the same computer, and travels between locations/machines
+    a lot**, so anything tied to one specific computer's operating system
+    is the wrong shape. Current direction: a **browser extension**
+    instead of an OS-level program, since it works identically across
+    Windows/Mac/Linux (any Chrome-based browser) rather than being tied
+    to macOS specifically — a much better fit for someone who switches
+    computers, even though it still requires installing it once on each
+    computer actually used for this (no way to add automation to a
+    machine never set up in advance — e.g. a public/borrowed computer
+    still couldn't get this). Design (not yet built): the extension
+    listens quietly in the background (while the browser is open) for
+    the same trade-open/still-open/closed signal the backend already
+    generates for the phone notifications, and on each one, captures the
+    current browser tab and uploads it to the same `/media/upload`
+    endpoint already built and tested for task 7 — no backend upload
+    logic to redo, only a new way to notify a browser instead of a
+    phone. Needs a one-time browser permission grant per computer,
+    similar in spirit to the phone's App Key/Screen Recording one-time
+    setups. Not yet built — this is the current plan being discussed
+    with the owner, not a decided/started build.
 
 15. **Build a real iPhone app for automatic video recording** (split out
     from task 7 on 2026-08-22, once real-device testing confirmed iOS
@@ -623,3 +649,38 @@ via the `TASKS.md` commit log.
     confirm the wake-and-record step is actually reliable. Owner's own
     sequencing: get task 7's automatic photos fully working and confirmed
     first, then start this as its own dedicated effort.
+
+16. **Track stock share trades (buying/selling shares of a company), not
+    just options** (added 2026-08-23, owner's own question). **Status: Not
+    started — real gap confirmed by reading the actual code, not yet
+    designed.** Right now, share trades are completely invisible to this
+    app — not mismatched, simply thrown away before they're ever stored.
+    Confirmed in `schwabClient.js`'s `extractOptionFills()`: every fill
+    from Schwab is checked with `if (ti.instrument?.assetType !== 'OPTION')
+    continue;`, which silently skips anything that isn't an options
+    contract. Buying shares today produces no trade in the Journal, no
+    matching, no automatic pictures — nothing.
+
+    This is a real feature to design, not a quick fix, because several of
+    the app's core rules are built specifically around how options work
+    and don't have a share-trading equivalent yet:
+    - **Direction (Long/Short)**: currently comes from call vs. put
+      (`dirFromPutCall` in `matcher.js`). Shares have no call/put — would
+      need to come from buy vs. sell instead (buy shares = Long, short
+      shares = Short).
+    - **Profit calculation**: the app currently never needs to flip the
+      sign because the owner always buys options to open. That same
+      shortcut only holds for shares if the owner never shorts stock; if
+      short-selling shares is ever done, profit calculation needs its own
+      sign-flip logic, same as options already have for Short bets.
+    - **Realized R:R math**: built around "the option's price vs. the
+      underlying stock's price" being two separate things. For a share
+      trade, the position *is* the underlying — this calculation needs
+      its own version rather than reusing the options one.
+    - **`isOpen`/`isClose` in `matcher.js`** currently key off
+      options-specific instruction strings (`BUY_TO_OPEN`, etc.) that
+      Schwab may not report the same way for equities — needs checking
+      against real Schwab data before writing the matching logic.
+
+    Not blocking any current work — flagged here so it isn't forgotten,
+    to be scoped and built as its own dedicated effort when prioritized.
