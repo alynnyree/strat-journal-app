@@ -375,9 +375,27 @@ via the `TASKS.md` commit log.
       way: always check this toggle specifically, it's easy to miss.
 
       What's left for Path 1 (automatic photos): all three Shortcuts are
-      now built, fixed, and individually test-confirmed. The whole
-      pipeline just needs a real live trade to confirm it end to end
-      outside of manual testing.
+      now built, fixed, and individually test-confirmed.
+
+      **UX polish added 2026-08-23:** tapping any of these three
+      notifications necessarily switches away from whatever app the
+      owner was looking at (opening a `shortcuts://` address always
+      switches to the Shortcuts app — a hard iOS limit, not something
+      that can be configured around) — the owner was previously left
+      sitting in the Shortcuts app afterward and had to manually swipe
+      back. Fixed by removing the temporary debug step (Show Alert /
+      Stop and Output — each required a manual "OK" tap and would have
+      interrupted every real trade) from all three Shortcuts and adding
+      an **"Open App" → TradingView** step at the end of each instead.
+      Confirmed working on all three: notification tap → brief flash →
+      automatically lands back on the TradingView chart, no manual
+      swipe-back needed. (One-time "Allow to output 1 app?" permission
+      popup appears the first time each shortcut runs this new step —
+      tap Always Allow, doesn't ask again.)
+
+      Path 1 (automatic photos) is now fully built, fixed, and
+      polished. All that's left is a real live trade to confirm the
+      whole pipeline end to end outside of manual testing.
 
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
