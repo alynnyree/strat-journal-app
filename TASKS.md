@@ -254,25 +254,57 @@ via the `TASKS.md` commit log.
    never touches real cloud storage during automated testing, on purpose,
    so this still needs a real phone test once the Shortcuts below exist.
 
+   **Real-device finding 2026-08-22 that changed the plan: iOS does not
+   allow Shortcuts to start or stop screen recording at all**, confirmed
+   by the owner's own phone (neither action exists in the Shortcuts
+   action picker, even after adding Screen Recording to Control Center).
+   This is a deliberate Apple privacy restriction, not a settings problem
+   — no amount of searching or configuring unlocks it. That means true
+   automatic *video* capture is not achievable through Pushcut+Shortcuts
+   at all; it needs a real, separately-installed iPhone app with its own
+   one-time recording permission (see task 15, newly split out below).
+   The video storage/backend pieces above stay built and untouched —
+   they're exactly what that future app will use once it exists.
+
+   **The good news: `Take Screenshot` (a single instant picture, as
+   opposed to continuous recording) IS available** — confirmed on the
+   owner's phone. That means the *photo* half of the owner's original ask
+   (a picture at entry, one at the 15-minute mark for a longer trade, and
+   the existing exit picture) can be made fully automatic — zero taps —
+   using only what's already built, no native app required. This is now
+   the active build.
+
+   Also found and fixed while wiring this up: not every iOS version
+   offers "Unix Time" in the Shortcuts date-format list (the owner's
+   didn't) — `/media/upload` and `/media/upload-video` now also accept
+   an ISO 8601 date string as the timestamp, so the Shortcut isn't
+   fighting whatever format list happens to be on screen. Tested (9/9
+   checks): Unix-seconds timestamps still work exactly as before, ISO
+   8601 now also works and stores the identical value, invalid/missing
+   timestamps are still rejected.
+
    **What's left needs the owner's phone and Render's settings — not more
    code:**
    1. On **Render**, add four new settings (same place `APP_SECRET` etc.
       already live): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
       `R2_SECRET_ACCESS_KEY` (the three values from creating the storage
-      key), and `R2_BUCKET_NAME` set to `strat-journal-videos`.
+      key), and `R2_BUCKET_NAME` set to `strat-journal-videos`. (Done by
+      the owner — R2 storage itself confirmed working from the code side;
+      not yet confirmed with a real phone upload.)
    2. Two more Pushcut notifications beyond the original one from earlier
       in this task (one for "trade opened," one for "still open after 15
       minutes"), plus two more Render settings so the backend knows their
       exact names: `PUSHCUT_NOTIFICATION_NAME_OPENED` and
       `PUSHCUT_NOTIFICATION_NAME_STILL_OPEN` (pick any names — whatever's
       set here must exactly match the notification names created in the
-      Pushcut app, same rule as the original).
-   3. Three Shortcuts to build: start recording (runs off the "opened"
-      notification), stop-and-discard-then-screenshot (runs off the
-      "still open" notification), and stop-recording-and-upload-video
-      (runs off the existing "closed" notification, reading the `mode`
-      value passed to it to decide whether to upload a video or fall back
-      to a screenshot).
+      Pushcut app, same rule as the original). Done by the owner.
+   3. Two new Shortcuts to build (in progress with the owner
+      2026-08-22): "Trade Opened" and "Trade Still Open," each just
+      `Take Screenshot` followed by uploading it to the existing
+      `/media/upload` address. The existing "Trade Closed" Shortcut from
+      earlier in this task needs no changes at all. Once built, needs a
+      manual test run (not a real trade) to confirm the screenshot
+      actually captures the right app on screen — not yet confirmed live.
 
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
@@ -439,3 +471,25 @@ via the `TASKS.md` commit log.
     notifications, iOS Shortcuts, screen recording) is iPhone-only and has
     no equivalent trigger mechanism on a Mac. Needs its own scoping
     conversation rather than assuming the phone approach carries over.
+
+15. **Build a real iPhone app for automatic video recording** (split out
+    from task 7 on 2026-08-22, once real-device testing confirmed iOS
+    Shortcuts cannot start or stop screen recording at all — a deliberate
+    Apple privacy restriction, not something more configuration fixes).
+    **Status: Not started — this is the "native iOS app" idea already
+    noted in CLAUDE.md's Feature Status section, now confirmed to be the
+    only real path to automatic video** (the automatic-photo half of the
+    original ask doesn't need this — see task 7). The mechanism: a real,
+    separately-installed app (not a website) can ask the owner once,
+    ever, for permission to record the screen; after that one-time
+    consent, the app can start and stop recording in code on its own,
+    woken by a signal from the backend using the same trade-open/close
+    detection already built for task 7. The finished recording would
+    upload to the same R2 video storage already built and tested. Real
+    scope, not to be underestimated: a separate codebase in Swift/Xcode
+    on the owner's Mac, a decision on paying Apple's $99/year developer
+    fee vs. re-signing a free app roughly weekly, setting up push
+    notifications so the backend can wake the app, and live testing to
+    confirm the wake-and-record step is actually reliable. Owner's own
+    sequencing: get task 7's automatic photos fully working and confirmed
+    first, then start this as its own dedicated effort.
