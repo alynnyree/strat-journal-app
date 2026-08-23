@@ -325,6 +325,28 @@ via the `TASKS.md` commit log.
       flash). Same fix needed for "Trade Still Open" once that shortcut
       exists — same URL pattern with its own name.
 
+      **Full end-to-end confirmed working 2026-08-23.** After the URL fix
+      above, real testing (screen recording reviewed frame-by-frame)
+      turned up two more real bugs, not phone user error — both are
+      known iOS/Pushcut flakiness where a setting silently doesn't save:
+      (1) the Default Action URL from the fix above had reverted to "No
+      action" on its own after being set and closed out of — re-set it
+      and confirmed by fully backing out and back in before it stuck; (2)
+      the "Current Date" timestamp chip's format had separately reverted
+      away from ISO 8601, causing the server's "Missing or invalid
+      timestamp" error — reset back to ISO 8601 fixed it. Also found and
+      fixed along the way: the shortcut's `key=` was still the literal
+      placeholder text `YOUR_APP_KEY` rather than the owner's real App
+      Key (`Jesus`), which was silently rejected by the server as
+      "Forbidden" until corrected. **Lesson for building "Trade Still
+      Open" and any future Pushcut-triggered shortcut:** after wiring up
+      Default Action and any date-format chip, close fully out and back
+      in to *re-check* both settings actually stuck before trusting a
+      test — don't assume a save was permanent just because it showed
+      correctly right after setting it. Final proof: the shortcut's own
+      alert showed the real server response, `{"ok":true,"id":"..."}`,
+      confirming the picture was accepted.
+
    Added 2026-08-23 to make that checkable: a plain read-only web page,
    `GET /media/preview?key=...` (same App Key as everywhere else in the
    app), that shows every screenshot/video still waiting to be matched —
