@@ -764,3 +764,68 @@ project "complete":**
 
     Not blocking any current work — flagged here so it isn't forgotten,
     to be scoped and built as its own dedicated effort when prioritized.
+
+15. **Record the actual Stop Loss *rule*, not just a dollar price** (Gap 2
+    from a spreadsheet-vs-app comparison done in a separate conversation,
+    surfaced back into this project 2026-08-23 after being found
+    untracked here). Owner's spreadsheet writes out the real stop rule in
+    words ("30% against trade," "682.67 (50% of mark of trigger candle),"
+    "10%-15% stop"); the app's Stop field only holds a single number, with
+    nowhere to record *why* that's the stop. **Status: Not started.**
+
+16. **Show trade Notes on the main trade list, not just inside the Edit
+    screen** (Gap 3, same source as task 15). Owner's spreadsheet has
+    Notes as a column visible at a glance; the app saves Notes but only
+    shows them after tapping into a trade's Edit screen. **Status: Not
+    started.**
+
+    (Gap 1 from that same comparison — strategy labels too broad, no way
+    to note which timeframe a setup happened on — was already the exact
+    thing that became task 10's 9-pattern combo rebuild, done and tested
+    2026-08-21, before this conversation surfaced the other two gaps.)
+
+17. **Let FTFC alignment and Broadening Formation genuinely factor into
+    how a trade gets classified, not just sit as separate disconnected
+    data** (added 2026-08-23, owner's own clarification). **Status: Needs
+    a decision before building — flagged, not started.** Two related but
+    different asks, worth telling apart:
+
+    (a) **Record whether each classified combo was taken with FTFC
+    aligned and/or off a Broadening Formation, together with the pattern
+    name** — not as two separate unconnected summaries the way the
+    Dashboard shows them today (confirmed by reading `index.html`: setup
+    performance and FTFC performance are computed as two independent
+    breakdowns with no combined view). This part is straightforward:
+    `ftfcConfirmed`/`ftfcDirection` are already computed per trade, and
+    the Broadening Formation toggle already exists on the trade form —
+    they just need combining into one view/analysis instead of staying
+    separate.
+
+    (b) **Whether the AI should be allowed to use FTFC/Broadening as
+    evidence when deciding *which* of the 9 patterns a trade was** — this
+    is a real change to `aiClient.js`'s prompt, which currently tells the
+    model explicitly "FTFC alignment... should not affect which pattern
+    you pick," a deliberate choice made in task 10 after the owner
+    confirmed FTFC/Broadening aren't real pattern types of their own.
+    Loosening that to "use as supporting evidence" is a reasonable
+    reading of the owner's ask and doesn't have to contradict task 10 (the
+    9 patterns stay the only valid output either way) — but it directly
+    runs into a SEPARATE, already-settled finding from that same task 10:
+    the owner himself confirmed Broadening Formation is "a genuine
+    multi-step judgment call" (a compound outside bar, drawn right-to-
+    left, redrawn as new candles form, tied to a timeframe's color
+    flipping) that the app deliberately does NOT try to auto-detect —
+    only a manual yes/no toggle exists. Before building (b), needs the
+    owner to confirm: is the AI meant to now attempt recognizing a
+    Broadening Formation itself from the candles/screenshot as supporting
+    evidence (reversing that earlier decision), or only ever use the
+    owner's own manual toggle (already set by hand) as the FTFC/Broadening
+    context it's allowed to weigh?
+
+18. **"Test Classification" tool — try the AI classifier against a
+    made-up chart (drawn, AI-generated, pulled from the internet, or just
+    described) without it needing to be a real trade, and give feedback
+    on whether it got it right** (added 2026-08-23, owner's own request,
+    to sanity-check/improve the classifier while not currently in any
+    real trades). **Status: In progress 2026-08-23.** Reuses the real
+    classifier from task 6/11 as-is, not a separate copy.
