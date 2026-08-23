@@ -430,3 +430,12 @@ via the `TASKS.md` commit log.
     phone once task 7's remaining setup step is done, and whether the
     screenshot genuinely improves the AI's accuracy in practice (only
     something a real run over time can show).
+
+14. **Capture the exact entry/exit moment when trading from a laptop, not
+    just a phone** (added 2026-08-22, owner's own note to revisit).
+    **Status: Not started — a conversation to have once task 7's phone-side
+    capture (screenshot + video) is confirmed actually working.** Phone and
+    laptop are different problems: everything task 7 relies on (Pushcut
+    notifications, iOS Shortcuts, screen recording) is iPhone-only and has
+    no equivalent trigger mechanism on a Mac. Needs its own scoping
+    conversation rather than assuming the phone approach carries over.
