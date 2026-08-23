@@ -827,5 +827,33 @@ project "complete":**
     described) without it needing to be a real trade, and give feedback
     on whether it got it right** (added 2026-08-23, owner's own request,
     to sanity-check/improve the classifier while not currently in any
-    real trades). **Status: In progress 2026-08-23.** Reuses the real
-    classifier from task 6/11 as-is, not a separate copy.
+    real trades). **Status: Built and tested 2026-08-23.**
+
+    **Backend (PR #14 on strat-journal-backend):** new `POST
+    /ai/test-classify` reuses the real classifier's prompt-building via a
+    shared `runClassification()` — refactored out of `aiClient.js` so the
+    real automatic tagging (`classifyStrategy`, behavior unchanged) and
+    this new sandbox path (`testClassifyStrategy`) share one prompt
+    instead of two copies. Unlike real auto-tagging, the sandbox version
+    always returns the model's actual answer — even "unclear" or low
+    confidence — instead of hiding it, since the point is to see what the
+    AI actually thinks. New `aiTestFeedback.js` stores correct/incorrect
+    feedback (with the image) via `POST`/`GET /ai/test-classify-feedback`
+    for later review. Two real bugs fixed along the way: the prompt
+    claimed Broadening Formation status was "included below as context"
+    but never actually included it, and FTFC confirmed printed the
+    literal word "undefined" when missing. Tested (33/33 checks):
+    `classifyStrategy`'s existing behavior fully unchanged, the new
+    sandbox function's different behavior, both new routes' auth/
+    validation/round-tripping.
+
+    **Frontend (PR #21 on strat-journal-app):** new "Test Classification"
+    card on the AI Analyst tab — picture upload, typed description,
+    Direction/FTFC/Broadening Formation, a Classify button showing
+    strategy/confidence/reasoning, Correct/Incorrect feedback (Incorrect
+    prompts for the real pattern + notes), and a "Past Test Feedback"
+    history list. Tested in a real browser via Playwright (19/19 checks):
+    empty-input validation, correct request payload, result rendering,
+    the feedback flow end to end, and the history view. NOT yet tried
+    with a real Gemini call or a real photo on an actual phone — that's
+    the next step, on the owner's end.
