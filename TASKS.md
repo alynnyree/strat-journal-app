@@ -302,9 +302,22 @@ via the `TASKS.md` commit log.
       2026-08-22): "Trade Opened" and "Trade Still Open," each just
       `Take Screenshot` followed by uploading it to the existing
       `/media/upload` address. The existing "Trade Closed" Shortcut from
-      earlier in this task needs no changes at all. Once built, needs a
-      manual test run (not a real trade) to confirm the screenshot
-      actually captures the right app on screen — not yet confirmed live.
+      earlier in this task needs no changes at all. Owner ran "Trade
+      Opened" once by hand on 2026-08-23 (screen visibly flashed as
+      expected) but had no way to see whether the picture actually
+      arrived, since a manual test has no real trade to auto-attach to
+      inside the Journal itself.
+
+   Added 2026-08-23 to make that checkable: a plain read-only web page,
+   `GET /media/preview?key=...` (same App Key as everywhere else in the
+   app), that shows every screenshot/video still waiting to be matched —
+   newest first, pictures shown directly, nothing technical to read. Lets
+   the owner check "did my Shortcut actually upload something" straight
+   from Safari, on demand, without waiting for a real trade or reading
+   raw data. Doesn't delete or change anything. Tested (11/11 checks):
+   right/wrong/missing key, correct page shows up, screenshot and video
+   counts, images render, video "Play" links work, newest-first order,
+   and a deliberately malicious stored value can't break the page.
 
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
