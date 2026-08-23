@@ -302,9 +302,139 @@ via the `TASKS.md` commit log.
       2026-08-22): "Trade Opened" and "Trade Still Open," each just
       `Take Screenshot` followed by uploading it to the existing
       `/media/upload` address. The existing "Trade Closed" Shortcut from
-      earlier in this task needs no changes at all. Once built, needs a
-      manual test run (not a real trade) to confirm the screenshot
-      actually captures the right app on screen — not yet confirmed live.
+      earlier in this task needs no changes at all. Owner ran "Trade
+      Opened" once by hand on 2026-08-23 (screen visibly flashed as
+      expected) but had no way to see whether the picture actually
+      arrived, since a manual test has no real trade to auto-attach to
+      inside the Journal itself. **Confirmed working 2026-08-23** — owner
+      checked the new preview page below and the picture was there and
+      accurate. "Trade Opened" is done.
+
+      **Pushcut connection quirk found 2026-08-23**: Pushcut's own
+      "Run Shortcut" picker (Default Action → Shortcut → pick from list)
+      did not list "Trade opened" at all, even after fully closing and
+      reopening Pushcut, even though the shortcut existed, was saved, and
+      already worked when run by hand. Cause not confirmed (Pushcut's
+      internal shortcut list appears to go stale for newly-created
+      shortcuts). **Fix that worked:** set the Default Action's type to
+      "URL" instead of "Shortcut," with the address
+      `shortcuts://run-shortcut?name=Trade%20opened` (iOS's own built-in
+      "run a shortcut by name" address — %20 stands in for the space).
+      Confirmed working end-to-end: tapping the Pushcut notification
+      opened Shortcuts and ran "Trade opened" (spinner then a screen
+      flash). Same fix needed for "Trade Still Open" once that shortcut
+      exists — same URL pattern with its own name.
+
+      **Full end-to-end confirmed working 2026-08-23.** After the URL fix
+      above, real testing (screen recording reviewed frame-by-frame)
+      turned up two more real bugs, not phone user error — both are
+      known iOS/Pushcut flakiness where a setting silently doesn't save:
+      (1) the Default Action URL from the fix above had reverted to "No
+      action" on its own after being set and closed out of — re-set it
+      and confirmed by fully backing out and back in before it stuck; (2)
+      the "Current Date" timestamp chip's format had separately reverted
+      away from ISO 8601, causing the server's "Missing or invalid
+      timestamp" error — reset back to ISO 8601 fixed it. Also found and
+      fixed along the way: the shortcut's `key=` was still the literal
+      placeholder text `YOUR_APP_KEY` rather than the owner's real App
+      Key (`Jesus`), which was silently rejected by the server as
+      "Forbidden" until corrected. **Lesson for building "Trade Still
+      Open" and any future Pushcut-triggered shortcut:** after wiring up
+      Default Action and any date-format chip, close fully out and back
+      in to *re-check* both settings actually stuck before trusting a
+      test — don't assume a save was permanent just because it showed
+      correctly right after setting it. Final proof: the shortcut's own
+      alert showed the real server response, `{"ok":true,"id":"..."}`,
+      confirming the picture was accepted.
+
+      **"Trade Still Open" built and confirmed working 2026-08-23,
+      same session** — duplicated from "Trade opened," Pushcut's Default
+      Action set to the URL-scheme fix the same way, worked on the first
+      try (`{"ok":true,...}`). Both automatic-photo Shortcuts are now
+      built and proven.
+
+      **Turned out the pre-existing "Trade Closed" Shortcut ("Take Trade
+      Screenshot") did need changes after all** — the "needs no changes"
+      assumption above was wrong. Two real problems found and fixed
+      2026-08-23: (1) it had no Default Action at all (relied on
+      expanding the notification and tapping a separate button — an
+      extra step, inconsistent with the other two and with the owner's
+      zero-friction goal), fixed the same way as the other two
+      (`shortcuts://run-shortcut?name=Take%20Trade%20Screenshot`); (2)
+      its timestamp was wired to "Shortcut Input" (expecting something
+      handed in from outside) instead of generating its own "Current
+      Date" like the other two — swapped to match.
+
+      **Second real bug found across all three Shortcuts, same day:**
+      the "Current Date" chip has its own separate **"ISO 8601 Time"**
+      toggle, off by default — with it off, the timestamp sent is a bare
+      date with no time of day (e.g. "2026-09-15"), which would silently
+      break the app's 10-minute entry/exit matching window for every
+      screenshot. Confirmed and turned ON for all three Shortcuts. Worth
+      remembering for any future Shortcut that sends a timestamp this
+      way: always check this toggle specifically, it's easy to miss.
+
+      What's left for Path 1 (automatic photos): all three Shortcuts are
+      now built, fixed, and individually test-confirmed.
+
+      **UX polish added 2026-08-23:** tapping any of these three
+      notifications necessarily switches away from whatever app the
+      owner was looking at (opening a `shortcuts://` address always
+      switches to the Shortcuts app — a hard iOS limit, not something
+      that can be configured around) — the owner was previously left
+      sitting in the Shortcuts app afterward and had to manually swipe
+      back. Fixed by removing the temporary debug step (Show Alert /
+      Stop and Output — each required a manual "OK" tap and would have
+      interrupted every real trade) from all three Shortcuts and adding
+      an **"Open App" → TradingView** step at the end of each instead.
+      Confirmed working on all three: notification tap → brief flash →
+      automatically lands back on the TradingView chart, no manual
+      swipe-back needed. (One-time "Allow to output 1 app?" permission
+      popup appears the first time each shortcut runs this new step —
+      tap Always Allow, doesn't ask again.)
+
+      **Real bug found right after the above, same day — the captured
+      pictures didn't actually show TradingView.** Every test up to this
+      point had only confirmed the server accepted the upload, never
+      actually looked at the image content. Owner checked the preview
+      page and none of the pictures showed TradingView — they showed the
+      Shortcuts/Pushcut screen instead. Root cause: opening a
+      `shortcuts://` address always switches the foreground app to
+      Shortcuts *before* any of the shortcut's own steps run, so "Take
+      Screenshot" — sitting near the start of each shortcut — was
+      capturing that switch-over screen, not TradingView. The end-of-
+      shortcut "Open App" from the earlier polish fix only returned to
+      TradingView *after* the (wrong) picture was already taken.
+
+      **Fix:** reordered all three Shortcuts to open TradingView *first*,
+      wait 2 seconds for it to fully render, then take the screenshot —
+      instead of taking the screenshot first and returning to TradingView
+      after. Final order in all three: Open App (TradingView) → Wait (2s)
+      → Take Screenshot → Get Contents of URL (upload). Also removed the
+      "Show Alert"/"Stop and Output" debug steps that were still present
+      on "Trade opened" (missed in the earlier cleanup pass). **Confirmed
+      2026-08-23 by directly inspecting the uploaded images on the
+      preview page** (not just a success response) — all three now show
+      the actual TradingView chart. Lesson: a server "ok:true" response
+      only proves the upload worked, never proves the picture shows the
+      right thing — always check the actual image content after any
+      change to what app is on screen when a Shortcut runs.
+
+      Path 1 (automatic photos) is now fully built, fixed, polished, and
+      verified against actual image content. All that's left is a real
+      live trade to confirm the whole pipeline end to end outside of
+      manual testing.
+
+   Added 2026-08-23 to make that checkable: a plain read-only web page,
+   `GET /media/preview?key=...` (same App Key as everywhere else in the
+   app), that shows every screenshot/video still waiting to be matched —
+   newest first, pictures shown directly, nothing technical to read. Lets
+   the owner check "did my Shortcut actually upload something" straight
+   from Safari, on demand, without waiting for a real trade or reading
+   raw data. Doesn't delete or change anything. Tested (11/11 checks):
+   right/wrong/missing key, correct page shows up, screenshot and video
+   counts, images render, video "Play" links work, newest-first order,
+   and a deliberately malicious stored value can't break the page.
 
 8. **Add daily/weekly risk-rule tracking** — a fixed risk-% per trade and a
    max-loss limit, written down and enforced/tracked in the journal.
@@ -465,12 +595,79 @@ via the `TASKS.md` commit log.
 
 14. **Capture the exact entry/exit moment when trading from a laptop, not
     just a phone** (added 2026-08-22, owner's own note to revisit).
-    **Status: Not started — a conversation to have once task 7's phone-side
-    capture (screenshot + video) is confirmed actually working.** Phone and
-    laptop are different problems: everything task 7 relies on (Pushcut
-    notifications, iOS Shortcuts, screen recording) is iPhone-only and has
-    no equivalent trigger mechanism on a Mac. Needs its own scoping
-    conversation rather than assuming the phone approach carries over.
+    **Status: Built 2026-08-23, not yet installed/tested on a real
+    computer.** Phone and laptop are different problems: everything task 7
+    relies on (Pushcut notifications, iOS Shortcuts, screen recording) is
+    iPhone-only and has no equivalent trigger mechanism on a computer.
+
+    Key advantage over the phone: unlike iOS, a computer does NOT have
+    Apple's restriction requiring a person to physically tap something
+    before a screenshot can be taken — true zero-click automatic capture
+    is genuinely possible here, not just a nicer manual step.
+
+    First design (a background helper program installed on the owner's
+    specific MacBook) was **dropped 2026-08-23 — owner does not always
+    trade from the same computer, and travels between locations/machines
+    a lot**, so anything tied to one specific computer's operating system
+    is the wrong shape. Built instead as a **browser extension**, since it
+    works identically across Windows/Mac/Linux (any Chrome-based browser)
+    rather than being tied to macOS specifically — a much better fit for
+    someone who switches computers, even though it still requires
+    installing it once on each computer actually used for this (no way to
+    add automation to a machine never set up in advance — e.g. a
+    public/borrowed computer still couldn't get this).
+
+    **Backend half — built, tested, merged (PR #13 on strat-journal-
+    backend):** a new `browserEvents.js` queue (`GET`/`DELETE
+    /browser/events`), wired into `cron.js` at the exact same three points
+    the Pushcut notifications already fire (trade opened / still open
+    after 15 min / closed), using the trade's real timestamp, not "now."
+    Tested (21/21 checks total): the queue routes directly, and the
+    `cron.js` wiring end-to-end with the real matcher and every other
+    dependency mocked (including intercepting the 15-minute safety-net
+    timer so the test doesn't wait 15 real minutes).
+
+    **Extension half — built, not yet installed anywhere real:** lives in
+    the frontend repo under `browser-extension/`. A small Chrome extension
+    (Manifest V3) with:
+    - `background.js` — once a minute (Chrome's alarm system won't go
+      faster than that), polls `/browser/events`, and for each one
+      captures whatever browser tab is currently active and uploads it to
+      the same `/media/upload` endpoint the phone already uses, then
+      deletes the event so it isn't captured twice.
+    - `options.html`/`options.js` — a settings page for the same Backend
+      URL and App Key the Journal app itself uses.
+    - `popup.html`/`popup.js` — a small toolbar-icon status view (last
+      checked, last error, how many events were found/captured) so the
+      owner can see it's working without needing developer tools.
+    - Icons generated from the app's own existing icon.
+    Tested (6/6 checks) on the pure address-building logic (the pieces
+    with no dependency on an actual browser); the browser-specific parts
+    (`chrome.tabs.captureVisibleTab`, `chrome.alarms`, the install flow
+    itself) **cannot be tested from here — no browser available** and
+    need real-device verification the same way the phone Shortcuts did.
+
+    **Honest limits to know before testing:**
+    - Requires the **`<all_urls>`** permission (needed so the extension
+      can capture a tab automatically, without a click, regardless of
+      what site is showing) — Chrome will show a broad-sounding warning
+      ("Read and change all your data on all websites") when installing.
+      Expected for what this needs to do, not a red flag.
+    - Captures **whatever tab is currently active** — same requirement as
+      the phone had with TradingView needing to be the on-screen app.
+    - Up to about a **minute of lag** between the real trade event and the
+      extension noticing it (Chrome's alarm system's fastest setting),
+      versus the phone's near-instant push notification.
+    - Only works while that **browser window is open** on that computer —
+      expected, not a bug.
+    - Only exists on computers where it's been installed ahead of time —
+      cannot add itself to an unfamiliar/borrowed machine.
+
+    **Not yet done:** loading it into a real browser (`chrome://extensions`
+    → Developer mode → "Load unpacked" → select the `browser-extension`
+    folder), entering the Backend URL/App Key in its settings, granting
+    the one-time permission, and a live test to confirm a real capture
+    actually works end to end.
 
 15. **Build a real iPhone app for automatic video recording** (split out
     from task 7 on 2026-08-22, once real-device testing confirmed iOS
@@ -493,3 +690,38 @@ via the `TASKS.md` commit log.
     confirm the wake-and-record step is actually reliable. Owner's own
     sequencing: get task 7's automatic photos fully working and confirmed
     first, then start this as its own dedicated effort.
+
+16. **Track stock share trades (buying/selling shares of a company), not
+    just options** (added 2026-08-23, owner's own question). **Status: Not
+    started — real gap confirmed by reading the actual code, not yet
+    designed.** Right now, share trades are completely invisible to this
+    app — not mismatched, simply thrown away before they're ever stored.
+    Confirmed in `schwabClient.js`'s `extractOptionFills()`: every fill
+    from Schwab is checked with `if (ti.instrument?.assetType !== 'OPTION')
+    continue;`, which silently skips anything that isn't an options
+    contract. Buying shares today produces no trade in the Journal, no
+    matching, no automatic pictures — nothing.
+
+    This is a real feature to design, not a quick fix, because several of
+    the app's core rules are built specifically around how options work
+    and don't have a share-trading equivalent yet:
+    - **Direction (Long/Short)**: currently comes from call vs. put
+      (`dirFromPutCall` in `matcher.js`). Shares have no call/put — would
+      need to come from buy vs. sell instead (buy shares = Long, short
+      shares = Short).
+    - **Profit calculation**: the app currently never needs to flip the
+      sign because the owner always buys options to open. That same
+      shortcut only holds for shares if the owner never shorts stock; if
+      short-selling shares is ever done, profit calculation needs its own
+      sign-flip logic, same as options already have for Short bets.
+    - **Realized R:R math**: built around "the option's price vs. the
+      underlying stock's price" being two separate things. For a share
+      trade, the position *is* the underlying — this calculation needs
+      its own version rather than reusing the options one.
+    - **`isOpen`/`isClose` in `matcher.js`** currently key off
+      options-specific instruction strings (`BUY_TO_OPEN`, etc.) that
+      Schwab may not report the same way for equities — needs checking
+      against real Schwab data before writing the matching logic.
+
+    Not blocking any current work — flagged here so it isn't forgotten,
+    to be scoped and built as its own dedicated effort when prioritized.
