@@ -9,6 +9,17 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+**Standing reminders from the owner — check before ever calling this
+project "complete":**
+- Install and live-test the browser extension (task 14) on a real
+  computer — owner said "make sure to remind me of this build out before
+  we call this project complete" (2026-08-23). Not yet done as of this
+  note.
+- Revisit capturing entry/exit moments when trading from a laptop, not
+  just a phone (task 14) — originally asked 2026-08-22, before the
+  browser extension existed; now superseded by task 14 itself, kept here
+  only as the origin of that request.
+
 1. **Fix 403 error on `/media/pending`.**
    **Status: Done (2026-08-19).** Owner confirmed: pasted the real
    `APP_SECRET` value into the App Key box, "Not connected" turned to a
@@ -163,8 +174,12 @@ via the `TASKS.md` commit log.
    before this is scoped or started.
 
 7. **Complete the screenshot capture pipeline.**
-   **Status: All code done and tested; one phone-side setup step left
-   for the owner (2026-08-19).**
+   **Status: Automatic phone pictures (Path 1) fully built, fixed, and
+   verified against real image content (2026-08-23) — only a real live
+   trade left to confirm the whole pipeline end to end. Automatic video
+   (Path 2) confirmed impossible via Shortcuts, split out to task 15 as
+   its own native-app effort.** (Original 2026-08-19 status line below
+   kept for history; superseded by everything after it in this section.)
 
    Found the backend's upload/pending/delete side (`media.js`) was
    already fully built and correct — functionally tested (mocked Redis,
