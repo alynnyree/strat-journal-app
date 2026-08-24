@@ -457,29 +457,17 @@
     <div class="card">
       <h3>Test Classification</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
-        Try the AI on a made-up chart — drawn, AI-generated, pulled from the internet, or just described in words. Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
+        Upload a made-up chart — drawn, AI-generated, pulled from the internet — and the AI classifies it strictly from the picture, with no other hints (no direction, no FTFC, no Broadening Formation). Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
       </div>
 
-      <label>Chart picture (optional)</label>
+      <label>Chart picture</label>
       <div class="shot-row">
         <div class="shot-box" id="testShotBox" onclick="document.getElementById('testShotInput').click()">+ Add picture</div>
       </div>
       <input type="file" id="testShotInput" accept="image/*" style="display:none;" onchange="handleTestShot(this)">
 
-      <label style="margin-top:10px;">Describe the setup (optional)</label>
+      <label style="margin-top:10px;">Or describe the setup in words instead (if you have no picture)</label>
       <textarea id="testDescription" placeholder="e.g. inside bar, then a directional bar breaking up, then another directional bar breaking down..."></textarea>
-
-      <label style="margin-top:10px;">Direction</label>
-      <select id="testDir"><option value="">(not specified)</option><option value="Long">Long</option><option value="Short">Short</option></select>
-
-      <div style="margin-top:10px;">
-        <div class="strat-opt" id="testFtfcToggle" onclick="toggleTestFlag('testFtfcToggle')">
-          <div class="t">FTFC Confirmed: No</div>
-        </div>
-        <div class="strat-opt broadening-opt" id="testBroadeningToggle" onclick="toggleTestFlag('testBroadeningToggle')">
-          <div class="t">Off Broadening Formation: No</div>
-        </div>
-      </div>
 
       <button class="primary" id="testClassifyBtn" onclick="runTestClassification()" style="margin-top:14px;">Classify This Chart</button>
       <div id="testClassifyOutput"></div>
@@ -1959,16 +1947,19 @@ async function classifyUnclassifiedTrades(){
 // Lets the owner try the AI classifier against a made-up chart — a drawn
 // picture, an AI-generated image, something pulled from the internet, or
 // just a typed description — while he isn't currently in any real trades.
-// Talks to a separate backend route (/ai/test-classify) that reuses the
-// exact same classifier, but always returns its real answer (even
-// "unclear" or low confidence) instead of hiding it, since the whole point
-// here is to see what the AI actually thinks. Nothing here is saved as a
-// trade; feedback (correct/incorrect) is stored separately for the owner
-// to review later, so the classifier's real-world accuracy can be judged
+// Deliberately sends NO other context (no direction, no FTFC, no
+// Broadening Formation) — the owner's own stated purpose is to test
+// whether the AI can read the candle pattern from the picture alone, the
+// same way he's testing his own eye, not to hand it answer-adjacent
+// hints a real trade's classification wouldn't get for free. Talks to a
+// separate backend route (/ai/test-classify) that reuses the exact same
+// classifier, but always returns its real answer (even "unclear" or low
+// confidence) instead of hiding it, since the whole point here is to see
+// what the AI actually thinks. Nothing here is saved as a trade;
+// feedback (correct/incorrect) is stored separately for the owner to
+// review later, so the classifier's real-world accuracy can be judged
 // over time.
 let currentTestShot = null;
-let testFtfcConfirmed = false;
-let testBroadeningFormation = false;
 let lastTestClassifyResult = null; // {strategy, confidence, reasoning} — needed when submitting feedback
 
 function handleTestShot(input){
@@ -1985,15 +1976,6 @@ function handleTestShot(input){
 function clearTestShot(){
   currentTestShot = null;
   document.getElementById('testShotBox').innerHTML = '+ Add picture';
-}
-
-function toggleTestFlag(elId){
-  const isFtfc = elId === 'testFtfcToggle';
-  const newVal = isFtfc ? !testFtfcConfirmed : !testBroadeningFormation;
-  if(isFtfc) testFtfcConfirmed = newVal; else testBroadeningFormation = newVal;
-  const el = document.getElementById(elId);
-  el.classList.toggle('sel', newVal);
-  el.querySelector('.t').textContent = (isFtfc ? 'FTFC Confirmed: ' : 'Off Broadening Formation: ') + (newVal ? 'Yes' : 'No');
 }
 
 async function runTestClassification(){
@@ -2015,9 +1997,6 @@ async function runTestClassification(){
   const payload = {
     image: currentTestShot || undefined,
     description: description || undefined,
-    dir: document.getElementById('testDir').value || undefined,
-    ftfcConfirmed: testFtfcConfirmed,
-    offBroadeningFormation: testBroadeningFormation,
   };
 
   try{
@@ -2067,7 +2046,6 @@ async function submitTestFeedback(wasCorrect){
     predictedReasoning: lastTestClassifyResult.reasoning,
     image: currentTestShot || undefined,
     description: document.getElementById('testDescription').value.trim() || undefined,
-    dir: document.getElementById('testDir').value || undefined,
   };
   if(!wasCorrect){
     payload.actualStrategy = document.getElementById('testActualStrat').value;
