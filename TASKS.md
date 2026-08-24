@@ -874,5 +874,26 @@ project "complete":**
     false, and the simplified UI no longer sends `dir`/`ftfcConfirmed`/
     `offBroadeningFormation` at all.
 
-    NOT yet tried with a real Gemini call or a real photo on an actual
-    phone — that's the next step, on the owner's end.
+    **First real-phone test 2026-08-23 failed** — a real annotated
+    screenshot (with a hand-drawn trend line) returned a generic
+    "Classification failed — check server logs" error, which the owner
+    has no way to act on. Found two real, likely-related gaps (PR #16 on
+    strat-journal-backend), neither ever caught before because every test
+    up to this point used a short, hand-written stand-in Gemini response,
+    never a real call analyzing a real photo: (1) the classify call's
+    output-token budget (300) was likely too tight for a real image plus
+    a full written "reasoning" explanation, risking a cut-off, invalid-
+    JSON response; raised to 800, and a JSON-parse failure now throws a
+    specific, readable error (with a snippet of what Gemini actually
+    said) instead of a generic one. (2) the error message shown to the
+    owner literally told him to check server logs — something he cannot
+    do — now replaced with the real underlying error text so a failure is
+    diagnosable from the app itself, without needing me to have server
+    access I don't have anyway. Tested (8/8 checks): a real success case
+    still works at the higher budget, a simulated truncated response now
+    surfaces a specific useful error, and `classifyStrategy` (real
+    automatic tagging) is confirmed unaffected — still returns `null` on
+    any error, same as before.
+
+    NOT yet re-confirmed with a real Gemini call or the same real photo
+    that failed — waiting on the owner to retry.
