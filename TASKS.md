@@ -854,6 +854,25 @@ project "complete":**
     prompts for the real pattern + notes), and a "Past Test Feedback"
     history list. Tested in a real browser via Playwright (19/19 checks):
     empty-input validation, correct request payload, result rendering,
-    the feedback flow end to end, and the history view. NOT yet tried
-    with a real Gemini call or a real photo on an actual phone — that's
-    the next step, on the owner's end.
+    the feedback flow end to end, and the history view.
+
+    **Corrected same day, right after the above shipped:** owner clarified
+    the actual point is to classify **strictly from the picture (or a
+    typed description), with zero other hints** — no direction, no FTFC,
+    no Broadening Formation — the same way he's testing his own eye, not
+    handing the AI answer-adjacent context a real trade wouldn't give it
+    for free. Those three fields were pure Claude-added scope creep beyond
+    what was actually asked for. Removed (strat-journal-app PR #22) —
+    the tool is now just picture-or-description, then Classify. Also
+    fixed a real related bug on the backend (strat-journal-backend PR
+    #15): `ftfcConfirmed: !!body.ftfcConfirmed` turned "not provided" into
+    an explicit `false` claim rather than genuinely absent (n/a) — didn't
+    matter before since real trades always have this field, but would
+    have quietly broken the "zero hints" guarantee here. Tested (5/5 +
+    10/10 checks): omitted fields stay `null`/absent from the request
+    entirely, an explicitly-sent `false` is still respected as a real
+    false, and the simplified UI no longer sends `dir`/`ftfcConfirmed`/
+    `offBroadeningFormation` at all.
+
+    NOT yet tried with a real Gemini call or a real photo on an actual
+    phone — that's the next step, on the owner's end.
