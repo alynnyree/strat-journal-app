@@ -895,5 +895,21 @@ project "complete":**
     automatic tagging) is confirmed unaffected — still returns `null` on
     any error, same as before.
 
+    **Two more real, live-only findings from that same retry attempt
+    (2026-08-23), each only discoverable by actually trying it — not
+    something testing from here could have caught:**
+    1. `GEMINI_API_KEY` was never actually set on Render at all, despite
+       being listed in CLAUDE.md's expected environment variables — every
+       AI feature (this tool, AI Analyst, real auto-classification) has
+       likely been silently unable to reach Gemini this whole time. Owner
+       created a real key via Google AI Studio and added it to Render.
+    2. Once the key worked, Gemini rejected the hardcoded model name,
+       `gemini-2.5-flash`, as "no longer available to new users" — Google's
+       own error named `gemini-3.6-flash` as the replacement. Updated
+       (PR #17 on strat-journal-backend) — one shared constant, so this
+       fixes all three AI features at once. Not testable from here (no
+       outbound access to the real Gemini API from this environment).
+
     NOT yet re-confirmed with a real Gemini call or the same real photo
-    that failed — waiting on the owner to retry.
+    that failed — waiting on the owner to retry now that both the key and
+    the model name are fixed.
