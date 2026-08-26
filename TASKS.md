@@ -959,3 +959,33 @@ project "complete":**
 
     NOT yet confirmed: whether the AI actually reads a Broadening
     Formation correctly off a real chart. That's the next real test.
+
+    **Reliability pass 2026-08-23, after the owner hit "Load failed" and
+    asked how to stop having to manually retry.** "Load failed" is the
+    phone giving up before any answer arrives — different from the
+    earlier Google-side errors. Root cause is two slow things stacking:
+    Render's free tier sleeps when idle (30-60s to wake) and a real chart
+    analysis takes another 10-30s on top. Fixed in two layers:
+    - **Backend (PR #19):** `callGemini` now retries transient failures
+      itself — 429/503 (the "high demand" case), Google-side 5xx, and raw
+      network failures — 3 attempts, 1s/2.5s backoff, plus a 60s timeout
+      so a stalled connection can't hang. Deliberately does NOT retry a
+      bad key, malformed request, or unknown model, since those fail
+      identically every time and retrying would only delay showing the
+      real reason (which mattered: the last two real bugs were exactly a
+      missing key and a wrong model name). Benefits all three AI features.
+      Tested 13/13, including fail-fast on 400/401/403/404 and a hard stop
+      at 3 attempts rather than looping.
+    - **Frontend (PR #24):** pings `/health` first so the cold start
+      doesn't eat the real request's patience, then retries the classify
+      call up to 3 times (3s/8s backoff) showing which attempt it's on.
+      403/400 still fail immediately with the real cause named. The final
+      error now says retries already happened rather than telling the
+      owner to "try again" after he just watched it try three times, and
+      offers a Try Again button so the picture doesn't need re-uploading.
+      Tested 14/14 in a real browser, asserting wake-before-classify
+      ordering (not just call count — the app has its own separate
+      periodic health check, which is why a naive count read as 2).
+
+    Between both layers there are now ~9 real attempts before the owner
+    sees any failure at all.
