@@ -910,6 +910,12 @@ project "complete":**
        fixes all three AI features at once. Not testable from here (no
        outbound access to the real Gemini API from this environment).
 
-    NOT yet re-confirmed with a real Gemini call or the same real photo
-    that failed — waiting on the owner to retry now that both the key and
-    the model name are fixed.
+    **Retry after the model-name fix (2026-08-23) got a genuinely
+    different response: "This model is currently experiencing high
+    demand... try again later."** Not a bug — confirms the key and model
+    name are both correct now, since the request reached Gemini and got a
+    real (if temporary) capacity response, not a code/auth/name error.
+    Google's side, not ours. Owner told to wait a minute and retry.
+
+    NOT yet confirmed with a real successful classification — waiting on
+    the owner's next retry once Gemini's temporary demand spike clears.
