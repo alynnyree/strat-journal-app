@@ -917,5 +917,45 @@ project "complete":**
     real (if temporary) capacity response, not a code/auth/name error.
     Google's side, not ours. Owner told to wait a minute and retry.
 
-    NOT yet confirmed with a real successful classification — waiting on
-    the owner's next retry once Gemini's temporary demand spike clears.
+    **First successful real classification 2026-08-23** — the retry went
+    through, confirming the whole chain (key, model name, image upload,
+    Gemini call, response rendering) works end to end. The answer itself
+    was "unclear," and the model's stated reason exposed a real design
+    mistake of mine, not a model failure: *"No trade direction, entry
+    markers, or explicit candle numbers/sequence data were provided...
+    Without knowing which specific bar triggered the entry, the setup is
+    ambiguous."* The test tool had been reusing the REAL TRADE
+    classifier's prompt, which asks "what setup was this trade?" and leans
+    on knowing the entry bar — but in this tool there is no trade and no
+    entry bar, only a picture, so that question was unanswerable by
+    construction. Stripping the context fields out (per the owner's
+    "strictly from the picture" correction) made this worse, not better,
+    because the underlying question was still trade-shaped.
+
+    **Rebuilt as a chart-reading tool with three layered answers**
+    (strat-journal-backend PR #18, strat-journal-app PR #23), which is
+    also what the owner asked for directly: combo, FTFC, and Broadening
+    Formation each judged independently, each allowed to be "unclear" on
+    its own. The prompt now asks the answerable question ("read this
+    chart and tell me what you see"), states plainly there's no trade or
+    entry marker and not to assume one, and defines the Strat 1/2/3
+    candle numbering (inside/directional/outside bar) inline rather than
+    assuming the model knows it. Guardrails: don't infer FTFC from a
+    single timeframe (usually correctly "unclear" from one image); only
+    say yes to Broadening when the widening/megaphone structure is
+    genuinely visible. The correction form is layered to match — combo
+    dropdown plus a toggle each for FTFC and Broadening, every control
+    seeded from what the AI guessed so correcting one thing doesn't
+    overwrite the two it got right. Tested 27/27 backend (including
+    regressions proving the real trade classifier is untouched) and 27/27
+    in a real browser.
+
+    **This resolves the open question in task 17(b)** — the owner's
+    request that FTFC/Broadening factor into classification. The answer
+    that emerged: in this sandbox the AI reads all three from the picture
+    (there is no Schwab data to compute from), while real trades keep the
+    existing split — FTFC computed mechanically, Broadening a manual
+    toggle, per task 10's finding that it's a genuine judgment call.
+
+    NOT yet confirmed: whether the AI actually reads a Broadening
+    Formation correctly off a real chart. That's the next real test.

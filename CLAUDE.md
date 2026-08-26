@@ -102,8 +102,27 @@ Uses **The Strat**. Key concepts the code implements:
   1H, 30m, 15m, 5m, 3m, 1m). Confirmed when **any 4+ consecutive**
   timeframes agree — the run can start anywhere in the sequence, not just
   at the largest timeframe.
-- **Setups traded:** 2→3 Reversal, FTFC Continuation, Broadening Formation
-  Reversal.
+- **Setups traded — the owner's own 9-combo list** (corrected 2026-08-21,
+  task 10; this section previously listed "2→3 Reversal, FTFC Continuation,
+  Broadening Formation Reversal," which was **wrong** and stayed stale here
+  for two days after the app itself was fixed — do not reintroduce it):
+  2-1-2 Continuation, 2-1-2 Reversal, 3-1-2 Reversal, 2-2 Continuation,
+  2-2 Reversal, 3-2-2 Reversal, 1-2-2 Rev Strat, 1 Bar Rev Strat, and PMG
+  (Pivot Machine Gun). Each is usable Long or Short via the trade's own
+  direction field, so there is no separate bullish/bearish variant of each.
+  The authoritative copy of this list, with each pattern's full definition,
+  lives in `aiClient.js`'s `STRATEGIES` array and must stay in sync with
+  `index.html`'s Strat Setup cards (`data-v` values).
+- **FTFC and Broadening Formation are context, not setups of their own.**
+  Any of the 9 combos above can be taken with FTFC aligned and/or off a
+  Broadening Formation — that's still that combo, just with context worth
+  recording. The app tracks these as separate fields (`ftfcConfirmed`,
+  computed mechanically from Schwab candle data; `offBroadeningFormation`,
+  a manual toggle, since the owner confirmed a Broadening Formation is a
+  multi-step judgment call the app does not auto-detect for real trades).
+  The one deliberate exception is the sandbox Test Classification tool,
+  which has no Schwab data to compute from and so reads all three visually
+  from the picture.
 - **Instruments:** SPY and IWM options, 0DTE–3DTE. Occasionally others.
 - **Always buys to open** (calls or puts), never sells to open. This is why
   P&L needs no sign flip: a rising option price is always profit,
