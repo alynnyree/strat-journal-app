@@ -1025,9 +1025,34 @@ project "complete":**
     straight into the appended retry hint, reading as one garbled
     sentence. The hint now renders on its own line.
 
-    **Lesson worth keeping:** three separate "fixes" here (bigger token
-    limit, then retries, then bigger limit again) were aimed at symptoms
-    because the model's own error text was being discarded before it
-    reached the owner. The fix that actually worked came from finally
-    seeing the raw cut-off response. Surfacing real error detail to the
-    screen was worth more than any amount of defensive guessing.
+    **The thinkingConfig fix broke it again — my own bug (PR #21).** The
+    fallback added alongside `thinkingConfig` only triggered when the
+    error text contained the word "thinking". `gemini-3.6-flash` rejects
+    it with a generic **"Request contains an invalid argument"** that
+    never mentions thinking, so the fallback never fired and the whole
+    call failed. Conclusive that `thinkingConfig` was the cause: the run
+    immediately before PR #20 produced a real (if truncated) answer from
+    the same image, and it was the only thing that changed.
+
+    Fixed: drop `thinkingConfig` and retry on **any** 400 while it's set,
+    instead of pattern-matching error text — the rest of the request is
+    unchanged from calls that already worked, and if the real cause were
+    something else the retry fails identically and surfaces the same
+    message, so nothing is hidden. Also: the config correction no longer
+    consumes a transient-retry slot, and budgets were raised again (6000
+    real / 8000 test+analysis) so the call still completes even when
+    thinking CAN'T be disabled and eats part of the budget — which is the
+    likely path on this model. Tested 15/15, including a test
+    reproducing the exact error shape from the phone.
+
+    **Lesson worth keeping:** four separate "fixes" here (bigger token
+    limit → retries → disable thinking → fix the fallback) were aimed at
+    symptoms, largely because the model's own error text kept being
+    discarded before it reached the owner. Every real diagnosis in this
+    sequence came from finally seeing the raw response or raw error.
+    Surfacing real error detail to the screen was worth more than any
+    amount of defensive guessing. Second lesson, more specific: **don't
+    pattern-match on a third-party error's wording** — match on the
+    status code plus what the request actually contained. The narrow
+    string check here is precisely what turned a working fallback into
+    a hard failure.
