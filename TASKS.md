@@ -1283,6 +1283,48 @@ project "complete":**
     Standing consequence worth remembering: **a wrong correction now
     lasts forever rather than ageing out**, and a repeated one gets
     counted and reported as a pattern. The clickable log (task 18) is
-    the place to review them. There is currently no way to delete a
-    single bad correction — if one gets in, that is the next thing to
-    build here.
+    the place to review them. Deleting a single bad correction was the
+    obvious gap here and is now built — see task 23.
+
+23. **Delete individual log entries, view pictures full size, and read
+    partial timeframe continuity** (added and built 2026-08-26, from the
+    owner: five junk entries he could not remove, no way to see an
+    uploaded picture properly, and — the substantive one — "I need it to
+    be able to recognize broadening formations, Strat combos, FTFC and
+    also timeframe continuity that is not completely aligned in the same
+    direction"). **Status: BUILT AND TESTED 2026-08-26
+    (strat-journal-backend PR #25, strat-journal-app PR #28) — 20 backend
+    checks, 27 browser checks, earlier suites still green.**
+
+    - **Delete.** Each expanded log entry has a Delete button behind a
+      confirm step. It removes the entry, its full-size picture, and its
+      place in the index, and the lesson stops counting immediately.
+      Confirm step kept deliberately: corrections are permanent and each
+      shapes every future classification, so this both fixes a bad
+      lesson and can lose a good one.
+    - **Full-size view.** Any entry with a picture or clip gets a "View
+      full size" button filling the screen. Tapping the picture itself
+      deliberately does NOT close it — on a phone that would make
+      pinch-zooming to inspect candles nearly impossible.
+    - **Timeframe continuity is no longer yes/no.** This was the real
+      request. The owner's own rule confirms continuity at any 4+
+      CONSECUTIVE timeframes agreeing anywhere in the 13-timeframe
+      ladder, so a run of two or three is a genuine, readable state that
+      a yes/no answer was throwing away. Now **Confirmed / Partial /
+      None / Unclear**, with a new per-timeframe read alongside it
+      ("1D up, 4H up, 1H down") so a correction can land on the specific
+      timeframe misread rather than only on the verdict. The correction
+      form has a free-text box for that read, which is the highest-value
+      thing he can correct — it teaches how HE reads a split ladder.
+    - The prompt now teaches that rule explicitly, names the full ladder,
+      and stops treating a single-timeframe screenshot as automatically
+      "unclear": larger timeframes covered by the visible range can
+      usually be read off it, so it is told to try before giving up
+      while not inventing timeframes it cannot see.
+    - **Broadening Formation reading strengthened**: lines the owner has
+      drawn diverging on the chart are him marking the formation
+      himself and weigh heavily; asymmetric widening still counts.
+    - **Backwards compatibility mattered here.** Entries already saved
+      used yes/no/true/false. Both ends translate those, so the existing
+      back-history keeps teaching instead of reading as unrecognised
+      values and silently dropping out.
