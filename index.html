@@ -1978,6 +1978,43 @@ function clearTestShot(){
   document.getElementById('testShotBox').innerHTML = '+ Add picture';
 }
 
+// Sends the classify request, retrying on its own if the connection drops
+// or the server hiccups. The backend separately retries Gemini's own
+// transient failures (see aiClient.js) — this layer covers the failures
+// that happen BEFORE the backend is even reached: a still-waking server,
+// a dropped mobile connection, a request the phone gave up on.
+//
+// Deliberately does NOT retry a 403 (wrong App Key) or a 400 (nothing to
+// classify) — those fail identically every time, and retrying would just
+// hide the real reason behind a long wait.
+const TEST_CLASSIFY_RETRY_DELAYS_MS = [3000, 8000]; // 3 attempts total
+async function fetchTestClassification(url, payload, out){
+  let lastErr;
+  for(let attempt = 0; attempt <= TEST_CLASSIFY_RETRY_DELAYS_MS.length; attempt++){
+    try{
+      const r = await fetch(url+'/ai/test-classify?key='+encodeURIComponent(appKey()), {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      });
+      if(r.status === 403) throw Object.assign(new Error('The App Key doesn\'t match your backend — check it on the Journal tab.'), {noRetry:true});
+      if(r.status === 400){
+        const e = await r.json().catch(()=>({}));
+        throw Object.assign(new Error(e.error || 'Nothing to classify.'), {noRetry:true});
+      }
+      if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error || `Server responded with status ${r.status}`); }
+      return (await r.json()).result;
+    }catch(e){
+      lastErr = e;
+      const canRetry = !e.noRetry && attempt < TEST_CLASSIFY_RETRY_DELAYS_MS.length;
+      if(!canRetry) break;
+      const waitSec = Math.round(TEST_CLASSIFY_RETRY_DELAYS_MS[attempt]/1000);
+      out.innerHTML = `<div class="ai-msg"><span class="spin"></span>That didn't go through — trying again in ${waitSec}s (attempt ${attempt+2} of ${TEST_CLASSIFY_RETRY_DELAYS_MS.length+1})...</div>`;
+      await new Promise(res=>setTimeout(res, TEST_CLASSIFY_RETRY_DELAYS_MS[attempt]));
+      out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Reading the chart...</div>`;
+    }
+  }
+  throw lastErr;
+}
+
 async function runTestClassification(){
   const url = backendUrl();
   const out = document.getElementById('testClassifyOutput');
@@ -1991,7 +2028,6 @@ async function runTestClassification(){
 
   const btn = document.getElementById('testClassifyBtn');
   btn.disabled = true;
-  out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Classifying...</div>`;
   lastTestClassifyResult = null;
 
   const payload = {
@@ -2000,11 +2036,17 @@ async function runTestClassification(){
   };
 
   try{
-    const r = await fetch(url+'/ai/test-classify?key='+encodeURIComponent(appKey()), {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
-    });
-    if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error || `Server responded with status ${r.status}`); }
-    const { result } = await r.json();
+    // The backend sleeps when idle (free hosting) and takes 30-60s to wake.
+    // A real chart analysis takes another 10-30s on top. Stacked together,
+    // that reliably exceeded what the phone was willing to wait for — the
+    // "Load failed" the owner hit on 2026-08-23. Waking the server with a
+    // cheap /health call FIRST means the slow wake-up doesn't eat into the
+    // real request's patience.
+    out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Waking the server (this can take up to a minute if it's been idle)...</div>`;
+    try{ await fetch(url+'/health'); }catch(e){ /* non-fatal — the real call below is what matters, and it retries on its own */ }
+
+    out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Reading the chart...</div>`;
+    const result = await fetchTestClassification(url, payload, out);
     lastTestClassifyResult = result;
     const confBadge = result.confidence === 'high' ? 'pos' : (result.confidence === 'medium' ? '' : 'neg');
     // Three layered answers, shown separately — the combo, FTFC, and
@@ -2033,7 +2075,11 @@ async function runTestClassification(){
       <div id="testIncorrectForm"></div>
     `;
   }catch(e){
-    out.innerHTML = `<div class="ai-msg"><div class="tag">Error</div>Couldn't classify (${e.message}). Try again.</div>`;
+    // Only reached after every automatic retry above has already failed,
+    // so "try again" alone isn't useful advice — say what actually
+    // happened and what's worth doing about it.
+    const hint = e.noRetry ? '' : ' The server and connection were both retried automatically, so this is likely a longer outage — worth waiting a few minutes before trying again.';
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Error</div>Couldn't classify: ${e.message}${hint}<div style="margin-top:8px;"><button class="secondary" style="margin-top:0;" onclick="runTestClassification()">Try Again</button></div></div>`;
   }
   btn.disabled = false;
 }
