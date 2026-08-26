@@ -2078,8 +2078,11 @@ async function runTestClassification(){
     // Only reached after every automatic retry above has already failed,
     // so "try again" alone isn't useful advice — say what actually
     // happened and what's worth doing about it.
-    const hint = e.noRetry ? '' : ' The server and connection were both retried automatically, so this is likely a longer outage — worth waiting a few minutes before trying again.';
-    out.innerHTML = `<div class="ai-msg"><div class="tag">Error</div>Couldn't classify: ${e.message}${hint}<div style="margin-top:8px;"><button class="secondary" style="margin-top:0;" onclick="runTestClassification()">Try Again</button></div></div>`;
+    // Kept on its own line: a server error can end mid-sentence (a
+    // truncated model response, say), and running this hint straight onto
+    // the end of it read as one garbled sentence.
+    const hint = e.noRetry ? '' : `<div style="margin-top:8px; color:var(--text-dim);">The server and connection were both retried automatically, so this is likely a longer outage — worth waiting a few minutes before trying again.</div>`;
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Error</div><div>Couldn't classify: ${e.message}</div>${hint}<div style="margin-top:8px;"><button class="secondary" style="margin-top:0;" onclick="runTestClassification()">Try Again</button></div></div>`;
   }
   btn.disabled = false;
 }
