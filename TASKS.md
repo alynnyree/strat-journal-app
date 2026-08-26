@@ -958,7 +958,27 @@ project "complete":**
     toggle, per task 10's finding that it's a genuine judgment call.
 
     NOT yet confirmed: whether the AI actually reads a Broadening
-    Formation correctly off a real chart. That's the next real test.
+    **CONFIRMED WORKING 2026-08-23** — after the fixes below, a real
+    annotated chart classified successfully with all three layers:
+    combo "2-2 Continuation" (high confidence), FTFC "unclear" (correctly
+    refusing to infer it from a single 1W chart), and **Broadening
+    Formation "yes"** with the reasoning *"Dashed white lines explicitly
+    trace expanding higher highs and lower lows, forming a clear
+    megaphone pattern."* That was the specific thing the owner wanted it
+    to catch, and it caught it including his own hand-drawn annotation.
+
+    **Interface pass 2026-08-23 (PR #26), four items the owner asked
+    for:** the feedback buttons now visibly acknowledge a tap ("Saving…"
+    plus disabling); a successful save clears the whole run (picture,
+    description, classification detail) leaving a confirmation and a
+    section ready for the next chart; the same classification can no
+    longer be saved twice (blocks rapid double-taps AND "All Correct"
+    followed by "Something's Wrong" — a failed save deliberately
+    re-enables the buttons rather than stranding the result); and Past
+    Test Feedback is now a scannable log rather than a wall of pictures
+    — one compact line per test, tapped to expand into full detail
+    including the chart image, held in memory so expanding is instant.
+    Tested 19/19 in a real browser.
 
     **Reliability pass 2026-08-23, after the owner hit "Load failed" and
     asked how to stop having to manually retry.** "Load failed" is the
@@ -1056,3 +1076,84 @@ project "complete":**
     status code plus what the request actually contained. The narrow
     string check here is precisely what turned a working fallback into
     a hard failure.
+
+19. **Feed Test Classification corrections back into real trade
+    classification ("the journal studies off its own test material")**
+    (added 2026-08-23, owner's own idea). **Status: Designed and agreed
+    in principle, NOT built — the owner chose to finish task 18's
+    interface items first.**
+
+    The owner's framing was that the journal should "update/upgrade
+    itself + its memory" from what gets uploaded into Test
+    Classification, so real auto-imported trades get classified using
+    that accumulated knowledge. **Important correction made to that
+    framing, and worth keeping straight:** the AI model itself cannot
+    learn or retain anything between calls — every classification starts
+    from zero, and nothing we send changes the model. Actual fine-tuning
+    is a separate, expensive process not in scope here.
+
+    What genuinely achieves the same outcome: **the journal remembers,
+    and re-teaches the model on every single call.** Each classification
+    request would include the accumulated corrections as worked examples
+    ("here is a chart, here is what the AI guessed, here is what the
+    trader said it actually was"). The model reads them fresh each time.
+    Practical effect matches the owner's goal — the more he corrects in
+    Test Classification, the better real trades get classified — and it
+    is especially valuable because the corrections encode HIS
+    interpretations, which generic prompt instructions can't. The
+    `userNotes` field carries the most teaching value since it explains
+    *why* something was wrong.
+
+    Design sketch (not built):
+    - On each real trade classification, pull the correction log and
+      include it in the prompt as reference examples.
+    - Prioritize INCORRECT entries (most informative) and recent ones;
+      cap the count — sending hundreds would make every classification
+      slow and expensive.
+    - Same for the Test Classification tool itself, so it visibly
+      improves as it's fed.
+
+    Two real cautions raised with the owner:
+    - **A wrong correction propagates.** Because corrections ride along
+      with every future request, one bad correction is not one bad
+      trade — it's one bad lesson repeated on every classification until
+      removed. Task 18's new clickable log exists partly to make
+      reviewing/auditing these practical.
+    - **Including chart IMAGES as examples is the expensive part**, and
+      the owner reasonably asked why, given he already uploaded the
+      picture once. The answer: uploading is one-time storage, but
+      examples are *re-sent to the model on every single call* — 20
+      example images would mean 20 images transmitted and processed
+      every time a trade closes, not once. Start with the text
+      corrections (predicted → actual plus notes), which carry most of
+      the teaching value, and measure whether adding images earns its
+      cost.
+
+20. **Let the Test Classification tool do the REAL 13-timeframe FTFC
+    lookup instead of reading FTFC visually** (added 2026-08-23, from
+    the owner's question about how FTFC should be determined).
+    **Status: Offered, awaiting the owner's go-ahead — not built.**
+
+    Worth recording clearly because it was asked directly: **for real
+    trades, FTFC is already determined exactly the way the owner
+    described.** `ftfcCheck.js`'s `getFtfcForTrade()` takes the trade's
+    exact entry timestamp, pulls real Schwab candle data for all 13
+    timeframes (6M, 3M, 1M, 1W, 1D, 4H, 2H, 1H, 30m, 15m, 5m, 3m, 1m) as
+    they stood at that moment, marks each bull or bear, then
+    `computeFtfcConfirmation()` finds the longest unbroken run of
+    same-direction timeframes and confirms FTFC at 4+ consecutive — with
+    the run allowed to start anywhere in the ladder, not just the top.
+    It also records WHICH timeframes formed the run, which indicates
+    suggested hold length. No AI involved in that calculation at all.
+
+    The gap is only in the sandbox test tool, which has a picture but no
+    ticker and no timestamp, so it has nothing to look up and correctly
+    answers "unclear" rather than guessing FTFC from one visible
+    timeframe. Proposed (not built): optional ticker + date/time fields
+    on the test tool; when filled, run the same real Schwab lookup
+    instead of the visual read; left blank, behave exactly as now.
+    Caveat to mention if built: Schwab retains minute-level data only
+    ~30-35 days, so older test dates would get daily-and-above only.
+    Deliberately NOT built yet — this tool has already been over-scoped
+    once (see task 18's removed direction/FTFC/Broadening inputs), so it
+    waits for an explicit yes.
