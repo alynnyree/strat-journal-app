@@ -196,6 +196,69 @@
   .navbar .item .ic{font-size:17px; display:block; margin-bottom:2px;}
 
   .view{display:none;} .view.active{display:block;}
+
+  /* ---- Opening screen -------------------------------------------------
+     Modelled on the reference recording: a mark, a numeral counting up in
+     the display face, a rule filling underneath it, and a wide-spaced
+     caps line. It sits over everything and fades out on its own. */
+  .intro{
+    position:fixed; inset:0; z-index:200; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:0; opacity:1; transition:opacity 520ms ease;
+  }
+  .intro.out{opacity:0; pointer-events:none;}
+  .intro .mark{
+    font-size:44px; line-height:1; color:var(--gold); margin-bottom:18px;
+    opacity:0; transform:translateY(10px); animation:introRise 700ms 80ms ease forwards;
+  }
+  .intro .count{
+    font-family:var(--display); font-size:64px; line-height:0.9; letter-spacing:1px;
+    color:var(--text); font-weight:400;
+    opacity:0; animation:introRise 700ms 200ms ease forwards;
+  }
+  /* The rule is the progress bar — the accent fills left to right as the
+     numeral climbs, so the two read as one movement rather than two. */
+  .intro .rule{
+    width:min(260px, 62vw); height:1px; background:var(--border); margin:16px 0 14px;
+    position:relative; overflow:hidden;
+  }
+  .intro .rule i{
+    position:absolute; inset:0 auto 0 0; width:0%;
+    background:linear-gradient(90deg, var(--bull), var(--gold));
+  }
+  .intro .line{
+    font-size:10px; text-transform:uppercase; letter-spacing:4px; color:var(--text-dim);
+    text-align:center; padding:0 24px;
+    opacity:0; animation:introRise 700ms 340ms ease forwards;
+  }
+  .intro .sub{
+    font-family:var(--serif); font-style:italic; font-size:14px; color:var(--text-dim);
+    margin-top:16px; text-align:center; padding:0 32px; line-height:1.5;
+    opacity:0; animation:introRise 800ms 620ms ease forwards;
+  }
+  .intro .skip{
+    position:absolute; bottom:calc(26px + env(safe-area-inset-bottom)); font-size:9.5px;
+    text-transform:uppercase; letter-spacing:2.4px; color:var(--text-dim); opacity:0;
+    animation:introRise 700ms 1100ms ease forwards;
+  }
+  @keyframes introRise{to{opacity:1; transform:translateY(0);}}
+
+  /* ---- Scroll transitions --------------------------------------------
+     Sections lift into place as they come into view, the way the
+     reference site introduces each block instead of having it just be
+     there. The hidden state is applied ONLY when body carries
+     .motion-on, which the script adds — so if anything goes wrong with
+     the script, or motion is switched off, every section is simply
+     visible rather than permanently invisible. */
+  body.motion-on .reveal{opacity:0; transform:translateY(18px);}
+  body.motion-on .reveal.in{
+    opacity:1; transform:none;
+    transition:opacity 620ms cubic-bezier(.2,.7,.3,1), transform 620ms cubic-bezier(.2,.7,.3,1);
+  }
+  @media (prefers-reduced-motion: reduce){
+    body.motion-on .reveal{opacity:1; transform:none;}
+    .intro .mark, .intro .count, .intro .line, .intro .sub, .intro .skip{animation:none; opacity:1; transform:none;}
+  }
   .empty{text-align:center; padding:30px 10px; color:var(--text-dim); font-size:13px;}
   .pill-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
   .pill{padding:6px 12px; border-radius:20px; border:1px solid var(--border); font-size:12px; color:var(--text-dim); cursor:pointer;}
@@ -292,6 +355,42 @@
 </style>
 </head>
 <body>
+<!-- Painted over the app on open. Deliberately in the markup rather than
+     built by the main script, and shown by the tiny script just below,
+     so it is already on screen before the app renders — an opening that
+     appears a moment AFTER the page does is not an opening. -->
+<div class="intro" id="introScreen" style="display:none;" onclick="skipIntro()">
+  <div class="mark" id="introMark">◆</div>
+  <div class="count" id="introCount">00</div>
+  <div class="rule"><i id="introFill"></i></div>
+  <div class="line" id="introLine">OPENING THE JOURNAL</div>
+  <!-- Defaults live in the markup, not only in the script: on a
+       first-ever open there is nothing saved yet, and the pre-paint
+       script above has nothing to fill these in from. -->
+  <div class="sub" id="introSub">Discipline compounds.</div>
+  <div class="skip">Tap to skip</div>
+</div>
+<script>
+  // Runs before the rest of the page so there is no flash of the app
+  // first. Self-contained on purpose: it must not depend on anything the
+  // main script sets up later, and any failure here must leave the app
+  // usable rather than stuck behind a stalled opening.
+  (function(){
+    try{
+      var raw = localStorage.getItem('strat_intro');
+      var cfg = raw ? JSON.parse(raw) : null;
+      if(cfg && cfg.on === false) return;
+      var el = document.getElementById('introScreen');
+      if(cfg){
+        if(cfg.symbol) document.getElementById('introMark').textContent = cfg.symbol;
+        if(cfg.line != null) document.getElementById('introLine').textContent = cfg.line;
+        if(cfg.sub != null) document.getElementById('introSub').textContent = cfg.sub; // '' is a real choice — he may not want a line at all
+      }
+      el.style.display = 'flex';
+      window.__introPending = true;
+    }catch(e){ /* never let the opening keep the app from loading */ }
+  })();
+</script>
 
 <div class="header">
   <div class="brand">
@@ -374,6 +473,38 @@
       </div>
       <input type="file" id="csvInput" accept=".csv" onchange="handleCsv(this)">
       <div class="sync-log" id="csvLog"></div>
+    </div>
+
+    <div class="card">
+      <h3>Opening &amp; Motion</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
+        The short opening you see when the app starts, and the way sections
+        lift into place as you scroll. Both can be turned off, and the
+        opening's wording is yours to write.
+      </div>
+      <div class="strat-opt" id="introOnToggle" onclick="toggleIntroSetting('on')">
+        <div class="t">Opening screen: <span id="introOnLabel">On</span></div>
+        <div class="d">Shows for a couple of seconds each time the app is opened. Tap it to skip.</div>
+      </div>
+      <div class="strat-opt" id="motionOnToggle" onclick="toggleIntroSetting('motion')" style="margin-top:8px;">
+        <div class="t">Scroll transitions: <span id="motionOnLabel">On</span></div>
+        <div class="d">Sections fade and lift as they come into view instead of just being there.</div>
+      </div>
+      <label style="margin-top:14px;">Symbol</label>
+      <input id="f_introSymbol" type="text" maxlength="3" placeholder="◆">
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">Any letter or emoji — ◆ ▲ $ 🏆 whatever you want to see first.</div>
+      <label style="margin-top:12px;">Line underneath</label>
+      <input id="f_introLine" type="text" maxlength="40" placeholder="OPENING THE JOURNAL">
+      <label style="margin-top:12px;">Introduction (optional)</label>
+      <input id="f_introSub" type="text" maxlength="80" placeholder="Discipline compounds.">
+      <label style="margin-top:12px;">How long it stays</label>
+      <select id="f_introMs">
+        <option value="1200">Quick — about 1 second</option>
+        <option value="2000" selected>Normal — about 2 seconds</option>
+        <option value="3200">Slow — about 3 seconds</option>
+      </select>
+      <button class="secondary" onclick="previewIntro()">Show Me</button>
+      <button class="primary" onclick="saveIntroSettings()">Save Opening</button>
     </div>
 
     <div class="card">
@@ -619,6 +750,136 @@ function showView(name){
   document.querySelectorAll('.navbar .item').forEach(i=>i.classList.toggle('active', i.dataset.view===name));
   if(name==='dashboard') renderDashboard();
   if(name==='journal') renderJournal();
+  // A hidden tab has no size, so nothing in it can be "in view" — its
+  // sections have to be re-checked once it is actually on screen.
+  revealScan();
+}
+
+// ---- Opening screen & scroll transitions -----------------------------
+// Both are presentation only: if either is switched off, or the script
+// never runs, the app behaves exactly as it did before.
+const INTRO_DEFAULTS = { on:true, motion:true, symbol:'◆', line:'OPENING THE JOURNAL', sub:'Discipline compounds.', ms:2000 };
+
+function loadIntroCfg(){
+  try{ return Object.assign({}, INTRO_DEFAULTS, JSON.parse(localStorage.getItem('strat_intro')||'{}')); }
+  catch(e){ return Object.assign({}, INTRO_DEFAULTS); }
+}
+function saveIntroCfg(cfg){ localStorage.setItem('strat_intro', JSON.stringify(cfg)); }
+
+// Runs the counter and the filling rule together, then fades out. Uses
+// the clock rather than a fixed number of steps so it lasts the same
+// time on a slow phone as a fast one.
+let introTimer = null;
+function playIntro(ms){
+  const el = document.getElementById('introScreen');
+  const countEl = document.getElementById('introCount');
+  const fillEl = document.getElementById('introFill');
+  if(!el) return;
+  clearTimeout(introTimer);
+  el.classList.remove('out');
+  el.style.display = 'flex';
+  const start = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - start) / ms);
+    countEl.textContent = String(Math.round(p * 100)).padStart(2, '0');
+    fillEl.style.width = (p * 100) + '%';
+    if(p < 1) requestAnimationFrame(step);
+    else introTimer = setTimeout(closeIntro, 260);
+  };
+  requestAnimationFrame(step);
+}
+
+function closeIntro(){
+  const el = document.getElementById('introScreen');
+  if(!el) return;
+  el.classList.add('out');
+  // Only hidden after the fade finishes, so it doesn't vanish abruptly.
+  setTimeout(()=>{ el.style.display = 'none'; }, 560);
+  window.__introPending = false;
+}
+
+function skipIntro(){ clearTimeout(introTimer); closeIntro(); }
+
+function previewIntro(){
+  const ms = parseInt(document.getElementById('f_introMs').value, 10) || 2000;
+  document.getElementById('introMark').textContent = document.getElementById('f_introSymbol').value.trim() || INTRO_DEFAULTS.symbol;
+  document.getElementById('introLine').textContent = document.getElementById('f_introLine').value.trim();
+  document.getElementById('introSub').textContent = document.getElementById('f_introSub').value.trim();
+  playIntro(ms);
+}
+
+function toggleIntroSetting(which){
+  const cfg = loadIntroCfg();
+  if(which === 'on') cfg.on = !cfg.on; else cfg.motion = !cfg.motion;
+  saveIntroCfg(cfg);
+  applyIntroSettingsToForm(cfg);
+  applyMotionSetting(cfg);
+  showStatus('ok', which === 'on'
+    ? `Opening screen turned ${cfg.on ? 'on' : 'off'}.`
+    : `Scroll transitions turned ${cfg.motion ? 'on' : 'off'}.`);
+}
+
+function applyIntroSettingsToForm(cfg){
+  const set = (id, on) => {
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('sel', on);
+  };
+  set('introOnToggle', cfg.on); set('motionOnToggle', cfg.motion);
+  const l1 = document.getElementById('introOnLabel'); if(l1) l1.textContent = cfg.on ? 'On' : 'Off';
+  const l2 = document.getElementById('motionOnLabel'); if(l2) l2.textContent = cfg.motion ? 'On' : 'Off';
+  const sym = document.getElementById('f_introSymbol'); if(sym) sym.value = cfg.symbol;
+  const ln = document.getElementById('f_introLine'); if(ln) ln.value = cfg.line;
+  const sb = document.getElementById('f_introSub'); if(sb) sb.value = cfg.sub;
+  const ms = document.getElementById('f_introMs'); if(ms) ms.value = String(cfg.ms);
+}
+
+function saveIntroSettings(){
+  const cfg = loadIntroCfg();
+  cfg.symbol = document.getElementById('f_introSymbol').value.trim() || INTRO_DEFAULTS.symbol;
+  cfg.line = document.getElementById('f_introLine').value.trim();
+  cfg.sub = document.getElementById('f_introSub').value.trim();
+  cfg.ms = parseInt(document.getElementById('f_introMs').value, 10) || 2000;
+  saveIntroCfg(cfg);
+  showStatus('ok', 'Opening saved — you\'ll see it next time you open the app.');
+}
+
+// ---- scroll transitions ----
+let revealObserver = null;
+function revealScan(){
+  if(!revealObserver) return;
+  document.querySelectorAll('.card, .idx-row').forEach(el=>{
+    if(el.dataset.revealBound) return;
+    el.dataset.revealBound = '1';
+    el.classList.add('reveal');
+    revealObserver.observe(el);
+  });
+}
+
+function initMotion(){
+  const cfg = loadIntroCfg();
+  applyMotionSetting(cfg);
+}
+
+function applyMotionSetting(cfg){
+  if(!cfg.motion){
+    document.body.classList.remove('motion-on');
+    if(revealObserver){ revealObserver.disconnect(); revealObserver = null; }
+    // Anything already waiting to appear must be released, not stranded.
+    document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in'));
+    return;
+  }
+  if(!('IntersectionObserver' in window)) return; // no support: leave everything visible
+  document.body.classList.add('motion-on');
+  if(!revealObserver){
+    revealObserver = new IntersectionObserver((entries)=>{
+      entries.forEach(e=>{
+        if(!e.isIntersecting) return;
+        e.target.classList.add('in');
+        revealObserver.unobserve(e.target); // reveal once; re-animating on every scroll past is nauseating
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
+  }
+  revealScan();
 }
 
 // ---- Timeframe grid ----
@@ -2924,6 +3185,16 @@ function wipeData(){
 
 loadRiskSettings();
 renderDashboard();
+
+// Presentation last, so a problem here can never stop the journal itself
+// from loading — the app is fully usable before any of this runs.
+(function(){
+  const cfg = loadIntroCfg();
+  applyIntroSettingsToForm(cfg);
+  initMotion();
+  if(cfg.on && window.__introPending) playIntro(cfg.ms);
+  else closeIntro();
+})();
 </script>
 </body>
 </html>
