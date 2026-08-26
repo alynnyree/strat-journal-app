@@ -2007,15 +2007,28 @@ async function runTestClassification(){
     const { result } = await r.json();
     lastTestClassifyResult = result;
     const confBadge = result.confidence === 'high' ? 'pos' : (result.confidence === 'medium' ? '' : 'neg');
+    // Three layered answers, shown separately — the combo, FTFC, and
+    // Broadening Formation are each judged on their own, so an "unclear"
+    // on one doesn't hide a confident read on another.
+    const yesNoClass = v => v === 'yes' ? 'pos' : (v === 'no' ? 'neg' : '');
+    const yesNoLabel = v => v === 'yes' ? 'Yes' : (v === 'no' ? 'No' : 'Unclear');
     out.innerHTML = `
       <div class="ai-msg">
-        <div class="tag">${result.strategy}${result.usedScreenshot ? ' 📷' : ''}</div>
+        <div class="tag">Combo: ${result.strategy}${result.usedScreenshot ? ' 📷' : ''}</div>
         <div class="num ${confBadge}" style="font-weight:700; margin-bottom:4px;">Confidence: ${result.confidence}</div>
         ${result.reasoning}
       </div>
+      <div class="ai-msg">
+        <div class="tag">FTFC: <span class="${yesNoClass(result.ftfc)}">${yesNoLabel(result.ftfc)}</span></div>
+        ${result.ftfcReasoning || ''}
+      </div>
+      <div class="ai-msg">
+        <div class="tag">Broadening Formation: <span class="${yesNoClass(result.broadeningFormation)}">${yesNoLabel(result.broadeningFormation)}</span></div>
+        ${result.broadeningReasoning || ''}
+      </div>
       <div style="display:flex; gap:8px; margin-top:8px;">
-        <button class="secondary" style="margin-top:0;" onclick="submitTestFeedback(true)">✓ Correct</button>
-        <button class="secondary" style="margin-top:0; color:var(--bear); border-color:var(--bear-dim);" onclick="showTestIncorrectForm()">✕ Incorrect</button>
+        <button class="secondary" style="margin-top:0;" onclick="submitTestFeedback(true)">✓ All Correct</button>
+        <button class="secondary" style="margin-top:0; color:var(--bear); border-color:var(--bear-dim);" onclick="showTestIncorrectForm()">✕ Something's Wrong</button>
       </div>
       <div id="testIncorrectForm"></div>
     `;
@@ -2025,15 +2038,43 @@ async function runTestClassification(){
   btn.disabled = false;
 }
 
+// Correction form, layered the same way the answer is: one dropdown for
+// the combo, one toggle each for FTFC and Broadening Formation. Each
+// toggle starts on whatever the AI guessed, so correcting one thing
+// doesn't accidentally overwrite the two it already got right.
+let testActualFtfc = false;
+let testActualBroadening = false;
+
 function showTestIncorrectForm(){
   const strats = ['2-1-2 Continuation','2-1-2 Reversal','3-1-2 Reversal','2-2 Continuation','2-2 Reversal','3-2-2 Reversal','1-2-2 Rev Strat','1 Bar Rev Strat','PMG'];
+  const predicted = lastTestClassifyResult || {};
+  // Seed each toggle from the AI's own read; "unclear" seeds to No, since
+  // the owner is being asked to state what it actually was.
+  testActualFtfc = predicted.ftfc === 'yes';
+  testActualBroadening = predicted.broadeningFormation === 'yes';
+  const selected = strats.includes(predicted.strategy) ? predicted.strategy : strats[0];
   document.getElementById('testIncorrectForm').innerHTML = `
-    <label style="margin-top:10px;">What was it actually?</label>
-    <select id="testActualStrat">${strats.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
-    <label style="margin-top:8px;">Notes (optional)</label>
+    <label style="margin-top:10px;">Which combo was it actually?</label>
+    <select id="testActualStrat">${strats.map(s=>`<option value="${s}"${s===selected?' selected':''}>${s}</option>`).join('')}</select>
+    <div class="strat-opt${testActualFtfc?' sel':''}" id="testActualFtfcToggle" onclick="toggleTestActual('ftfc')" style="margin-top:10px;">
+      <div class="t">FTFC: ${testActualFtfc ? 'Yes' : 'No'}</div>
+    </div>
+    <div class="strat-opt broadening-opt${testActualBroadening?' sel':''}" id="testActualBroadeningToggle" onclick="toggleTestActual('broadening')">
+      <div class="t">Broadening Formation: ${testActualBroadening ? 'Yes' : 'No'}</div>
+    </div>
+    <label style="margin-top:10px;">Notes (optional)</label>
     <textarea id="testFeedbackNotes" placeholder="Anything about why it got this wrong..."></textarea>
     <button class="primary" style="margin-top:8px;" onclick="submitTestFeedback(false)">Submit Feedback</button>
   `;
+}
+
+function toggleTestActual(which){
+  const isFtfc = which === 'ftfc';
+  const newVal = isFtfc ? !testActualFtfc : !testActualBroadening;
+  if(isFtfc) testActualFtfc = newVal; else testActualBroadening = newVal;
+  const el = document.getElementById(isFtfc ? 'testActualFtfcToggle' : 'testActualBroadeningToggle');
+  el.classList.toggle('sel', newVal);
+  el.querySelector('.t').textContent = (isFtfc ? 'FTFC: ' : 'Broadening Formation: ') + (newVal ? 'Yes' : 'No');
 }
 
 async function submitTestFeedback(wasCorrect){
@@ -2044,11 +2085,15 @@ async function submitTestFeedback(wasCorrect){
     predictedStrategy: lastTestClassifyResult.strategy,
     predictedConfidence: lastTestClassifyResult.confidence,
     predictedReasoning: lastTestClassifyResult.reasoning,
+    predictedFtfc: lastTestClassifyResult.ftfc,
+    predictedBroadeningFormation: lastTestClassifyResult.broadeningFormation,
     image: currentTestShot || undefined,
     description: document.getElementById('testDescription').value.trim() || undefined,
   };
   if(!wasCorrect){
     payload.actualStrategy = document.getElementById('testActualStrat').value;
+    payload.actualFtfc = testActualFtfc;
+    payload.actualBroadeningFormation = testActualBroadening;
     payload.userNotes = document.getElementById('testFeedbackNotes').value.trim() || undefined;
   }
   try{
@@ -2075,7 +2120,9 @@ async function loadTestFeedbackHistory(){
     el.innerHTML = feedback.sort((a,b)=>b.timestamp-a.timestamp).map(f=>`
       <div style="border-bottom:1px solid var(--border); padding:8px 0; font-size:12.5px;">
         ${f.image ? `<img src="${f.image}" style="max-width:100%; border-radius:6px; margin-bottom:6px;">` : ''}
-        <div><span class="badge ${f.wasCorrect?'win':'loss'}">${f.wasCorrect?'Correct':'Incorrect'}</span> Predicted: ${f.predictedStrategy || '—'}${f.wasCorrect===false && f.actualStrategy ? ` · Actual: ${f.actualStrategy}` : ''}</div>
+        <div><span class="badge ${f.wasCorrect?'win':'loss'}">${f.wasCorrect?'Correct':'Incorrect'}</span> Combo: ${f.predictedStrategy || '—'}${f.wasCorrect===false && f.actualStrategy ? ` → ${f.actualStrategy}` : ''}</div>
+        ${f.predictedFtfc ? `<div style="color:var(--text-dim); margin-top:2px;">FTFC: ${f.predictedFtfc}${f.wasCorrect===false && f.actualFtfc!=null ? ` → ${f.actualFtfc?'yes':'no'}` : ''}</div>` : ''}
+        ${f.predictedBroadeningFormation ? `<div style="color:var(--text-dim); margin-top:2px;">Broadening: ${f.predictedBroadeningFormation}${f.wasCorrect===false && f.actualBroadeningFormation!=null ? ` → ${f.actualBroadeningFormation?'yes':'no'}` : ''}</div>` : ''}
         ${f.userNotes ? `<div style="color:var(--text-dim); margin-top:4px;">${f.userNotes}</div>` : ''}
         <div style="color:var(--text-dim); margin-top:2px;">${new Date(f.timestamp).toLocaleString()}</div>
       </div>
