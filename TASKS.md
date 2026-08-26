@@ -1151,6 +1151,35 @@ project "complete":**
     improves accuracy. That needs real corrections accumulating over
     real use, then comparing classifications before and after.
 
+20. **Let the Test Classification tool do the REAL 13-timeframe FTFC
+    lookup instead of reading FTFC visually** (added 2026-08-23, from
+    the owner's question about how FTFC should be determined).
+    **Status: Offered, awaiting the owner's go-ahead — not built.**
+
+    Worth recording clearly because it was asked directly: **for real
+    trades, FTFC is already determined exactly the way the owner
+    described.** `ftfcCheck.js`'s `getFtfcForTrade()` takes the trade's
+    exact entry timestamp, pulls real Schwab candle data for all 13
+    timeframes (6M, 3M, 1M, 1W, 1D, 4H, 2H, 1H, 30m, 15m, 5m, 3m, 1m) as
+    they stood at that moment, marks each bull or bear, then
+    `computeFtfcConfirmation()` finds the longest unbroken run of
+    same-direction timeframes and confirms FTFC at 4+ consecutive — with
+    the run allowed to start anywhere in the ladder, not just the top.
+    It also records WHICH timeframes formed the run, which indicates
+    suggested hold length. No AI involved in that calculation at all.
+
+    The gap is only in the sandbox test tool, which has a picture but no
+    ticker and no timestamp, so it has nothing to look up and correctly
+    answers "unclear" rather than guessing FTFC from one visible
+    timeframe. Proposed (not built): optional ticker + date/time fields
+    on the test tool; when filled, run the same real Schwab lookup
+    instead of the visual read; left blank, behave exactly as now.
+    Caveat to mention if built: Schwab retains minute-level data only
+    ~30-35 days, so older test dates would get daily-and-above only.
+    Deliberately NOT built yet — this tool has already been over-scoped
+    once (see task 18's removed direction/FTFC/Broadening inputs), so it
+    waits for an explicit yes.
+
 21. **Correction charts travel with classifications, on a budget; and
     the test tool accepts short clips** (added and built 2026-08-26,
     from the owner's three questions: does a growing correction list
@@ -1207,31 +1236,53 @@ project "complete":**
     there would show up as a failed classification rather than anything
     subtler.
 
-20. **Let the Test Classification tool do the REAL 13-timeframe FTFC
-    lookup instead of reading FTFC visually** (added 2026-08-23, from
-    the owner's question about how FTFC should be determined).
-    **Status: Offered, awaiting the owner's go-ahead — not built.**
+22. **Every correction is kept forever, and every one keeps teaching**
+    (added and built 2026-08-26, from the owner's objection: "if this is
+    capped at 20 and starts replacing entries at 21, then the previous/
+    old uploads aren't saved. We need every entry to be remembered by the
+    journal therefore it just continues to improve based on past
+    uploads"). **Status: BUILT AND TESTED 2026-08-26
+    (strat-journal-backend PR #24) — 21 checks, plus the 22 from PR #23
+    still passing.**
 
-    Worth recording clearly because it was asked directly: **for real
-    trades, FTFC is already determined exactly the way the owner
-    described.** `ftfcCheck.js`'s `getFtfcForTrade()` takes the trade's
-    exact entry timestamp, pulls real Schwab candle data for all 13
-    timeframes (6M, 3M, 1M, 1W, 1D, 4H, 2H, 1H, 30m, 15m, 5m, 3m, 1m) as
-    they stood at that moment, marks each bull or bear, then
-    `computeFtfcConfirmation()` finds the longest unbroken run of
-    same-direction timeframes and confirms FTFC at 4+ consecutive — with
-    the run allowed to start anywhere in the ladder, not just the top.
-    It also records WHICH timeframes formed the run, which indicates
-    suggested hold length. No AI involved in that calculation at all.
+    **A correction I owe the record here.** I told him the 20-cap did not
+    delete anything and that everything was stored. The cap itself
+    genuinely doesn't delete — but checking turned up a separate, real
+    deletion I had not accounted for: saved feedback carried a 90-day
+    expiry, so a lesson taught in the test tool would have quietly
+    stopped existing after three months. He was right that entries were
+    not being kept; I was wrong about why.
 
-    The gap is only in the sandbox test tool, which has a picture but no
-    ticker and no timestamp, so it has nothing to look up and correctly
-    answers "unclear" rather than guessing FTFC from one visible
-    timeframe. Proposed (not built): optional ticker + date/time fields
-    on the test tool; when filled, run the same real Schwab lookup
-    instead of the visual read; left blank, behave exactly as now.
-    Caveat to mention if built: Schwab retains minute-level data only
-    ~30-35 days, so older test dates would get daily-and-above only.
-    Deliberately NOT built yet — this tool has already been over-scoped
-    once (see task 18's removed direction/FTFC/Broadening inputs), so it
-    waits for an explicit yes.
+    Two things fixed:
+
+    - **Nothing expires any more.** Feedback records are stored
+      permanently. The one exception is the full-size picture, which is
+      the only part big enough to fill the storage plan — it is now held
+      separately so it can age out on its own without taking the lesson
+      with it, and the small teaching copy is permanent, so an old entry
+      still shows a chart in the log and still teaches. A one-time pass
+      at server start strips the old expiry from entries already saved,
+      so the existing history becomes permanent rather than the memory
+      effectively restarting from today.
+
+    - **The whole history now influences every classification**, via a
+      running summary sent alongside the 20 recent verbatim examples:
+      misreadings that recur (counted, each with the most recent
+      explanation he gave for that kind of mistake), per-combo track
+      record weakest-first, and recurring FTFC / Broadening biases.
+
+    Why a summary rather than simply sending everything: sending all of
+    them grows without limit and would eventually make every
+    classification slow — the exact problem he asked about earlier the
+    same day. **The summary's size grows with the number of DISTINCT
+    KINDS of mistake, not the number of uploads.** There are only nine
+    combos, so it is bounded by construction. Measured: 302 entries
+    produce a 781-character summary; 1002 entries produce 790 — and the
+    lesson from the very first upload still reaches the AI at 1002.
+
+    Standing consequence worth remembering: **a wrong correction now
+    lasts forever rather than ageing out**, and a repeated one gets
+    counted and reported as a pattern. The clickable log (task 18) is
+    the place to review them. There is currently no way to delete a
+    single bad correction — if one gets in, that is the next thing to
+    build here.
