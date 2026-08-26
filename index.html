@@ -249,8 +249,8 @@
      is the only one that can become anything. Drawn rather than typed so
      the gold gradient runs through the actual shape and the glow sits
      around its real silhouette. */
-  .intro .mark.chess{filter:drop-shadow(0 0 24px rgba(247,201,72,0.5));}
-  .chess-mark{width:104px; height:auto; display:block;}
+  .intro .mark.chess{filter:drop-shadow(0 6px 18px rgba(0,0,0,0.55));}
+  .chess-mark{width:150px; height:auto; display:block;}
   .intro .count{
     font-family:var(--display); font-size:64px; line-height:0.9; letter-spacing:1px;
     color:var(--text); font-weight:400;
@@ -404,107 +404,141 @@
   <!-- The drawn mark lives in a template so BOTH the pre-paint script
        below and the settings preview can clone it, instead of each
        carrying its own copy of the drawing that could drift apart. -->
-  <template id="chessMarkTpl"><svg class="chess-mark" viewBox="0 0 100 146" role="img" aria-label="Crowned pawn">
+  <template id="chessMarkTpl"><svg class="chess-mark" viewBox="0 -9 200 227" role="img" aria-label="King and queen chess pieces">
   <defs>
-    <!-- Lit from the upper left. Every part gets its own gradient because
-         a single fill across the whole silhouette is what makes a shape
-         read as a logo rather than an object: a sphere and a cylinder
-         catch light in completely different ways. -->
-    <radialGradient id="cmSphere" cx="34%" cy="28%" r="78%">
-      <stop offset="0%" stop-color="#FFFAE2"/><stop offset="18%" stop-color="#FFE9A8"/>
-      <stop offset="46%" stop-color="#F0BC3C"/><stop offset="74%" stop-color="#B87C16"/>
-      <stop offset="92%" stop-color="#7E5310"/><stop offset="100%" stop-color="#A87418"/>
-    </radialGradient>
-    <!-- A turned cylinder: bright core left of centre, dark terminator to
-         the right, then a rim of REFLECTED light on the far edge. That
-         last stop is what separates metal from plastic. -->
-    <linearGradient id="cmTurn" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#8A5C11"/><stop offset="9%" stop-color="#D6A32B"/>
-      <stop offset="26%" stop-color="#FFEFBC"/><stop offset="44%" stop-color="#F5C63F"/>
-      <stop offset="70%" stop-color="#A9761C"/><stop offset="88%" stop-color="#6E4A0E"/>
-      <stop offset="100%" stop-color="#C9931F"/>
+    <!-- Drawn, not rendered. Glossy gradients read as a logo however much
+         shading is piled on. An etching reads as an object because its
+         tone is built from HATCHING — visible strokes laid across the
+         form — on a matte surface with no specular highlight anywhere. -->
+    <pattern id="cmHatch" width="3.6" height="3.6" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">
+      <line x1="0" y1="0" x2="0" y2="3.6" stroke="#2E2718" stroke-width="1.15" stroke-opacity="0.5"/>
+    </pattern>
+    <pattern id="cmHatchDeep" width="2.2" height="2.2" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">
+      <line x1="0" y1="0" x2="0" y2="2.2" stroke="#241E12" stroke-width="1.1" stroke-opacity="0.72"/>
+    </pattern>
+    <!-- A second pass at another angle is what deepens a pencil drawing. -->
+    <pattern id="cmCross" width="2.2" height="2.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-48)">
+      <line x1="0" y1="0" x2="0" y2="2.2" stroke="#1A1610" stroke-width="1" stroke-opacity="0.62"/>
+    </pattern>
+    <linearGradient id="cmPaper" x1="0" y1="0" x2="1" y2="0.25">
+      <stop offset="0%" stop-color="#F3EAD2"/><stop offset="48%" stop-color="#E2D6B6"/>
+      <stop offset="100%" stop-color="#CBBD97"/>
     </linearGradient>
-    <linearGradient id="cmTurnDark" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#6B460D"/><stop offset="10%" stop-color="#B8871F"/>
-      <stop offset="27%" stop-color="#F2DA96"/><stop offset="46%" stop-color="#D9AC33"/>
-      <stop offset="72%" stop-color="#8A5C11"/><stop offset="90%" stop-color="#57390B"/>
-      <stop offset="100%" stop-color="#A8791A"/>
-    </linearGradient>
-    <linearGradient id="cmCrown" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0%" stop-color="#FFF3CE"/><stop offset="30%" stop-color="#F7C948"/>
-      <stop offset="62%" stop-color="#B67D17"/><stop offset="100%" stop-color="#F0C862"/>
-    </linearGradient>
+    <!-- Tone has to FADE in. A hatch layer bounded by a straight edge
+         leaves a visible seam down the middle of a curved surface, which
+         is the single clearest sign a drawing was assembled rather than
+         drawn. Each layer is masked by its own gradient instead. -->
+    <linearGradient id="cmFadeK1" gradientUnits="userSpaceOnUse" x1="56" y1="0" x2="90" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient>
+    <linearGradient id="cmFadeK2" gradientUnits="userSpaceOnUse" x1="78" y1="0" x2="106" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient>
+    <linearGradient id="cmFadeK3" gradientUnits="userSpaceOnUse" x1="90" y1="0" x2="112" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient>
+    <linearGradient id="cmFadeKR" gradientUnits="userSpaceOnUse" x1="42" y1="0" x2="27" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#bbb"/></linearGradient>
+    <linearGradient id="cmFadeQ1" gradientUnits="userSpaceOnUse" x1="138" y1="0" x2="166" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient>
+    <linearGradient id="cmFadeQ2" gradientUnits="userSpaceOnUse" x1="156" y1="0" x2="180" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient>
+    <linearGradient id="cmFadeQ3" gradientUnits="userSpaceOnUse" x1="168" y1="0" x2="186" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient>
+    <linearGradient id="cmFadeQR" gradientUnits="userSpaceOnUse" x1="124" y1="0" x2="110" y2="0">
+      <stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#bbb"/></linearGradient>
+    <mask id="cmMK1"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeK1)"/></mask>
+    <mask id="cmMK2"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeK2)"/></mask>
+    <mask id="cmMK3"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeK3)"/></mask>
+    <mask id="cmMKR"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeKR)"/></mask>
+    <mask id="cmMQ1"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeQ1)"/></mask>
+    <mask id="cmMQ2"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeQ2)"/></mask>
+    <mask id="cmMQ3"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeQ3)"/></mask>
+    <mask id="cmMQR"><rect x="0" y="-10" width="200" height="230" fill="url(#cmFadeQR)"/></mask>
     <radialGradient id="cmFloor" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#000" stop-opacity="0.62"/>
-      <stop offset="65%" stop-color="#000" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#080A07" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#080A07" stop-opacity="0"/>
     </radialGradient>
-    <!-- Shadows on gold must be BROWN, not black. Black desaturates the
-         metal and leaves grey smears across it; a dark warm brown reads
-         as gold in shadow. -->
-    <!-- A rim catches light unevenly along its length. A flat strip of
-         one opacity reads as a painted line; fading it at both ends and
-         peaking it left of centre reads as light. -->
-    <linearGradient id="cmRim" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#FFF1C4" stop-opacity="0"/>
-      <stop offset="20%" stop-color="#FFFBEA" stop-opacity="0.8"/>
-      <stop offset="46%" stop-color="#FFF1C4" stop-opacity="0.32"/>
-      <stop offset="76%" stop-color="#FFF6DC" stop-opacity="0.16"/>
-      <stop offset="100%" stop-color="#FFF1C4" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="cmDrop" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#33200A" stop-opacity="0.62"/>
-      <stop offset="100%" stop-color="#33200A" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="cmBlur2" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.8"/></filter>
-    <filter id="cmBlur1" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="0.9"/></filter>
+    <clipPath id="cmKingClip">
+      <path d="M28 196 C28 190 33 187 40 186 L100 186 C107 187 112 190 112 196 C112 202 100 205 70 205 C40 205 28 202 28 196 Z"/>
+      <path d="M34 187 C34 174 42 163 52 158 L88 158 C98 163 106 174 106 187 Z"/>
+      <path d="M52 158 C50 138 54 116 59 104 L81 104 C86 116 90 138 88 158 Z"/>
+      <rect x="51" y="95" width="38" height="9" rx="2"/><rect x="55" y="87" width="30" height="8" rx="2"/>
+      <path d="M55 88 C51 74 47 56 44 44 L96 44 C93 56 89 74 85 88 Z"/>
+      <rect x="41" y="33" width="58" height="11" rx="2"/>
+      <rect x="42" y="24" width="9" height="10"/><rect x="54" y="23" width="9" height="11"/>
+      <rect x="66" y="23" width="9" height="11"/><rect x="78" y="23" width="9" height="11"/>
+      <rect x="89" y="24" width="9" height="10"/>
+      <circle cx="70" cy="18" r="5.4"/>
+      <path d="M66 13 L66 7 L60 7 L60 1 L66 1 L66 -5 L74 -5 L74 1 L80 1 L80 7 L74 7 L74 13 Z"/>
+    </clipPath>
+    <clipPath id="cmQueenClip">
+      <path d="M110 200 C110 194 115 191 121 190 L175 190 C181 191 186 194 186 200 C186 205 175 208 148 208 C121 208 110 205 110 200 Z"/>
+      <path d="M116 191 C116 179 123 169 132 165 L164 165 C173 169 180 179 180 191 Z"/>
+      <path d="M132 165 C130 148 133 130 137 120 L159 120 C163 130 166 148 164 165 Z"/>
+      <rect x="129" y="112" width="38" height="8" rx="2"/><rect x="133" y="105" width="30" height="7" rx="2"/>
+      <path d="M133 106 C129 95 126 82 124 73 L172 73 C170 82 167 95 163 106 Z"/>
+      <rect x="121" y="63" width="54" height="10" rx="2"/>
+    </clipPath>
   </defs>
 
-  <!-- Sits on something. Without a contact shadow it floats. -->
-  <ellipse cx="52" cy="138.5" rx="39" ry="5.2" fill="url(#cmFloor)"/>
+  <ellipse cx="104" cy="208" rx="90" ry="7" fill="url(#cmFloor)"/>
 
-  <!-- Base, bottom tier up -->
-  <rect x="13" y="128" width="74" height="10" rx="4.5" fill="url(#cmTurn)"/>
-  <rect x="13" y="128" width="74" height="1.8" rx="0.9" fill="url(#cmRim)"/>
-  <rect x="17" y="129.6" width="66" height="4.5" fill="url(#cmDrop)"/>
-  <rect x="18" y="118" width="64" height="11" rx="4.5" fill="url(#cmTurn)"/>
-  <rect x="18" y="118" width="64" height="1.7" rx="0.85" fill="url(#cmRim)"/>
-  <rect x="22" y="119.5" width="56" height="4.5" fill="url(#cmDrop)"/>
-  <path d="M28 119 C28 108 33.5 99.5 40.5 96 L59.5 96 C66.5 99.5 72 108 72 119 Z" fill="url(#cmTurn)"/>
+  <!-- ============ KING — behind, taller ============ -->
+  <g fill="url(#cmPaper)" stroke="#241F13" stroke-width="1.15" stroke-linejoin="round">
+    <path d="M28 196 C28 190 33 187 40 186 L100 186 C107 187 112 190 112 196 C112 202 100 205 70 205 C40 205 28 202 28 196 Z"/>
+    <path d="M34 187 C34 174 42 163 52 158 L88 158 C98 163 106 174 106 187 Z"/>
+    <path d="M52 158 C50 138 54 116 59 104 L81 104 C86 116 90 138 88 158 Z"/>
+    <rect x="51" y="95" width="38" height="9" rx="2"/>
+    <rect x="55" y="87" width="30" height="8" rx="2"/>
+    <path d="M55 88 C51 74 47 56 44 44 L96 44 C93 56 89 74 85 88 Z"/>
+    <rect x="41" y="33" width="58" height="11" rx="2"/>
+    <rect x="42" y="24" width="9" height="10" rx="1"/><rect x="54" y="23" width="9" height="11" rx="1"/>
+    <rect x="66" y="23" width="9" height="11" rx="1"/><rect x="78" y="23" width="9" height="11" rx="1"/>
+    <rect x="89" y="24" width="9" height="10" rx="1"/>
+    <circle cx="70" cy="18" r="5.4"/>
+    <path d="M66 13 L66 7 L60 7 L60 1 L66 1 L66 -5 L74 -5 L74 1 L80 1 L80 7 L74 7 L74 13 Z"/>
+  </g>
+  <!-- Fluting: the drawn lines that say "turned and carved", not moulded -->
+  <g stroke="#3A3220" stroke-width="0.85" fill="none" stroke-opacity="0.75">
+    <path d="M54 87 C50 73 47 57 45 45"/><path d="M62 87 C59 73 57 57 56 45"/>
+    <path d="M70 88 C70 74 70 57 70 45"/><path d="M78 87 C81 73 83 57 84 45"/>
+    <path d="M60 156 C58 137 61 117 65 105"/><path d="M70 157 C69 137 70 117 70 105"/>
+    <path d="M80 156 C82 137 79 117 76 105"/>
+  </g>
+  <g clip-path="url(#cmKingClip)">
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmHatch)" mask="url(#cmMK1)"/>
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmHatchDeep)" mask="url(#cmMK2)"/>
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmCross)" mask="url(#cmMK3)"/>
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmHatch)" mask="url(#cmMKR)"/>
+  </g>
 
-  <!-- Stem: darker than the base so the two planes separate -->
-  <path d="M42 96.5 C38.6 86 39.6 78 43 72.5 L57 72.5 C60.4 78 61.4 86 58 96.5 Z" fill="url(#cmTurnDark)"/>
-  <!-- Collar throwing its shadow down onto the stem -->
-  <ellipse cx="50" cy="79.5" rx="10" ry="3" fill="#33200A" opacity="0.5" filter="url(#cmBlur2)"/>
-
-  <!-- Collar -->
-  <path d="M30 69.5 L70 69.5 L62.5 80 L37.5 80 Z" fill="url(#cmTurn)"/>
-  <path d="M30 69.5 L70 69.5 L68.6 71.8 L31.4 71.8 Z" fill="url(#cmRim)"/>
-  <rect x="33" y="63.5" width="34" height="4.6" rx="2.3" fill="url(#cmTurn)"/>
-  <ellipse cx="50" cy="65.6" rx="13" ry="2.4" fill="#33200A" opacity="0.45" filter="url(#cmBlur2)"/>
-
-  <!-- Head -->
-  <circle cx="50" cy="45" r="18.5" fill="url(#cmSphere)"/>
-  <!-- Specular: the small hard glint that tells the eye this is polished -->
-  <ellipse cx="42.5" cy="35.5" rx="6.4" ry="4.4" transform="rotate(-32 42.5 35.5)" fill="#FFFDF2" opacity="0.72" filter="url(#cmBlur1)"/>
-  <ellipse cx="40.5" cy="33.5" rx="2.4" ry="1.6" transform="rotate(-32 40.5 33.5)" fill="#fff" opacity="0.9"/>
-  <!-- The crown lands on the head, so it must darken it where it sits -->
-  <path d="M32.5 40 C37 31.5 46 27.5 54 29 L51.5 34.5 C45 33.8 38.5 36 35.5 41.5 Z" fill="#33200A" opacity="0.45" filter="url(#cmBlur2)"/>
-
-  <!-- Crown -->
-  <g transform="translate(37,28.5) rotate(-26)">
-    <path d="M-21 5.5 C-21 8 -12 10.6 0 10.6 C12 10.6 21 8 21 5.5 L21 -3.5 L11 4 L0 -14.5 L-11 4 L-21 -3.5 Z" fill="url(#cmCrown)"/>
-    <path d="M-21 -3.5 L-21 5.5 C-21 6.8 -18.6 8 -16 8.7 L-16 0 Z" fill="#FFF3CE" opacity="0.45"/>
-    <!-- The band wraps a head, so it curves away from the viewer. Drawn
-         straight it reads as a sash laid across the piece. -->
-    <path d="M-21.5 4.6 C-21.5 9 -12 12 0 12 C12 12 21.5 9 21.5 4.6 L21.5 8.4 C21.5 12.8 12 15.8 0 15.8 C-12 15.8 -21.5 12.8 -21.5 8.4 Z" fill="url(#cmTurn)"/>
-    <path d="M-21.5 4.6 C-21.5 9 -12 12 0 12 C12 12 21.5 9 21.5 4.6 L21.5 5.9 C21.5 10.3 12 13.3 0 13.3 C-12 13.3 -21.5 10.3 -21.5 5.9 Z" fill="url(#cmRim)"/>
-    <circle cx="-20.5" cy="-6.4" r="2.9" fill="url(#cmCrown)"/>
-    <circle cx="0" cy="-17.6" r="3.3" fill="url(#cmCrown)"/>
-    <circle cx="20.5" cy="-6.4" r="2.9" fill="url(#cmCrown)"/>
-    <circle cx="-21.4" cy="-7.3" r="1" fill="#FFFDF2" opacity="0.85"/>
-    <circle cx="-1" cy="-18.7" r="1.15" fill="#FFFDF2" opacity="0.85"/>
-    <circle cx="19.6" cy="-7.3" r="1" fill="#FFFDF2" opacity="0.85"/>
+  <!-- ============ QUEEN — in front, shorter ============ -->
+  <g fill="url(#cmPaper)" stroke="#241F13" stroke-width="1.15" stroke-linejoin="round">
+    <path d="M110 200 C110 194 115 191 121 190 L175 190 C181 191 186 194 186 200 C186 205 175 208 148 208 C121 208 110 205 110 200 Z"/>
+    <path d="M116 191 C116 179 123 169 132 165 L164 165 C173 169 180 179 180 191 Z"/>
+    <path d="M132 165 C130 148 133 130 137 120 L159 120 C163 130 166 148 164 165 Z"/>
+    <rect x="129" y="112" width="38" height="8" rx="2"/>
+    <rect x="133" y="105" width="30" height="7" rx="2"/>
+    <path d="M133 106 C129 95 126 82 124 73 L172 73 C170 82 167 95 163 106 Z"/>
+    <rect x="121" y="63" width="54" height="10" rx="2"/>
+  </g>
+  <!-- Coronet: points rising off the band, each tipped with a bead -->
+  <g fill="url(#cmPaper)" stroke="#241F13" stroke-width="1.05" stroke-linejoin="round">
+    <path d="M122 64 L126 48 L134 62 Z"/><path d="M134 62 L140 45 L148 60 Z"/>
+    <path d="M148 60 L156 45 L162 62 Z"/><path d="M162 62 L170 48 L174 64 Z"/>
+    <circle cx="126" cy="46" r="3.3"/><circle cx="140" cy="43" r="3.5"/>
+    <circle cx="156" cy="43" r="3.5"/><circle cx="170" cy="46" r="3.3"/>
+    <circle cx="148" cy="38" r="4.4"/><circle cx="148" cy="29" r="5"/>
+  </g>
+  <g stroke="#3A3220" stroke-width="0.85" fill="none" stroke-opacity="0.75">
+    <path d="M133 105 C129 94 127 83 125 74"/><path d="M141 105 C139 94 138 83 137 74"/>
+    <path d="M148 106 C148 94 148 83 148 74"/><path d="M156 105 C158 94 159 83 160 74"/>
+    <path d="M139 163 C137 146 139 130 142 121"/><path d="M148 164 C147 146 148 130 148 121"/>
+    <path d="M157 163 C159 146 157 130 154 121"/>
+  </g>
+  <g clip-path="url(#cmQueenClip)">
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmHatch)" mask="url(#cmMQ1)"/>
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmHatchDeep)" mask="url(#cmMQ2)"/>
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmCross)" mask="url(#cmMQ3)"/>
+    <rect x="0" y="-10" width="200" height="230" fill="url(#cmHatch)" mask="url(#cmMQR)"/>
   </g>
 </svg></template>
   <div class="mark chess" id="introMark"></div>
