@@ -457,14 +457,17 @@
     <div class="card">
       <h3>Test Classification</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
-        Upload a made-up chart — drawn, AI-generated, pulled from the internet — and the AI classifies it strictly from the picture, with no other hints (no direction, no FTFC, no Broadening Formation). Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
+        Upload a made-up chart — drawn, AI-generated, pulled from the internet — and the AI classifies it strictly from what it sees, with no other hints (no direction, no FTFC, no Broadening Formation). Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
       </div>
 
-      <label>Chart picture</label>
+      <label>Chart picture or short clip</label>
       <div class="shot-row">
-        <div class="shot-box" id="testShotBox" onclick="document.getElementById('testShotInput').click()">+ Add picture</div>
+        <div class="shot-box" id="testShotBox" onclick="document.getElementById('testShotInput').click()">+ Add picture or clip</div>
       </div>
-      <input type="file" id="testShotInput" accept="image/*" style="display:none;" onchange="handleTestShot(this)">
+      <input type="file" id="testShotInput" accept="image/*,video/*" style="display:none;" onchange="handleTestShot(this)">
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">
+        A screen recording works as well as a still — keep clips under about 20 seconds (10MB) so they send from your phone.
+      </div>
 
       <label style="margin-top:10px;">Or describe the setup in words instead (if you have no picture)</label>
       <textarea id="testDescription" placeholder="e.g. inside bar, then a directional bar breaking up, then another directional bar breaking down..."></textarea>
@@ -1960,22 +1963,74 @@ async function classifyUnclassifiedTrades(){
 // review later, so the classifier's real-world accuracy can be judged
 // over time.
 let currentTestShot = null;
+let currentTestShotIsVideo = false;
+let currentTestTeachShot = null; // the shrunk copy that travels with future classifications
 let lastTestClassifyResult = null; // {strategy, confidence, reasoning} — needed when submitting feedback
+
+// A clip has to survive the trip from the phone AND fit inside what the AI
+// will accept in one request. Refusing an oversized file here, with a
+// reason, beats a long upload that dies with an unexplained error.
+const MAX_TEST_CLIP_BYTES = 10 * 1024 * 1024;
+
+// How big the teaching copy of a picture is allowed to be. Chart patterns
+// are shapes — candle bodies, wicks, trend lines — and shapes survive
+// shrinking far better than fine detail does, so a small copy still shows
+// what a correction meant. This is what keeps corrections from slowing
+// classification down: the full-size picture stays in the log for the
+// owner to look at, while only this small one is ever re-sent to the AI.
+const TEACH_SHOT_MAX_PX = 512;
+const TEACH_SHOT_QUALITY = 0.6;
+
+function makeTeachShot(dataUrl){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const scale = Math.min(1, TEACH_SHOT_MAX_PX / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', TEACH_SHOT_QUALITY));
+      }catch(e){ resolve(null); } // shrinking failing must never block the upload
+    };
+    img.onerror = ()=>resolve(null);
+    img.src = dataUrl;
+  });
+}
 
 function handleTestShot(input){
   const file = input.files[0];
   if(!file) return;
+  const isVideo = (file.type || '').startsWith('video/');
+  if(isVideo && file.size > MAX_TEST_CLIP_BYTES){
+    showStatus('err', 'That clip is too big — trim it to about 20 seconds and try again.');
+    input.value = '';
+    return;
+  }
   const reader = new FileReader();
-  reader.onload = e=>{
+  reader.onload = async e=>{
     currentTestShot = e.target.result;
-    document.getElementById('testShotBox').innerHTML = `<img src="${e.target.result}"><div class="close-x" onclick="event.stopPropagation(); clearTestShot()">✕</div>`;
+    currentTestShotIsVideo = isVideo;
+    // Only stills get a teaching copy. A clip is far too heavy to re-send
+    // on every future classification, so a corrected clip teaches through
+    // its written correction instead.
+    currentTestTeachShot = isVideo ? null : await makeTeachShot(e.target.result);
+    const preview = isVideo
+      ? `<video src="${currentTestShot}" muted playsinline controls style="max-width:100%; max-height:100%; border-radius:6px;"></video>`
+      : `<img src="${currentTestShot}">`;
+    document.getElementById('testShotBox').innerHTML = `${preview}<div class="close-x" onclick="event.stopPropagation(); clearTestShot()">✕</div>`;
   };
   reader.readAsDataURL(file);
 }
 
 function clearTestShot(){
   currentTestShot = null;
-  document.getElementById('testShotBox').innerHTML = '+ Add picture';
+  currentTestShotIsVideo = false;
+  currentTestTeachShot = null;
+  const inp = document.getElementById('testShotInput');
+  if(inp) inp.value = ''; // otherwise picking the same file twice in a row does nothing
+  document.getElementById('testShotBox').innerHTML = '+ Add picture or clip';
 }
 
 // Sends the classify request, retrying on its own if the connection drops
@@ -2155,6 +2210,7 @@ async function submitTestFeedback(wasCorrect){
     predictedFtfc: lastTestClassifyResult.ftfc,
     predictedBroadeningFormation: lastTestClassifyResult.broadeningFormation,
     image: currentTestShot || undefined,
+    teachImage: currentTestTeachShot || undefined,
     description: document.getElementById('testDescription').value.trim() || undefined,
   };
   if(!wasCorrect){
@@ -2255,7 +2311,9 @@ function toggleTestFeedbackDetail(id){
   const yn = v => v == null ? null : (v === true ? 'yes' : (v === false ? 'no' : v));
 
   box.innerHTML = `
-    ${f.image ? `<img src="${f.image}" style="max-width:100%; border-radius:6px; margin-bottom:8px;">` : '<div style="color:var(--text-dim); font-size:12px; margin-bottom:6px;">(no picture — description only)</div>'}
+    ${f.image ? (String(f.image).startsWith('data:video/')
+      ? `<video src="${f.image}" controls muted playsinline style="max-width:100%; border-radius:6px; margin-bottom:8px;"></video>`
+      : `<img src="${f.image}" style="max-width:100%; border-radius:6px; margin-bottom:8px;">`) : '<div style="color:var(--text-dim); font-size:12px; margin-bottom:6px;">(no picture — description only)</div>'}
     <div style="font-size:12.5px;">
       ${layer('Combo', f.predictedStrategy, f.actualStrategy)}
       ${layer('FTFC', f.predictedFtfc, yn(f.actualFtfc))}
