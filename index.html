@@ -244,6 +244,13 @@
      colours and just gets lit from behind instead. */
   .intro .mark.metal-gold{filter:drop-shadow(0 0 22px rgba(247,201,72,0.55));}
   .intro .mark.emoji{filter:drop-shadow(0 0 26px rgba(247,201,72,0.5));}
+  /* A drawn mark, not a character. A crowned pawn is the one chess piece
+     that means what this app is for — the piece that starts smallest and
+     is the only one that can become anything. Drawn rather than typed so
+     the gold gradient runs through the actual shape and the glow sits
+     around its real silhouette. */
+  .intro .mark.chess{filter:drop-shadow(0 0 24px rgba(247,201,72,0.5));}
+  .chess-mark{width:84px; height:auto; display:block;}
   .intro .count{
     font-family:var(--display); font-size:64px; line-height:0.9; letter-spacing:1px;
     color:var(--text); font-weight:400;
@@ -394,7 +401,39 @@
      so it is already on screen before the app renders — an opening that
      appears a moment AFTER the page does is not an opening. -->
 <div class="intro" id="introScreen" style="display:none;" onclick="skipIntro()">
-  <div class="mark metal-gold" id="introMark">◆</div>
+  <!-- The drawn mark lives in a template so BOTH the pre-paint script
+       below and the settings preview can clone it, instead of each
+       carrying its own copy of the drawing that could drift apart. -->
+  <template id="chessMarkTpl"><svg class="chess-mark" viewBox="0 0 100 142" role="img" aria-label="Crowned pawn">
+  <defs>
+    <linearGradient id="cmGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFEEB0"/><stop offset="34%" stop-color="#F7C948"/>
+      <stop offset="58%" stop-color="#C9931F"/><stop offset="78%" stop-color="#FFE08A"/>
+      <stop offset="100%" stop-color="#F7C948"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#cmGold)">
+    <!-- Base, built as stepped tiers the way the reference drawing has
+         it, widest at the floor. -->
+    <rect x="14" y="128" width="72" height="9" rx="4"/>
+    <rect x="19" y="119" width="62" height="10" rx="4"/>
+    <path d="M28 120 C28 110 34 102 40 98 L60 98 C66 102 72 110 72 120 Z"/>
+    <!-- Stem: a concave taper, narrow under the collar and flaring out. -->
+    <path d="M41 98 C38 88 39 80 42 75 L58 75 C61 80 62 88 59 98 Z"/>
+    <!-- Collar under the head. -->
+    <path d="M31 76 L69 76 L63 67 L37 67 Z"/>
+    <rect x="34" y="62" width="32" height="4" rx="2"/>
+    <circle cx="50" cy="44" r="18"/>
+    <!-- Crown, tilted and resting ON the head so the band overlaps the
+         sphere's top-left, as it does in the drawing. -->
+    <g transform="translate(37,29) rotate(-26) scale(0.94)">
+      <rect x="-21" y="5" width="42" height="6" rx="2"/>
+      <path d="M-20 6 L-20 -3 L-11 4 L0 -14 L11 4 L20 -3 L20 6 Z"/>
+      <circle cx="-20" cy="-6" r="2.8"/><circle cx="0" cy="-17" r="3.2"/><circle cx="20" cy="-6" r="2.8"/>
+    </g>
+  </g>
+</svg></template>
+  <div class="mark chess" id="introMark"></div>
   <div class="count" id="introCount">00</div>
   <div class="rule"><i id="introFill"></i></div>
   <div class="line" id="introLine">OPENING THE JOURNAL</div>
@@ -415,13 +454,18 @@
       var cfg = raw ? JSON.parse(raw) : null;
       if(cfg && cfg.on === false) return;
       var el = document.getElementById('introScreen');
-      if(cfg){
-        if(cfg.symbol){
-          var mk = document.getElementById('introMark');
-          mk.textContent = cfg.symbol;
+      if(true){
+        cfg = cfg || {};
+        var mk = document.getElementById('introMark');
+        var sym = cfg.symbol || 'chess';
+        if(sym === 'chess'){
+          mk.className = 'mark chess';
+          mk.appendChild(document.getElementById('chessMarkTpl').content.cloneNode(true));
+        } else {
+          mk.textContent = sym;
           // An emoji is already a full-colour picture; painting a gold
           // gradient through it would strip its colour to a gold blob.
-          var isEmoji = /\p{Extended_Pictographic}/u.test(cfg.symbol);
+          var isEmoji = /\p{Extended_Pictographic}/u.test(sym);
           mk.className = 'mark ' + (isEmoji ? 'emoji' : 'metal-gold');
         }
         if(cfg.line != null) document.getElementById('introLine').textContent = cfg.line;
@@ -532,8 +576,17 @@
         <div class="d">Sections fade and lift as they come into view instead of just being there.</div>
       </div>
       <label style="margin-top:14px;">Symbol</label>
-      <input id="f_introSymbol" type="text" maxlength="3" placeholder="◆">
-      <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">Any letter or emoji — ◆ ▲ $ 🏆 whatever you want to see first.</div>
+      <div class="pill-row" id="introPresets">
+        <div class="pill" onclick="pickIntroSymbol('chess')">♟ Crowned pawn</div>
+        <div class="pill" onclick="pickIntroSymbol('◆')">◆</div>
+        <div class="pill" onclick="pickIntroSymbol('▲')">▲</div>
+        <div class="pill" onclick="pickIntroSymbol('🏆')">🏆</div>
+      </div>
+      <input id="f_introSymbol" type="text" maxlength="12" placeholder="chess" style="margin-top:8px;">
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">
+        Tap one above, or type any letter or emoji of your own. Leave it as
+        <b>chess</b> for the drawn crowned pawn.
+      </div>
       <label style="margin-top:12px;">Line underneath</label>
       <input id="f_introLine" type="text" maxlength="40" placeholder="OPENING THE JOURNAL">
       <label style="margin-top:12px;">Introduction (optional)</label>
@@ -799,7 +852,10 @@ function showView(name){
 // ---- Opening screen & scroll transitions -----------------------------
 // Both are presentation only: if either is switched off, or the script
 // never runs, the app behaves exactly as it did before.
-const INTRO_DEFAULTS = { on:true, motion:true, symbol:'◆', line:'OPENING THE JOURNAL', sub:'Discipline compounds.', ms:2000 };
+// 'chess' is a reserved value meaning "use the drawn crowned-pawn mark"
+// rather than a typed character. Anything else is taken literally.
+const CHESS_SYMBOL = 'chess';
+const INTRO_DEFAULTS = { on:true, motion:true, symbol:CHESS_SYMBOL, line:'OPENING THE JOURNAL', sub:'Discipline compounds.', ms:2000 };
 
 function loadIntroCfg(){
   try{ return Object.assign({}, INTRO_DEFAULTS, JSON.parse(localStorage.getItem('strat_intro')||'{}')); }
@@ -815,6 +871,13 @@ function saveIntroCfg(cfg){ localStorage.setItem('strat_intro', JSON.stringify(c
 function setIntroMark(symbol){
   const mk = document.getElementById('introMark');
   if(!mk) return;
+  if(symbol === CHESS_SYMBOL){
+    const tpl = document.getElementById('chessMarkTpl');
+    mk.className = 'mark chess';
+    mk.textContent = '';
+    if(tpl) mk.appendChild(tpl.content.cloneNode(true));
+    return;
+  }
   mk.textContent = symbol;
   const isEmoji = /\p{Extended_Pictographic}/u.test(symbol);
   mk.className = 'mark ' + (isEmoji ? 'emoji' : 'metal-gold');
@@ -859,6 +922,20 @@ function previewIntro(){
   playIntro(ms);
 }
 
+// Fills the box from a preset and shows it straight away, so choosing a
+// symbol is a look-at-it decision rather than a type-and-hope one.
+function pickIntroSymbol(sym){
+  document.getElementById('f_introSymbol').value = sym;
+  markIntroPreset(sym);
+  previewIntro();
+}
+
+function markIntroPreset(sym){
+  document.querySelectorAll('#introPresets .pill').forEach(el=>{
+    el.classList.toggle('sel', el.getAttribute('onclick').includes(`'${sym}'`));
+  });
+}
+
 function toggleIntroSetting(which){
   const cfg = loadIntroCfg();
   if(which === 'on') cfg.on = !cfg.on; else cfg.motion = !cfg.motion;
@@ -879,6 +956,7 @@ function applyIntroSettingsToForm(cfg){
   const l1 = document.getElementById('introOnLabel'); if(l1) l1.textContent = cfg.on ? 'On' : 'Off';
   const l2 = document.getElementById('motionOnLabel'); if(l2) l2.textContent = cfg.motion ? 'On' : 'Off';
   const sym = document.getElementById('f_introSymbol'); if(sym) sym.value = cfg.symbol;
+  markIntroPreset(cfg.symbol);
   const ln = document.getElementById('f_introLine'); if(ln) ln.value = cfg.line;
   const sb = document.getElementById('f_introSub'); if(sb) sb.value = cfg.sub;
   const ms = document.getElementById('f_introMs'); if(ms) ms.value = String(cfg.ms);
