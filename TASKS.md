@@ -989,3 +989,45 @@ project "complete":**
 
     Between both layers there are now ~9 real attempts before the owner
     sees any failure at all.
+
+    **Real root cause of the cut-off answers, found 2026-08-23 (PR #20 on
+    strat-journal-backend).** The next run got far enough to show the
+    actual problem: the model DID answer — `{"strategy": "2-1-2
+    Reversal", "confidence": "high", "reasoning": "The green ` — and then
+    stopped mid-word, roughly 20 visible tokens out of a 1200-token
+    budget. **Newer Gemini models "think" before answering, and that
+    internal reasoning is billed against the SAME `maxOutputTokens`
+    budget as the visible answer.** The budget was being consumed almost
+    entirely by thinking. Every earlier "raise the token limit" fix was
+    treating the symptom.
+
+    Fixed properly:
+    - `thinkingConfig: { thinkingBudget: 0 }` on these calls — they're
+      structured classifications with a schema already enforcing the
+      shape, so chain-of-thought buys nothing. Includes an automatic
+      fallback that drops the parameter and retries if a model rejects it.
+    - Budgets raised anyway as headroom (2000 real / 3000 test+analysis),
+      and the prompt now asks for one-to-two-sentence reasoning.
+    - **Truncation is now detected rather than surfaced**: Gemini's own
+      `finishReason: MAX_TOKENS` triggers one automatic retry at double
+      the budget. An unparseable body is treated the same way, since
+      schema-enforced JSON mode makes "complete but malformed" unlikely.
+      An empty response now reports its finish reason (e.g. SAFETY)
+      instead of crashing on `JSON.parse`.
+    - New `callGeminiJson` centralizes call+parse+recover so all three AI
+      features get this instead of each repeating it.
+    Tested 19/19, including regressions proving network retries and
+    fail-fast-on-403 still behave as before, and that `classifyStrategy`
+    still returns `null` rather than throwing.
+
+    Also fixed a small readability bug the same screenshot exposed
+    (strat-journal-app PR #25): a server error ending mid-sentence ran
+    straight into the appended retry hint, reading as one garbled
+    sentence. The hint now renders on its own line.
+
+    **Lesson worth keeping:** three separate "fixes" here (bigger token
+    limit, then retries, then bigger limit again) were aimed at symptoms
+    because the model's own error text was being discarded before it
+    reached the owner. The fix that actually worked came from finally
+    seeing the raw cut-off response. Surfacing real error detail to the
+    screen was worth more than any amount of defensive guessing.
