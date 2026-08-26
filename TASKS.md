@@ -13,8 +13,12 @@ via the `TASKS.md` commit log.
 project "complete":**
 - Install and live-test the browser extension (task 12) on a real
   computer — owner said "make sure to remind me of this build out before
-  we call this project complete" (2026-08-23). Not yet done as of this
-  note.
+  we call this project complete" (2026-08-23), and on 2026-08-26 asked
+  to be reminded to finish it *that day*; a reminder was scheduled for
+  that afternoon. Not yet done as of this note.
+- Upload a real iPhone screen recording into Test Classification and
+  confirm the AI actually reads it (task 21). Built 2026-08-26 but never
+  tried against the live service.
 - Revisit capturing entry/exit moments when trading from a laptop, not
   just a phone (task 12) — originally asked 2026-08-22, before the
   browser extension existed; now superseded by task 12 itself, kept here
@@ -1138,15 +1142,70 @@ project "complete":**
       picture once. The answer: uploading is one-time storage, but
       examples are *re-sent to the model on every single call* — 20
       example images would mean 20 images transmitted and processed
-      every time a trade closes, not once. **Decision taken: the
-      teaching block is TEXT-ONLY for now** (predicted → actual plus
-      notes), which carries most of the teaching value. Revisiting it
-      with images stays open, and should be measured against cost and
-      latency rather than assumed better.
+      every time a trade closes, not once. **Resolved 2026-08-26**: the
+      owner said pictures are how he best gets the point across, so
+      they now travel — see task 21 for the budget that keeps them from
+      slowing anything down.
 
     Still open on this task: nobody has yet proven it measurably
     improves accuracy. That needs real corrections accumulating over
     real use, then comparing classifications before and after.
+
+21. **Correction charts travel with classifications, on a budget; and
+    the test tool accepts short clips** (added and built 2026-08-26,
+    from the owner's three questions: does a growing correction list
+    slow classification down, can videos be uploaded, and how do we
+    keep pictures from slowing it down). **Status: BUILT AND TESTED
+    2026-08-26 (strat-journal-backend PR #23, strat-journal-app PR #27)
+    — 22 backend checks, 30 browser checks. Not confirmed on a real
+    phone, and the live AI service has not been asked to read a real
+    iPhone clip yet.**
+
+    Answering the first question plainly, since it drove the design:
+    **no, the correction list does not grow without limit.** It was
+    already capped at 20 written examples, so past 20 corrections the
+    request stops getting bigger — new corrections displace old ones
+    rather than piling on. Roughly a second of extra thinking time at
+    the cap, on a call that already takes 10-30 seconds. Pictures are
+    the part that would genuinely have hurt, hence the budget below.
+
+    What was built:
+    - **The shrunk teaching copy.** When feedback is saved, the phone
+      makes a small 512px copy of the picture and sends it alongside
+      the full-size one. The full one is kept for the owner to look at
+      in the log; ONLY the small one is ever re-sent to the AI. A chart
+      pattern is shapes — candle bodies, wicks, drawn lines — and
+      shapes survive shrinking, so a small copy still shows what a
+      correction meant.
+    - **A deliberately narrow picture budget**, separate from the text
+      budget: only CORRECTIONS carry a picture (a confirmed-correct
+      read teaches little its text doesn't already say), at most 4 of
+      them, newest first, under a combined 600KB ceiling. An entry that
+      misses the picture budget still teaches through its words, so
+      nothing is lost, only deferred.
+    - **Labels on every attachment.** Several pictures in one request
+      are otherwise an unlabelled pile with no way to tell which one
+      the question is about. Each attachment now gets a short text
+      label immediately before it, and the past-correction charts say
+      outright "reference only — do NOT classify this one." This was
+      the real risk in attaching examples at all.
+    - **Short clips in the test tool.** The picker takes video as well
+      as stills, previews it playable, and refuses anything over 10MB
+      up front with a plain reason rather than letting a long upload
+      die. The prompt tells the AI to judge the combo from the last
+      completed candles at the END of the clip. Real auto-imported
+      trades stay stills-only — a clip is far too heavy to re-send as a
+      teaching example, so a corrected clip teaches through its written
+      correction instead.
+    - iOS hands .mov files over as "video/quicktime", which is renamed
+      to the "video/mov" the AI's list names — same container, so this
+      is a rename, not a conversion.
+
+    Left unverified, deliberately stated rather than glossed: nobody
+    has yet uploaded a real iPhone screen recording and watched the AI
+    read it. That is the one thing worth doing first, since a rejection
+    there would show up as a failed classification rather than anything
+    subtler.
 
 20. **Let the Test Classification tool do the REAL 13-timeframe FTFC
     lookup instead of reading FTFC visually** (added 2026-08-23, from
