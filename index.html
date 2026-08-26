@@ -54,11 +54,21 @@
     --bull-dim: #0B3D28;
     --bear: #C4453F;
     --bear-dim: #3A1A18;
-    /* Kept the name --amber so every existing use becomes gold with no
-       churn; the value is now a true metallic gold rather than a yellow. */
-    --amber: #D9A93C;
-    --gold: #D9A93C;
-    --gold-dim: #332812;
+    /* Trophy gold, not mustard. A single flat swatch always reads as
+       yellow no matter how you pick it — what makes metal look like
+       metal is the RANGE across it: a pale champagne highlight, a
+       saturated core, and a deep shadow, plus a glow so it looks lit
+       rather than painted. Hence four values and a gradient instead of
+       one hex code. */
+    --gold: #F7C948;
+    --gold-lite: #FFEEB0;
+    --gold-deep: #A9761C;
+    --gold-dim: #3A2C0E;
+    --gold-grad: linear-gradient(150deg, #FFEEB0 0%, #F7C948 34%, #C9931F 58%, #FFE08A 78%, #F7C948 100%);
+    --gold-glow: 0 0 14px rgba(247,201,72,0.45);
+    /* Kept the name --amber so every existing use picks up the new gold
+       with no churn. */
+    --amber: #F7C948;
     --mono: "SF Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif;
     /* Heavy condensed uppercase for headlines and a serif italic for the
@@ -78,6 +88,16 @@
   /* A quiet serif italic aside — the reference design's second voice,
      used for the sentence under a headline rather than for anything you
      need to act on. */
+  /* Paints the gold gradient THROUGH the letterforms and lights it from
+     behind. background-clip:text is what turns a flat fill into
+     something that catches the light across a glyph. */
+  .metal-gold{
+    background:var(--gold-grad);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    filter:drop-shadow(0 0 9px rgba(247,201,72,0.4));
+  }
+
   .aside{font-family:var(--serif); font-style:italic; font-size:13.5px; color:var(--text-dim); line-height:1.5;}
 
   /* Numbered index row: rank, heavy condensed name, italic aside, and
@@ -95,9 +115,9 @@
     padding:14px 16px 8px 16px; display:flex; align-items:center; justify-content:space-between;
   }
   .brand{display:flex; align-items:center; gap:10px;}
-  .brand .mark{width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg, var(--bull), var(--gold)); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; color:#080B09; font-size:13px;}
+  .brand .mark{width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg, var(--bull), var(--gold-lite)); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; color:#080B09; font-size:13px;}
   .brand .name{font-family:var(--display); font-weight:400; letter-spacing:1px; font-size:19px; text-transform:uppercase;}
-  .brand .sub{font-size:9px; color:var(--gold); letter-spacing:2.6px; text-transform:uppercase; margin-top:-2px;}
+  .brand .sub{font-size:9px; color:var(--gold-lite); text-shadow:0 0 10px rgba(247,201,72,0.35); letter-spacing:2.6px; text-transform:uppercase; margin-top:-2px;}
 
   .ladder{display:flex; gap:2px; padding:0 16px 10px 16px;}
   .ladder .seg{flex:1; height:4px; border-radius:2px; background:var(--border);}
@@ -112,7 +132,11 @@
     font-size:11px; text-transform:uppercase; letter-spacing:2.4px; color:var(--text-dim);
     margin-bottom:14px; display:flex; align-items:center; gap:10px; font-weight:700;
   }
-  .card h3::before{content:""; width:22px; height:1px; background:var(--gold); flex:none;}
+  .card h3::before{
+    content:""; width:22px; height:2px; flex:none; border-radius:1px;
+    background:linear-gradient(90deg, var(--gold-deep), var(--gold-lite) 55%, var(--gold));
+    box-shadow:var(--gold-glow);
+  }
 
   .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .stat{background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:14px 12px;}
@@ -139,7 +163,10 @@
      metadata. Green stays reserved for gain, so nothing else may borrow
      it. */
   .badge.long, .badge.short{background:transparent; color:var(--text-dim); border:1px solid var(--border);}
-  .badge.setup{background:var(--gold-dim); color:var(--gold);}
+  .badge.setup{
+    background:var(--gold-dim); color:var(--gold-lite);
+    border:1px solid rgba(247,201,72,0.45); box-shadow:0 0 10px rgba(247,201,72,0.18) inset;
+  }
 
   label{display:block; font-size:10px; color:var(--text-dim); margin:14px 0 6px 0; font-weight:700; text-transform:uppercase; letter-spacing:1.6px;}
   input, select, textarea{
@@ -208,9 +235,15 @@
   }
   .intro.out{opacity:0; pointer-events:none;}
   .intro .mark{
-    font-size:44px; line-height:1; color:var(--gold); margin-bottom:18px;
+    font-size:52px; line-height:1; margin-bottom:18px;
     opacity:0; transform:translateY(10px); animation:introRise 700ms 80ms ease forwards;
   }
+  /* Applied only when the symbol is a plain character. An emoji is
+     already a full-colour picture — clipping a gradient through it would
+     strip its colour and leave a gold blob — so an emoji keeps its own
+     colours and just gets lit from behind instead. */
+  .intro .mark.metal-gold{filter:drop-shadow(0 0 22px rgba(247,201,72,0.55));}
+  .intro .mark.emoji{filter:drop-shadow(0 0 26px rgba(247,201,72,0.5));}
   .intro .count{
     font-family:var(--display); font-size:64px; line-height:0.9; letter-spacing:1px;
     color:var(--text); font-weight:400;
@@ -224,7 +257,8 @@
   }
   .intro .rule i{
     position:absolute; inset:0 auto 0 0; width:0%;
-    background:linear-gradient(90deg, var(--bull), var(--gold));
+    background:linear-gradient(90deg, var(--bull), var(--gold-lite));
+    box-shadow:0 0 12px rgba(247,201,72,0.5);
   }
   .intro .line{
     font-size:10px; text-transform:uppercase; letter-spacing:4px; color:var(--text-dim);
@@ -265,7 +299,7 @@
   .pill.sel{background:var(--amber); color:#241C05; border-color:var(--amber); font-weight:700;}
 
   .ai-msg{background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:12px; margin-bottom:10px; font-size:13px; line-height:1.5;}
-  .ai-msg .tag{font-size:10px; text-transform:uppercase; letter-spacing:1.6px; color:var(--gold); font-weight:800; margin-bottom:5px;}
+  .ai-msg .tag{font-size:10px; text-transform:uppercase; letter-spacing:1.6px; color:var(--gold-lite); text-shadow:0 0 9px rgba(247,201,72,0.3); font-weight:800; margin-bottom:5px;}
   .spin{width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--amber); border-radius:50%; animation:sp 0.7s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
   @keyframes sp{to{transform:rotate(360deg);}}
 
@@ -360,7 +394,7 @@
      so it is already on screen before the app renders — an opening that
      appears a moment AFTER the page does is not an opening. -->
 <div class="intro" id="introScreen" style="display:none;" onclick="skipIntro()">
-  <div class="mark" id="introMark">◆</div>
+  <div class="mark metal-gold" id="introMark">◆</div>
   <div class="count" id="introCount">00</div>
   <div class="rule"><i id="introFill"></i></div>
   <div class="line" id="introLine">OPENING THE JOURNAL</div>
@@ -382,7 +416,14 @@
       if(cfg && cfg.on === false) return;
       var el = document.getElementById('introScreen');
       if(cfg){
-        if(cfg.symbol) document.getElementById('introMark').textContent = cfg.symbol;
+        if(cfg.symbol){
+          var mk = document.getElementById('introMark');
+          mk.textContent = cfg.symbol;
+          // An emoji is already a full-colour picture; painting a gold
+          // gradient through it would strip its colour to a gold blob.
+          var isEmoji = /\p{Extended_Pictographic}/u.test(cfg.symbol);
+          mk.className = 'mark ' + (isEmoji ? 'emoji' : 'metal-gold');
+        }
         if(cfg.line != null) document.getElementById('introLine').textContent = cfg.line;
         if(cfg.sub != null) document.getElementById('introSub').textContent = cfg.sub; // '' is a real choice — he may not want a line at all
       }
@@ -769,6 +810,16 @@ function saveIntroCfg(cfg){ localStorage.setItem('strat_intro', JSON.stringify(c
 // Runs the counter and the filling rule together, then fades out. Uses
 // the clock rather than a fixed number of steps so it lasts the same
 // time on a slow phone as a fast one.
+// Sets the opening's symbol and picks its treatment. Kept in one place
+// so the preview and the real opening can never disagree about it.
+function setIntroMark(symbol){
+  const mk = document.getElementById('introMark');
+  if(!mk) return;
+  mk.textContent = symbol;
+  const isEmoji = /\p{Extended_Pictographic}/u.test(symbol);
+  mk.className = 'mark ' + (isEmoji ? 'emoji' : 'metal-gold');
+}
+
 let introTimer = null;
 function playIntro(ms){
   const el = document.getElementById('introScreen');
@@ -802,7 +853,7 @@ function skipIntro(){ clearTimeout(introTimer); closeIntro(); }
 
 function previewIntro(){
   const ms = parseInt(document.getElementById('f_introMs').value, 10) || 2000;
-  document.getElementById('introMark').textContent = document.getElementById('f_introSymbol').value.trim() || INTRO_DEFAULTS.symbol;
+  setIntroMark(document.getElementById('f_introSymbol').value.trim() || INTRO_DEFAULTS.symbol);
   document.getElementById('introLine').textContent = document.getElementById('f_introLine').value.trim();
   document.getElementById('introSub').textContent = document.getElementById('f_introSub').value.trim();
   playIntro(ms);
