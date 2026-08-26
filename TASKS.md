@@ -1079,9 +1079,10 @@ project "complete":**
 
 19. **Feed Test Classification corrections back into real trade
     classification ("the journal studies off its own test material")**
-    (added 2026-08-23, owner's own idea). **Status: Designed and agreed
-    in principle, NOT built — the owner chose to finish task 18's
-    interface items first.**
+    (added 2026-08-23, owner's own idea). **Status: BUILT AND TESTED
+    2026-08-23 (PR #22 on strat-journal-backend) — 20/20 checks. Not yet
+    proven to improve real-world accuracy, which needs corrections
+    accumulating over real use.**
 
     The owner's framing was that the journal should "update/upgrade
     itself + its memory" from what gets uploaded into Test
@@ -1104,30 +1105,48 @@ project "complete":**
     `userNotes` field carries the most teaching value since it explains
     *why* something was wrong.
 
-    Design sketch (not built):
-    - On each real trade classification, pull the correction log and
-      include it in the prompt as reference examples.
-    - Prioritize INCORRECT entries (most informative) and recent ones;
-      cap the count — sending hundreds would make every classification
-      slow and expensive.
-    - Same for the Test Classification tool itself, so it visibly
-      improves as it's fed.
+    What was actually built (2026-08-23):
+    - `aiTestFeedback.js` gained `getTeachingExamples()`, which reads
+      the correction log and picks which entries travel with the next
+      classification. Entries marked WRONG get most of the budget
+      (newest first) because they show exactly where the model's
+      reading diverges from the owner's; a few confirmed-correct ones
+      ride along so the model also sees what it already reads right.
+      Hard cap of 20 total (15 wrong + up to 5 right).
+    - `aiClient.js` gained `formatTeachingExamples()` and
+      `loadTeachingBlock()`, which turn those entries into a plain-text
+      "THE TRADER'S OWN PAST CORRECTIONS — study these before
+      answering" block, spelling out for each one what the AI read, what
+      the owner said it actually was, across all three layers (combo,
+      FTFC, Broadening) plus his typed notes.
+    - That block is appended to BOTH prompts: `runClassification()`
+      (the real auto-imported trades) and `testClassifyStrategy()` (the
+      sandbox tool), so the tool visibly improves as it's fed and real
+      trades inherit the same accumulated knowledge.
+    - Loading is fault-tolerant: if the correction log can't be read,
+      classification still runs, just without the examples, rather than
+      failing the trade.
 
-    Two real cautions raised with the owner:
+    Two real cautions raised with the owner (both still apply):
     - **A wrong correction propagates.** Because corrections ride along
       with every future request, one bad correction is not one bad
       trade — it's one bad lesson repeated on every classification until
-      removed. Task 18's new clickable log exists partly to make
+      removed. Task 18's clickable log exists partly to make
       reviewing/auditing these practical.
     - **Including chart IMAGES as examples is the expensive part**, and
       the owner reasonably asked why, given he already uploaded the
       picture once. The answer: uploading is one-time storage, but
       examples are *re-sent to the model on every single call* — 20
       example images would mean 20 images transmitted and processed
-      every time a trade closes, not once. Start with the text
-      corrections (predicted → actual plus notes), which carry most of
-      the teaching value, and measure whether adding images earns its
-      cost.
+      every time a trade closes, not once. **Decision taken: the
+      teaching block is TEXT-ONLY for now** (predicted → actual plus
+      notes), which carries most of the teaching value. Revisiting it
+      with images stays open, and should be measured against cost and
+      latency rather than assumed better.
+
+    Still open on this task: nobody has yet proven it measurably
+    improves accuracy. That needs real corrections accumulating over
+    real use, then comparing classifications before and after.
 
 20. **Let the Test Classification tool do the REAL 13-timeframe FTFC
     lookup instead of reading FTFC visually** (added 2026-08-23, from
