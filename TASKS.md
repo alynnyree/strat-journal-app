@@ -837,8 +837,25 @@ project "complete":**
 16. **Show trade Notes on the main trade list, not just inside the Edit
     screen** (Gap 3, same source as task 15). Owner's spreadsheet has
     Notes as a column visible at a glance; the app saves Notes but only
-    shows them after tapping into a trade's Edit screen. **Status: Not
-    started.**
+    shows them after tapping into a trade's Edit screen. **Status: BUILT
+    AND TESTED 2026-08-27 (strat-journal-app PR #37) — 15 browser
+    checks.**
+
+    Notes now sit on the trade card, in the reading typeface rather than
+    the monospaced one the figures use, with the trader's own line breaks
+    kept. Trimmed to three lines and tapped to open, so one long note
+    cannot push every other trade off screen.
+
+    Two things worth remembering from building it:
+    - The trim must be applied to the TEXT, not to the padded box. Clamp
+      the box and a sliver of the next line shows through inside its own
+      padding, which reads as a rendering fault. Found by looking at a
+      screenshot, then pinned by a check asserting the trimmed height is
+      exactly three lines.
+    - Notes are free text and were about to be dropped into the page
+      unescaped — a note containing "<" would have silently swallowed the
+      rest of the card. There was no escaping helper anywhere in the
+      frontend before this.
 
     (Gap 1 from that same comparison — strategy labels too broad, no way
     to note which timeframe a setup happened on — was already the exact
