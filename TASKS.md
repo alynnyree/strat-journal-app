@@ -9,6 +9,24 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+**Parked, to come back to (owner's own call, 2026-08-27):**
+- **Rolling the app out to the public.** Discussed at length; the owner
+  asked to park it and return later. The one thing worth carrying
+  forward: what exists today is a single-person app (his Schwab login,
+  his one password, trades in his phone's own storage). Serving strangers
+  needs accounts, isolated data, payment, a company, and confirmation
+  that Schwab's developer terms permit acting for other people's
+  accounts — more work than everything built so far combined. The cheap
+  step that should come FIRST is a one-page site to see whether 100 Strat
+  traders will give an email address, before any of that is built.
+- **A "which method do you trade" pack**, rather than a Strat on/off
+  toggle (owner's idea, reshaped 2026-08-27). Only three things are
+  method-specific: the setup list, the stop rule, and which context gets
+  computed. All three already live in one place each, so the door is
+  open. **Deliberately NOT built** — it only has value once a
+  non-Strat user exists, and building it now would mean every future
+  feature has to work twice for a customer who does not exist.
+
 **Standing reminders from the owner — check before ever calling this
 project "complete":**
 - Install and live-test the browser extension (task 12) on a real
@@ -775,7 +793,46 @@ project "complete":**
     untracked here). Owner's spreadsheet writes out the real stop rule in
     words ("30% against trade," "682.67 (50% of mark of trigger candle),"
     "10%-15% stop"); the app's Stop field only holds a single number, with
-    nowhere to record *why* that's the stop. **Status: Not started.**
+    nowhere to record *why* that's the stop. **Status: BUILT AND TESTED
+    2026-08-27 (strat-journal-backend PR #26, strat-journal-app PR #36) —
+    30 + 25 backend checks, 21 browser checks. Not yet run against live
+    Schwab data or a real trade.**
+
+    Built larger than the task as written. The owner offered his own
+    rules, which turned out to be ONE rule rather than nine: the stop is
+    the bottom of the candle before the entry (the top, if Short), or the
+    halfway point of that candle when it was a large one. So the app does
+    not merely record the rule — it applies it and works the stop out
+    itself.
+
+    Why that matters more than the original task: Schwab cannot supply a
+    Strat stop, because it is a line drawn on the underlying's chart and
+    never an order sent to the broker. Every auto-imported trade has
+    therefore arrived with the stop blank — and since realized R:R is
+    computed from the entry-to-stop distance, **realized R:R has been
+    empty on essentially every automatically synced trade.** That is the
+    single most useful number in the journal, missing from almost all of
+    it. This fills it in.
+
+    Decisions taken, each flagged to the owner rather than buried:
+    - **Short mirrors Long** (bottom becomes top). He described the long
+      side only; this is an assumption, not his words.
+    - **"Large" is measured against the MEDIAN range of the previous 20
+      bars**, not the mean — one freak candle would drag a mean up and
+      make everything after it look normal. Threshold starts at 1.5x and
+      is a setting, because "rather large" is his judgement and no number
+      chosen here would be his.
+    - **His timeframe varies**, so resolution runs most-specific first:
+      a timeframe set on the trade, then one set for that setup, then his
+      general default. Per-setup defaults exist because the timeframe
+      plausibly varies WITH the setup rather than at random.
+    - Bars group against the 9:30 ET session open, so an hourly bar runs
+      9:30-10:30 the way a charting app draws it.
+    - Never overwrites a stop he typed himself.
+
+    Still open: he has not yet checked a computed stop against a trade he
+    remembers. That is the next thing, and it is his call whether the
+    1.5x threshold is right.
 
 16. **Show trade Notes on the main trade list, not just inside the Edit
     screen** (Gap 3, same source as task 15). Owner's spreadsheet has
