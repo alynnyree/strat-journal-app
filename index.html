@@ -943,9 +943,10 @@ function showView(name){
   document.querySelectorAll('.navbar .item').forEach(i=>i.classList.toggle('active', i.dataset.view===name));
   if(name==='dashboard') renderDashboard();
   if(name==='journal') renderJournal();
-  // A hidden tab has no size, so nothing in it can be "in view" — its
-  // sections have to be re-checked once it is actually on screen.
+  // A hidden tab has no size, so nothing in it could be measured. Now
+  // that it is on screen, bind and reveal whatever is actually visible.
   revealScan();
+  revealSweep();
 }
 
 // ---- Stop Loss Rule --------------------------------------------------
@@ -1196,13 +1197,53 @@ function saveIntroSettings(){
 
 // ---- scroll transitions ----
 let revealObserver = null;
+
+// Never hides anything that is already on screen.
+//
+// This caused a real failure worth not repeating. Sections were being
+// bound while their tab was still hidden, so they were set to invisible
+// and then waited on a browser notification that never arrived for
+// them. The result was a Journal tab holding 233 trades that rendered
+// perfectly and displayed as a blank page — a decoration silently hid
+// the entire contents of the app.
+//
+// The rule now: anything on screen at the moment it is bound is
+// revealed immediately with no animation, and anything in a tab that is
+// not open yet is not touched at all until that tab is shown. Only
+// things genuinely below the fold get hidden and animated in. Content
+// being visible always beats content arriving prettily.
 function revealScan(){
   if(!revealObserver) return;
   document.querySelectorAll('.card, .idx-row').forEach(el=>{
     if(el.dataset.revealBound) return;
+    // offsetParent is null for anything inside a hidden tab. Leave it
+    // alone — it gets bound when that tab opens and its position is real.
+    if(!el.offsetParent) return;
     el.dataset.revealBound = '1';
     el.classList.add('reveal');
-    revealObserver.observe(el);
+    if(el.getBoundingClientRect().top < window.innerHeight){
+      el.classList.add('in');
+    } else {
+      revealObserver.observe(el);
+    }
+  });
+}
+
+// A second, independent path to becoming visible. If the browser's
+// notification is ever missed, scrolling or opening a tab still reveals
+// things — the animation must never be the ONLY way content appears.
+let revealSweepQueued = false;
+function revealSweep(){
+  if(revealSweepQueued) return;
+  revealSweepQueued = true;
+  requestAnimationFrame(()=>{
+    revealSweepQueued = false;
+    if(!document.body.classList.contains('motion-on')) return;
+    revealScan();
+    document.querySelectorAll('.reveal:not(.in)').forEach(el=>{
+      const r = el.getBoundingClientRect();
+      if(r.top < window.innerHeight && r.bottom > 0) el.classList.add('in');
+    });
   });
 }
 
@@ -1231,6 +1272,10 @@ function applyMotionSetting(cfg){
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
   }
   revealScan();
+  // A second, independent path to becoming visible, so a missed
+  // notification can never leave a section stuck invisible.
+  window.addEventListener('scroll', revealSweep, { passive: true });
+  window.addEventListener('resize', revealSweep, { passive: true });
 }
 
 // ---- Timeframe grid ----
@@ -3218,17 +3263,45 @@ async function getMyTrades(){
   }
   btn.disabled = true;
   const original = btn.textContent;
+  const before = loadTrades().length;
   try{
-    // First time only: pull the whole history. Afterwards just collect
-    // what is new — the app remembers which it needs, so he doesn't.
-    if(!localStorage.getItem(BACKFILL_DONE_KEY)){
-      btn.textContent = 'Getting your history…';
-      showStatus('info', 'Getting your full trade history — this can take a moment the first time.');
-      await runBackfillNow(true);
-      localStorage.setItem(BACKFILL_DONE_KEY, '1');
-    }
+    // ALWAYS re-asks Schwab for the full history, every time. An earlier
+    // version did this only once and then remembered it was done — which
+    // meant that if a run missed trades, there was no way left to go and
+    // get them except a hidden Reset button. A button whose whole job is
+    // "force it" must actually force it.
+    btn.textContent = 'Asking Schwab…';
+    showStatus('info', 'Asking Schwab for your full trade history — this can take a minute.');
+    await runBackfillNow(true);
+    localStorage.setItem(BACKFILL_DONE_KEY, '1');
+
+    // The backfill hands trades to the queue in the background, so one
+    // immediate look can miss them. Keep checking for a while rather
+    // than reporting "up to date" on a queue that is still filling —
+    // that false all-clear is what made this feel broken.
+    // The backfill fills the queue in the background, so one immediate
+    // look can miss everything. Keep checking for a few seconds rather
+    // than reporting "up to date" on a queue that is still filling —
+    // that false all-clear is what made this feel broken. Stops as soon
+    // as a round brings nothing new.
     btn.textContent = 'Collecting…';
-    await pollBackend(false);
+    let found = 0;
+    for(let attempt = 0; attempt < 4; attempt++){
+      const countBefore = loadTrades().length;
+      await pollBackend(true);
+      const gained = loadTrades().length - countBefore;
+      found = loadTrades().length - before;
+      if(attempt > 0 && gained === 0) break;
+      await new Promise(r=>setTimeout(r, 1800));
+    }
+    renderJournal(); renderDashboard();
+    const total = loadTrades().length;
+    if(found > 0){
+      showStatus('ok', `${found} trade${found===1?'':'s'} added. You now have ${total} in your journal.`);
+    } else {
+      showStatus('ok', `Schwab had nothing new — still ${total} trades. If you know a trade is missing, it may be older than the history Schwab will hand back.`);
+    }
+    setConnState(true, `Connected · ${total} trade${total===1?'':'s'} in your journal`);
   } finally {
     btn.disabled = false;
     btn.textContent = original;
@@ -3278,10 +3351,14 @@ async function pollBackend(silent=false){
     const pending = data.pending||[];
     if(pending.length){
       const imported = await autoImportPendingTrades(url, pending);
-      // Always surface this, silent or not — a trade actually landing in
-      // the Journal is worth knowing about regardless of how the check
-      // was triggered.
-      showStatus('ok', `${imported} trade(s) auto-imported to your Journal.`);
+      // Only speak up when something actually landed. "0 trade(s)
+      // auto-imported" reads as a failure, and worse, it used to
+      // overwrite the summary the Get My Trades button had just written.
+      if(imported > 0){
+        showStatus('ok', `${imported} trade(s) auto-imported to your Journal.`);
+      } else if(!silent){
+        showStatus('ok', 'No new trades — you\'re up to date.');
+      }
       log('syncLog', `${imported} trade(s) auto-imported to Journal`);
     } else if(!silent) {
       showStatus('ok', 'No new trades — you\'re up to date.');
