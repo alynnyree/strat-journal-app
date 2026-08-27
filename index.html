@@ -386,6 +386,28 @@
   .trade-card .tc-pnl{font-weight:800; font-size:17px;}
   .trade-card .tc-badges{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
   .trade-card .tc-details{font-size:11.5px; color:var(--text-dim); font-family:var(--mono); display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; margin-bottom:12px;}
+  /* Notes are the one part of a trade written in sentences, so they get
+     the reading typeface rather than the monospaced one the figures use —
+     a paragraph set in mono reads like a receipt. Clamped to three lines
+     so one long note cannot push every other trade off the screen; tap to
+     open it out. */
+  .trade-card .tc-notes{
+    background:var(--panel); border-left:2px solid var(--gold); border-radius:0 4px 4px 0;
+    padding:8px 10px; margin-bottom:12px; cursor:pointer;
+  }
+  .trade-card .tc-notes-label{
+    display:block; font-family:var(--sans); font-size:9px; letter-spacing:1.6px;
+    text-transform:uppercase; color:var(--text-dim); margin-bottom:4px;
+  }
+  /* The clamp goes on the TEXT, not on the padded box. Clamping the box
+     lets a sliver of the next line show through inside its own padding,
+     which looks like a rendering fault rather than a deliberate trim. */
+  .trade-card .tc-notes-body{
+    font-size:12.5px; line-height:1.5; color:var(--text); white-space:pre-wrap;
+  }
+  .trade-card .tc-notes.clamped .tc-notes-body{
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
   .trade-card .tc-actions{display:flex; gap:8px;}
   .trade-card .tc-actions button{
     flex:1; padding:12px 4px; border-radius:8px; font-size:13px; font-weight:700;
@@ -2415,6 +2437,19 @@ function renderDashboard(){
   }
 }
 
+// Notes are free text the trader typed. Dropped into the page unescaped,
+// a note containing "<" would silently swallow the rest of the card — so
+// it is escaped before it ever reaches the markup.
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function toggleTradeNotes(el){
+  el.classList.toggle('clamped');
+}
+
 function renderJournal(){
   const trades = loadTrades();
   const list = document.getElementById('journalList');
@@ -2456,6 +2491,7 @@ function renderJournal(){
         <div>R:R Plan: ${t.rrPlanned!=null?t.rrPlanned.toFixed(1):'—'}</div>
         <div>Realized R:R: ${t.realizedRR!=null?t.realizedRR.toFixed(2)+':1':'—'}</div>
       </div>
+      ${(t.notes||'').trim() ? `<div class="tc-notes clamped" onclick="toggleTradeNotes(this)"><span class="tc-notes-label">Notes</span><div class="tc-notes-body">${escapeHtml(t.notes.trim())}</div></div>` : ''}
       <div class="tc-actions">
         ${t.replayData ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
         <button onclick="editTrade('${t.id}')">✎ Edit</button>
