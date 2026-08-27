@@ -509,7 +509,11 @@
   </div>
   <div id="connBadge" style="font-size:11px; color:var(--text-dim);"><span class="conn-dot off"></span>Not connected</div>
 </div>
-<div id="setupDebug" style="font-size:10.5px; color:var(--text-dim); padding:2px 16px 6px 16px;"></div>
+<!-- Kept in the page but hidden. It was added to chase a specific
+     problem with settings not saving on the phone, and that problem is
+     long fixed — but the wiring below still fills it in, so it stays
+     available if that ever needs diagnosing again. -->
+<div id="setupDebug" style="display:none; font-size:10.5px; color:var(--text-dim); padding:2px 16px 6px 16px;"></div>
 <div class="ladder" id="heroLadder"></div>
 
 <main>
@@ -550,21 +554,45 @@
     <div class="card">
       <h3>Schwab Connection</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5; margin-bottom:10px;">
-        A background job on your backend checks Schwab every few minutes on its own —
-        whether your phone is open or not — and matched trades are pulled straight
-        into your Journal below the next time you open the app. No tagging step.
+        Your trades come in on their own. The server watches Schwab every few
+        minutes whether your phone is open or not, and the app collects
+        anything new every time you open it — so normally there is nothing
+        here to press.
       </div>
-      <label>Backend URL</label>
-      <input id="f_backendUrl" placeholder="https://your-backend.example.com">
-      <label>App Key</label>
-      <input id="f_appKey" placeholder="the APP_SECRET value from your Render environment variables">
-      <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">Required for screenshot matching and AI Analyst — same value as your backend's APP_SECRET.</div>
-      <button class="secondary" id="btnConnect" onclick="connectBackend()">Connect</button>
-      <button class="secondary" id="btnRefresh" onclick="pollBackend()">Check for New Trades</button>
-      <button class="secondary" id="btnBackfill" onclick="runBackfillNow()">Import Trade History (one-time)</button>
-      <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" id="btnReset" onclick="resetAndReimport()">Reset &amp; Re-import Trades</button>
+      <div id="connState" style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;">
+        <span class="conn-dot off" id="connStateDot"></span>
+        <span id="connStateText">Not connected</span>
+      </div>
+
+      <!-- The one button. Everything the four old buttons did, with the
+           app deciding which is needed instead of asking. -->
+      <button class="primary" id="btnGetTrades" onclick="getMyTrades()" style="margin-top:0;">Get My Trades</button>
       <div class="status-banner" id="syncStatus"></div>
-      <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
+
+      <!-- Setup, tucked away. These are things you fill in once and never
+           touch again, so they do not belong on the screen you look at
+           every day. Opens itself only when there is nothing connected. -->
+      <div id="connSettingsToggle" onclick="toggleConnSettings()" style="margin-top:14px; cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+        <span id="connSettingsArrow">›</span> Connection settings
+      </div>
+      <div id="connSettings" style="display:none; margin-top:10px;">
+        <label>Backend URL</label>
+        <input id="f_backendUrl" placeholder="https://your-backend.example.com">
+        <label>App Key</label>
+        <input id="f_appKey" placeholder="the APP_SECRET value from your Render environment variables">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">Required for screenshot matching and AI Analyst — same value as your backend's APP_SECRET.</div>
+        <button class="secondary" id="btnConnect" onclick="connectBackend()">Save &amp; Connect</button>
+        <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" id="btnReset" onclick="resetAndReimport()">Reset &amp; Re-import Trades</button>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+          Only needed after a change to how trades are matched — it rebuilds
+          everything from Schwab.
+        </div>
+        <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
+      </div>
+      <!-- Kept so the old code paths that disable it still work, but no
+           longer something to find and press. -->
+      <button id="btnRefresh" onclick="pollBackend()" style="display:none;"></button>
+      <button id="btnBackfill" onclick="runBackfillNow()" style="display:none;"></button>
     </div>
 
     <div class="card">
@@ -3140,17 +3168,105 @@ async function connectBackend(){
     const r = await fetch(url.replace(/\/$/,'')+'/health');
     if(!r.ok) throw new Error('Server responded with status '+r.status);
     const d = await r.json();
-    document.getElementById('connBadge').innerHTML = '<span class="conn-dot on"></span>Connected';
+    const n = loadTrades().length;
+    setConnState(true, `Connected · ${n} trade${n === 1 ? '' : 's'} in your journal`);
     showStatus('ok', 'Connected to your backend.');
     log('syncLog', 'Connected: '+JSON.stringify(d));
     pollBackend();
   }catch(e){
-    document.getElementById('connBadge').innerHTML = '<span class="conn-dot off"></span>Not connected';
+    // Says plainly that the trades already saved are unaffected. Losing
+    // the connection does not lose the journal, and seeing "not
+    // connected" without that reassurance is exactly what makes someone
+    // think they have to re-import everything.
+    const saved = loadTrades().length;
+    setConnState(false, saved
+      ? `Not connected — your ${saved} saved trade${saved === 1 ? '' : 's'} are still here`
+      : 'Not connected');
     showStatus('err', `Couldn't reach that backend (${e.message}). Have you deployed it yet? See the README in the backend zip — this needs a live Render/Railway URL, not the zip file itself.`);
     log('syncLog', 'Could not reach backend: '+e.message);
   }
   setBusy('btnConnect', false);
 }
+// ---- One button, and no button at all in the normal case ------------
+// There used to be four buttons here that all sounded like "get my
+// trades" — Connect, Check for New Trades, Import Trade History, and
+// Reset & Re-import — and choosing between them was a decision the owner
+// should never have had to make. This works out which is needed.
+const BACKFILL_DONE_KEY = 'strat_backfilled';
+
+function connSettingsOpen(){
+  return document.getElementById('connSettings').style.display !== 'none';
+}
+
+function toggleConnSettings(force){
+  const box = document.getElementById('connSettings');
+  const arrow = document.getElementById('connSettingsArrow');
+  const open = force === undefined ? !connSettingsOpen() : force;
+  box.style.display = open ? 'block' : 'none';
+  if(arrow) arrow.textContent = open ? '⌄' : '›';
+}
+
+async function getMyTrades(){
+  const url = backendUrl();
+  const btn = document.getElementById('btnGetTrades');
+  if(!url){
+    // Nothing to get trades FROM — open the setup rather than showing an
+    // error he can do nothing about.
+    toggleConnSettings(true);
+    showStatus('err', 'Enter your backend address below first, then tap Save & Connect.');
+    return;
+  }
+  btn.disabled = true;
+  const original = btn.textContent;
+  try{
+    // First time only: pull the whole history. Afterwards just collect
+    // what is new — the app remembers which it needs, so he doesn't.
+    if(!localStorage.getItem(BACKFILL_DONE_KEY)){
+      btn.textContent = 'Getting your history…';
+      showStatus('info', 'Getting your full trade history — this can take a moment the first time.');
+      await runBackfillNow(true);
+      localStorage.setItem(BACKFILL_DONE_KEY, '1');
+    }
+    btn.textContent = 'Collecting…';
+    await pollBackend(false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// Runs quietly whenever the app opens. This is the real answer to "I
+// don't want to upload my trades all the time" — in normal use there is
+// nothing to press, because it has already happened by the time the
+// Journal is on screen. Failures stay silent: a dropped signal on
+// startup is not something to interrupt him about, and the button is
+// still there if he wants to force it.
+async function autoCollectOnOpen(){
+  const url = backendUrl();
+  if(!url){ setConnState(false, 'Not connected'); toggleConnSettings(true); return; }
+  setConnState(true, 'Connected — checking for new trades…');
+  try{
+    await pollBackend(true);
+    const n = loadTrades().length;
+    setConnState(true, `Connected · ${n} trade${n === 1 ? '' : 's'} in your journal`);
+  }catch(e){
+    setConnState(true, 'Connected — could not reach the server just now');
+  }
+}
+
+// One source of truth for "am I connected". There were two indicators —
+// the badge in the corner and the line on the Journal card — driven by
+// different things, so the corner could read "Not connected" while the
+// card read "Connected". Two contradicting answers is worse than one.
+function setConnState(connected, text){
+  const dot = document.getElementById('connStateDot');
+  const label = document.getElementById('connStateText');
+  if(dot) dot.className = 'conn-dot ' + (connected ? 'on' : 'off');
+  if(label) label.textContent = text;
+  const badge = document.getElementById('connBadge');
+  if(badge) badge.innerHTML = `<span class="conn-dot ${connected ? 'on' : 'off'}"></span>${connected ? 'Connected' : 'Not connected'}`;
+}
+
 async function pollBackend(silent=false){
   const url = backendUrl();
   if(!url){ if(!silent) showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
@@ -3241,10 +3357,10 @@ async function resetAndReimport(){
     setBusy('btnReset', false);
   }
 }
-async function runBackfillNow(){
+async function runBackfillNow(quiet=false){
   const url = backendUrl();
   if(!url){ showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
-  setBusy('btnBackfill', true);
+  if(!quiet) setBusy('btnBackfill', true);
   showStatus('info', 'Requesting historical backfill — this can take a moment...');
   log('syncLog', 'Requesting historical backfill...');
   try{
@@ -3265,7 +3381,7 @@ async function runBackfillNow(){
     showStatus('err', `Backfill failed to start (${e.message}). Make sure you've completed Schwab login (/auth/schwab/login) first.`);
     log('syncLog', 'Backfill failed to start: '+e.message);
   }
-  setBusy('btnBackfill', false);
+  if(!quiet) setBusy('btnBackfill', false);
 }
 async function autoFillEnrichment(){
   const url = backendUrl();
@@ -3524,6 +3640,7 @@ function wipeData(){
 loadRiskSettings();
 loadStopRuleSettings();
 renderDashboard();
+autoCollectOnOpen();
 
 // Presentation last, so a problem here can never stop the journal itself
 // from loading — the app is fully usable before any of this runs.
