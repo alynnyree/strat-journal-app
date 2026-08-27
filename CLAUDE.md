@@ -191,6 +191,27 @@ Uses **The Strat**. Key concepts the code implements:
   purges dead legs and prefers same-day matches.
 - **iOS Safari measures container size before a fullscreen modal finishes
   laying out.** Chart sizing needs a short delayed re-measure.
+- **A fade-in-on-scroll effect hid the entire Journal.** Sections were
+  bound to the effect while their tab was still hidden, so they were set
+  to invisible and then waited on a visibility notification that never
+  arrived for them. Result: a Journal holding 233 trades, every one
+  stored and every one rendered, displaying as a blank page — and the
+  owner reasonably concluding his trades had never imported. **Rule: a
+  visual effect may never be the only thing standing between the user
+  and their content.** Anything already on screen is revealed
+  immediately with no animation; only things genuinely below the fold
+  are hidden; and there is a second, independent sweep on scroll so a
+  missed notification cannot strand a section. Applies to any future
+  animation, not just this one.
+- **An edit that fails partway can write nothing while its follow-up
+  edits succeed.** A Python replace script hit an assertion on its third
+  substitution and so never wrote the file, but the next script added
+  calls to the function that first script was supposed to define. The
+  app threw on startup and sat on the opening screen forever —
+  completely unusable — and no test caught it because none of them
+  watched for errors on the page. **Always check the page for thrown
+  errors in browser tests**, and re-verify that a multi-part edit
+  actually landed rather than assuming it did.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

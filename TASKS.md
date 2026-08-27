@@ -9,6 +9,42 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+24. **One button to import, trades always present on open, and the fix
+    for a Journal that displayed as a blank page** (2026-08-27).
+    **Status: BUILT AND TESTED (strat-journal-app PRs #38, #39) — 22 + 12
+    browser checks.**
+
+    The owner: "This page is too confusing. I want to be able to just tap
+    one button... They should just always be there when I open the app."
+    Then, after the first attempt: "I know for a fact that I have past
+    trades that can be logged but they are not showing up... It's
+    unacceptable."
+
+    He was right on both counts, and the second was my bug. Reproduced
+    with his 233 trades: all stored, all rendered, and the All Trades
+    section sitting at opacity 0 — see CLAUDE.md's Known Traps, where the
+    lesson is now recorded.
+
+    What the Journal tab now does:
+    - Collects trades **automatically on every app open**, so in normal
+      use there is nothing to press.
+    - **One button**, "Get My Trades", which genuinely FORCES: it re-asks
+      Schwab every single time. The first version pulled the history once
+      and then refused ever to do it again, leaving no way to recover
+      missed trades except a Reset button hidden in settings — the exact
+      opposite of what a force button is for.
+    - Setup (address, key, and the destructive Reset) tucked behind
+      "Connection settings", which opens itself only when nothing is
+      connected.
+    - The leftover diagnostic line removed from every screen, and the two
+      contradicting connection indicators merged into one.
+
+    Still open, and asked of the owner: whether trades are genuinely
+    missing after all this. If the count is still short once the app is
+    reliably showing what it holds, the gap is on the server side — how
+    far back Schwab will hand history over — and needs chasing
+    separately from anything in the app.
+
 **Parked, to come back to (owner's own call, 2026-08-27):**
 - **Rolling the app out to the public.** Discussed at length; the owner
   asked to park it and return later. The one thing worth carrying
