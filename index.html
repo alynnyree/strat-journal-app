@@ -848,6 +848,53 @@
   <!-- AI ANALYST -->
   <div class="view" id="view-ai">
     <div class="card">
+      <h3>Backtest</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:12px; line-height:1.5;">
+        Pick a setup, a stretch of time and one or more timeframes. Every
+        occurrence is found in real Schwab candles and played forward using
+        <b>your own stop rule</b>, so you can see what it actually did — then
+        the AI reads those results back to you.
+      </div>
+
+      <label>Ticker</label>
+      <input id="bt_ticker" type="text" placeholder="SPY" value="SPY">
+
+      <label style="margin-top:12px;">Setups to test</label>
+      <div class="pill-row" id="bt_setups"></div>
+
+      <label style="margin-top:12px;">Timeframes to compare</label>
+      <div class="pill-row" id="bt_timeframes"></div>
+
+      <div class="row2" style="margin-top:12px;">
+        <div>
+          <label>How far back</label>
+          <select id="bt_days">
+            <option value="7">Last week</option>
+            <option value="30" selected>Last month</option>
+            <option value="35">As far back as minutes go (35 days)</option>
+            <option value="365">Last year (daily bars only)</option>
+          </select>
+        </div>
+        <div>
+          <label>Target</label>
+          <select id="bt_target">
+            <option value="1">1R</option>
+            <option value="1.5">1.5R</option>
+            <option value="2" selected>2R</option>
+            <option value="3">3R</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">
+        Schwab only keeps about 35 days of minute-by-minute history, so
+        anything longer than that can only be tested on daily bars.
+      </div>
+
+      <button class="primary" id="btRunBtn" onclick="runBacktest()">Run Backtest</button>
+      <div id="btOutput"></div>
+    </div>
+
+    <div class="card">
       <h3>AI Analyst</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
         Reviews every logged trade for setup performance, late/early entries, sub-2:1 R:R setups you took anyway, and exits before target.
@@ -947,6 +994,120 @@ function showView(name){
   // that it is on screen, bind and reveal whatever is actually visible.
   revealScan();
   revealSweep();
+}
+
+// ---- Backtest --------------------------------------------------------
+// Every number shown here is counted on the server from real Schwab
+// candles. The AI's reading is displayed separately and clearly labelled,
+// so a comment is never mistaken for a measurement.
+const BT_SETUPS = ['2-1-2 Continuation','2-1-2 Reversal','3-1-2 Reversal','2-2 Continuation','2-2 Reversal','3-2-2 Reversal','1-2-2 Rev Strat','1 Bar Rev Strat','PMG'];
+const BT_TFS = ['1m','3m','5m','10m','15m','30m','1H','1D'];
+let btSetupsChosen = new Set(['2-2 Continuation']);
+let btTfsChosen = new Set(['5m','15m']);
+
+function renderBacktestPickers(){
+  const sBox = document.getElementById('bt_setups');
+  const tBox = document.getElementById('bt_timeframes');
+  if(sBox) sBox.innerHTML = BT_SETUPS.map(x=>
+    `<div class="pill${btSetupsChosen.has(x)?' sel':''}" onclick="toggleBtSetup('${x.replace(/'/g,"\\'")}')">${x}</div>`).join('');
+  if(tBox) tBox.innerHTML = BT_TFS.map(x=>
+    `<div class="pill${btTfsChosen.has(x)?' sel':''}" onclick="toggleBtTf('${x}')">${x}</div>`).join('');
+}
+function toggleBtSetup(x){ btSetupsChosen.has(x) ? btSetupsChosen.delete(x) : btSetupsChosen.add(x); renderBacktestPickers(); }
+function toggleBtTf(x){ btTfsChosen.has(x) ? btTfsChosen.delete(x) : btTfsChosen.add(x); renderBacktestPickers(); }
+
+async function runBacktest(){
+  const url = backendUrl();
+  const out = document.getElementById('btOutput');
+  if(!url){ out.innerHTML = `<div class="ai-msg"><div class="tag">Not connected</div>Connect your backend on the Journal tab first.</div>`; return; }
+  if(!btSetupsChosen.size){ out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing picked</div>Choose at least one setup to test.</div>`; return; }
+  if(!btTfsChosen.size){ out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing picked</div>Choose at least one timeframe.</div>`; return; }
+
+  const btn = document.getElementById('btRunBtn');
+  btn.disabled = true;
+  out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Waking the server...</div>`;
+  try{ await fetch(url+'/health'); }catch(e){ /* the real call below is what matters */ }
+  out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Reading the candles and playing every occurrence forward. This can take a minute.</div>`;
+
+  try{
+    const r = await fetch(url+'/ai/backtest?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ticker: document.getElementById('bt_ticker').value.trim() || 'SPY',
+        setups: [...btSetupsChosen], timeframes: [...btTfsChosen],
+        days: parseInt(document.getElementById('bt_days').value,10),
+        targetR: parseFloat(document.getElementById('bt_target').value),
+      })
+    });
+    const data = await r.json();
+    if(!r.ok){ out.innerHTML = `<div class="ai-msg"><div class="tag">Couldn't run it</div>${escapeHtml(data.error||('status '+r.status))}</div>`; return; }
+    renderBacktestResults(data);
+  }catch(e){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Couldn't run it</div>${escapeHtml(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+function renderBacktestResults(data){
+  const out = document.getElementById('btOutput');
+  const found = (data.results||[]).filter(r=>r.summary.occurrences>0);
+  if(!found.length){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing found</div>
+      None of those setups appeared on those timeframes in that stretch of time.
+      ${(data.notes||[]).map(n=>`<div style="margin-top:6px; color:var(--text-dim);">${escapeHtml(n)}</div>`).join('')}</div>`;
+    return;
+  }
+  // Best first, by total R — the figure that actually says whether it paid.
+  found.sort((a,b)=>b.summary.totalR - a.summary.totalR);
+
+  const row = r => {
+    const s = r.summary;
+    const cls = s.totalR > 0 ? 'pos' : (s.totalR < 0 ? 'neg' : '');
+    // Anything under 30 occurrences is flagged. A win rate on 8 trades
+    // tells nobody anything, and it must not be shown as if it did.
+    const thin = s.occurrences < 30
+      ? `<div style="font-size:11px; color:var(--gold); margin-top:4px;">⚠ Only ${s.occurrences} of these happened — too few to trust the percentage.</div>` : '';
+    return `
+    <div class="ai-msg">
+      <div class="tag">${escapeHtml(r.setup)} · ${escapeHtml(r.timeframe)}</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+        <span class="num" style="font-size:15px; font-weight:700;">${s.winRate}% won</span>
+        <span class="num ${cls}" style="font-size:15px; font-weight:700;">${s.totalR > 0 ? '+' : ''}${s.totalR}R</span>
+      </div>
+      <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">
+        ${s.occurrences} occurrence${s.occurrences===1?'':'s'} · ${s.wins} won, ${s.losses} lost<br>
+        Reached target ${s.hitTarget} · stopped out ${s.stoppedOut} · ran out of time ${s.ranOut}<br>
+        Average ${s.avgR}R per trade · searched ${r.barsSearched} candles from ${r.from.slice(0,10)} to ${r.to.slice(0,10)}
+      </div>
+      ${thin}
+    </div>`;
+  };
+
+  const rd = data.reading;
+  const readingHtml = rd ? `
+    <div class="card" style="margin-top:14px;">
+      <h3>What the AI makes of it</h3>
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:10px;">
+        The AI did not produce any of the numbers above — it was handed them and asked what it sees.
+      </div>
+      <div class="ai-msg"><div class="tag">Reading · ${escapeHtml(rd.verdict||'')}</div>${escapeHtml(rd.headline||'')}</div>
+      ${rd.timeframeComparison ? `<div class="ai-msg"><div class="tag">Timeframes</div>${escapeHtml(rd.timeframeComparison)}</div>` : ''}
+      ${(rd.patterns||[]).length ? `<div class="ai-msg"><div class="tag">What it noticed</div>${rd.patterns.map(x=>`<div style="margin-top:4px;">· ${escapeHtml(x)}</div>`).join('')}</div>` : ''}
+      ${(rd.cautions||[]).length ? `<div class="ai-msg"><div class="tag">Be careful of</div>${rd.cautions.map(x=>`<div style="margin-top:4px;">· ${escapeHtml(x)}</div>`).join('')}</div>` : ''}
+    </div>` : (data.readingError ? `<div class="ai-msg" style="margin-top:12px;"><div class="tag">No AI reading</div>The numbers above are still real — the AI just couldn't be reached (${escapeHtml(data.readingError)}).</div>` : '');
+
+  out.innerHTML = `
+    <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.6px; margin:14px 0 8px;">
+      Counted from real candles
+    </div>
+    ${found.map(row).join('')}
+    ${(data.notes||[]).length ? `<div class="ai-msg"><div class="tag">Worth knowing</div>${data.notes.map(n=>`<div style="margin-top:4px;">· ${escapeHtml(n)}</div>`).join('')}</div>` : ''}
+    <div class="ai-msg"><div class="tag">How this was worked out</div>
+      Entry is where the trigger candle breaks the one before it. The stop is
+      your own rule. Where a single candle contained both your stop and your
+      target, it is counted as a <b>loss</b> — the candle can't say which came
+      first, and guessing in your favour is how a backtest fools you.
+    </div>
+    ${readingHtml}`;
 }
 
 // ---- Stop Loss Rule --------------------------------------------------
@@ -3716,6 +3877,7 @@ function wipeData(){
 
 loadRiskSettings();
 loadStopRuleSettings();
+renderBacktestPickers();
 renderDashboard();
 autoCollectOnOpen();
 
