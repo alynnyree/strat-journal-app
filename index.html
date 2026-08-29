@@ -567,6 +567,12 @@
       <!-- The one button. Everything the four old buttons did, with the
            app deciding which is needed instead of asking. -->
       <button class="primary" id="btnGetTrades" onclick="getMyTrades()" style="margin-top:0;">Get My Trades</button>
+      <!-- Schwab makes you sign in again every 7 days and there was no way
+           to do it from the app at all — the only route was typing a web
+           address by hand. Shown only when the connection has actually
+           lapsed. -->
+      <button class="primary" id="btnReconnectSchwab" onclick="reconnectSchwab()"
+              style="display:none; margin-top:10px; background:var(--gold-grad); color:#1A1206;">Reconnect to Schwab</button>
       <div class="status-banner" id="syncStatus"></div>
 
       <!-- Setup, tucked away. These are things you fill in once and never
@@ -3517,6 +3523,56 @@ async function getMyTrades(){
   }
 }
 
+// Schwab requires signing in again every 7 days — there is no way to
+// avoid it, and when it lapses every sync, import and live update stops
+// at that one point. This opens Schwab's own sign-in page.
+function reconnectSchwab(){
+  const url = backendUrl();
+  if(!url){ toggleConnSettings(true); showStatus('err', 'Enter your backend address below first.'); return; }
+  const key = appKey();
+  if(!key){ toggleConnSettings(true); showStatus('err', 'Fill in your App Key below first — Schwab sign-in needs it.'); return; }
+  window.open(url+'/auth/schwab/login?key='+encodeURIComponent(key), '_blank');
+  showStatus('info', 'Sign in to Schwab in the tab that just opened, then come back here and tap "Get My Trades".');
+}
+
+function showReconnect(show){
+  const b = document.getElementById('btnReconnectSchwab');
+  if(b) b.style.display = show ? 'block' : 'none';
+}
+
+// True when a message from the server is Schwab saying the sign-in has
+// run out. Schwab words this several ways, none of them plainly.
+function isSchwabLoginExpired(text){
+  const t = String(text||'').toLowerCase();
+  return t.includes('invalid_grant') || t.includes('unsupported_token_type')
+      || t.includes('refresh token') || t.includes('no refresh token')
+      || t.includes('not connected — run') || t.includes('expired or revoked');
+}
+
+// Turns whatever the server reports into something readable. Raw text
+// like {"error":"unsupported_token_type","error_description":"400 Bad
+// Request..."} is not an explanation — it is the reason he could not tell
+// a lapsed sign-in from a missing year of trades.
+function plainErrorText(raw){
+  if(isSchwabLoginExpired(raw)){
+    return 'Your Schwab sign-in has run out. Schwab makes you sign in again every 7 days — nothing is wrong with your trades or your journal. Tap "Reconnect to Schwab" above, sign in, then come back and tap "Get My Trades".';
+  }
+  const t = String(raw||'').trim();
+  if(!t) return 'The import stopped, but no reason was given.';
+  return t.length > 220 ? t.slice(0,220)+'…' : t;
+}
+
+// Asks the server whether ITS connection to Schwab is alive. The green
+// light in the corner only ever meant "the app can reach my server" —
+// which stayed true for weeks while nothing could reach Schwab at all.
+async function fetchSchwabAuthState(url){
+  try{
+    const r = await fetch(url+'/auth/status');
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+
 // Asks the server what the history import is actually doing. Returns
 // null if the server is too old to answer or cannot be reached — in
 // which case the app falls back to saying nothing it cannot support.
@@ -3543,7 +3599,11 @@ function backfillProgressText(status, found){
 // what Schwab does or does not hold.
 function backfillResultMessage(status, found, total){
   if(status && status.status === 'failed'){
-    return ['err', `The history import stopped with an error: ${status.error || 'no reason given'}. Your ${total} existing trades are untouched.`];
+    const expired = isSchwabLoginExpired(status.error);
+    showReconnect(expired);
+    if(expired) return ['err', plainErrorText(status.error)];
+    const why = plainErrorText(status.error).replace(/[.\s]+$/, '');
+    return ['err', `The import stopped: ${why}. Your ${total} saved trade${total===1?'':'s'} ${total===1?'is':'are'} untouched.`];
   }
   const stillRunning = status && status.status === 'running';
   if(found > 0){
@@ -3579,7 +3639,19 @@ async function autoCollectOnOpen(){
   try{
     await pollBackend(true);
     const n = loadTrades().length;
-    setConnState(true, `Connected · ${n} trade${n === 1 ? '' : 's'} in your journal`);
+    // Two different questions, and only one of them was ever asked. The
+    // green light meant "the app can reach my server" — which was true
+    // and green while the server's own Schwab sign-in had been dead long
+    // enough for a month of trades to go unfetched. Ask the second one.
+    const auth = await fetchSchwabAuthState(url);
+    if(auth && auth.needsReconnect){
+      showReconnect(true);
+      setConnState(false, `Schwab sign-in has run out · ${n} trade${n===1?'':'s'} saved here`);
+      showStatus('err', 'Your Schwab sign-in has run out — Schwab makes you sign in again every 7 days. Your saved trades are fine, but no new ones can come in until you tap "Reconnect to Schwab" above.');
+    } else {
+      showReconnect(false);
+      setConnState(true, `Connected · ${n} trade${n === 1 ? '' : 's'} in your journal`);
+    }
   }catch(e){
     setConnState(true, 'Connected — could not reach the server just now');
   }
