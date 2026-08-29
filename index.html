@@ -3460,37 +3460,110 @@ async function getMyTrades(){
     await runBackfillNow(true);
     localStorage.setItem(BACKFILL_DONE_KEY, '1');
 
-    // The backfill hands trades to the queue in the background, so one
-    // immediate look can miss them. Keep checking for a while rather
-    // than reporting "up to date" on a queue that is still filling —
-    // that false all-clear is what made this feel broken.
-    // The backfill fills the queue in the background, so one immediate
-    // look can miss everything. Keep checking for a few seconds rather
-    // than reporting "up to date" on a queue that is still filling —
-    // that false all-clear is what made this feel broken. Stops as soon
-    // as a round brings nothing new.
+    // The server answers the moment the import STARTS, not when it
+    // finishes. A year of history is a dozen requests to Schwab followed
+    // by working out the timeframes, prices, setup and stop for every
+    // trade found — minutes, not seconds.
+    //
+    // This used to wait about seven seconds and then announce "Schwab had
+    // nothing new". That is not something it could know, and on the one
+    // run that mattered — the run meant to bring back January to April —
+    // it said exactly that while the server was still fetching. Now it
+    // follows the server's own progress and only reports what the server
+    // actually says happened.
     btn.textContent = 'Collecting…';
     let found = 0;
-    for(let attempt = 0; attempt < 4; attempt++){
-      const countBefore = loadTrades().length;
+    const started = Date.now();
+    // Long enough for a year of history, but he is never trapped here:
+    // trades are queued as they are found, and anything still arriving
+    // after he closes the page is collected next time he opens it.
+    const MAX_WAIT_MS = 3 * 60 * 1000;
+    // If the server is too old to report progress, fall back to a short
+    // bounded wait rather than pretending to know it has finished.
+    const BLIND_WAIT_MS = 15 * 1000;
+    let status = null;
+    let quietRounds = 0;
+    while(true){
       await pollBackend(true);
-      const gained = loadTrades().length - countBefore;
+      const gained = (loadTrades().length - before) - found;
       found = loadTrades().length - before;
-      if(attempt > 0 && gained === 0) break;
-      await new Promise(r=>setTimeout(r, 1800));
+      renderJournal(); renderDashboard();
+      status = await fetchBackfillStatus(url);
+      btn.textContent = found > 0 ? `Collecting… ${found}` : 'Collecting…';
+      showStatus('info', backfillProgressText(status, found));
+      if(status){
+        // Only stop once the SERVER says it has finished.
+        if(status.status === 'done' || status.status === 'failed') break;
+        if(Date.now() - started > MAX_WAIT_MS) break;
+      } else {
+        // No progress to follow. Behave as before: a few quick looks,
+        // stopping once a round brings nothing.
+        quietRounds = gained === 0 ? quietRounds + 1 : 0;
+        if(quietRounds >= 2 || Date.now() - started > BLIND_WAIT_MS) break;
+      }
+      await new Promise(r=>setTimeout(r, status ? 3000 : 1800));
     }
+    // One last sweep, since trades are queued before their details are
+    // filled in and the final ones may have landed during the last wait.
+    await pollBackend(true);
+    found = loadTrades().length - before;
     renderJournal(); renderDashboard();
+    showStatus(...backfillResultMessage(status, found, loadTrades().length));
     const total = loadTrades().length;
-    if(found > 0){
-      showStatus('ok', `${found} trade${found===1?'':'s'} added. You now have ${total} in your journal.`);
-    } else {
-      showStatus('ok', `Schwab had nothing new — still ${total} trades. If you know a trade is missing, it may be older than the history Schwab will hand back.`);
-    }
     setConnState(true, `Connected · ${total} trade${total===1?'':'s'} in your journal`);
   } finally {
     btn.disabled = false;
     btn.textContent = original;
   }
+}
+
+// Asks the server what the history import is actually doing. Returns
+// null if the server is too old to answer or cannot be reached — in
+// which case the app falls back to saying nothing it cannot support.
+async function fetchBackfillStatus(url){
+  try{
+    const r = await fetch(url+'/api/trades/backfill/status');
+    if(!r.ok) return null;
+    const data = await r.json();
+    return data && data.backfill ? data.backfill : null;
+  }catch(e){ return null; }
+}
+
+function backfillProgressText(status, found){
+  const gotSoFar = found > 0 ? ` ${found} so far.` : '';
+  if(!status) return `Asking Schwab for your history — this takes a few minutes.${gotSoFar}`;
+  if(status.phase === 'asking-schwab') return `Asking Schwab for your history, a month at a time — this takes a few minutes.${gotSoFar}`;
+  if(status.phase === 'matching') return `Schwab sent ${status.fillsFound ?? 0} buy and sell records — pairing them into trades.${gotSoFar}`;
+  if(status.phase === 'enriching') return `Found ${status.tradesMatched ?? 0} trades — working out the timeframes and prices for each one.${gotSoFar}`;
+  return `Finishing up.${gotSoFar}`;
+}
+
+// What to say once the server says it is done. Every branch here reports
+// something the server actually told us, rather than an assumption about
+// what Schwab does or does not hold.
+function backfillResultMessage(status, found, total){
+  if(status && status.status === 'failed'){
+    return ['err', `The history import stopped with an error: ${status.error || 'no reason given'}. Your ${total} existing trades are untouched.`];
+  }
+  const stillRunning = status && status.status === 'running';
+  if(found > 0){
+    const more = stillRunning ? ' It is still running, so more may follow — tap again in a few minutes.' : '';
+    return ['ok', `${found} trade${found===1?'':'s'} added. You now have ${total} in your journal.${more}`];
+  }
+  if(stillRunning){
+    return ['info', `Still working — Schwab is slow with a year of history. Your journal stays at ${total} for now; open the app again in a few minutes and anything found will be waiting.`];
+  }
+  if(status && status.windowsFailed > 0){
+    const f = (status.failures && status.failures[0]) || {};
+    return ['err', `Schwab refused ${status.windowsFailed} of ${status.windowsAsked} requests for older history${f.from ? ` (for example ${f.from} to ${f.to})` : ''}. That is why older trades are missing — it is not that you have none. Reason given: ${f.why || 'none'}.`];
+  }
+  if(status && status.oldestWindowWithData){
+    return ['ok', `Nothing new. Schwab served history back to ${status.oldestWindowWithData} and every trade in it is already in your journal — still ${total}.`];
+  }
+  if(status && status.fillsFound === 0){
+    return ['ok', `Schwab answered every request but returned no trades at all for the last ${status.daysBack || 365} days. Still ${total} in your journal.`];
+  }
+  return ['ok', `Nothing new to add — still ${total} trades.`];
 }
 
 // Runs quietly whenever the app opens. This is the real answer to "I
