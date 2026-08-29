@@ -607,7 +607,23 @@
           Only needed after a change to how trades are matched — it rebuilds
           everything from Schwab.
         </div>
-        <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
+        <!-- Alpaca's keys, typed here rather than added to the server by
+           hand. Same idea as the App Key above: a thing you fill in once
+           and never touch again. -->
+      <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
+        <label>Alpaca API Key ID</label>
+        <input id="f_alpacaKey" placeholder="the Key ID from your Alpaca dashboard" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <label>Alpaca Secret Key</label>
+        <input id="f_alpacaSecret" type="password" placeholder="the Secret Key shown once when you create it" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px; line-height:1.5;">
+          Free from alpaca.markets. With these, the stock price on each
+          trade becomes the real price at the second you filled, instead
+          of an estimate. Without them nothing changes and nothing breaks.
+        </div>
+        <button class="secondary" onclick="saveAlpacaKeys()">Save Alpaca Keys</button>
+        <div id="alpacaState" style="font-size:12px; margin-top:6px; line-height:1.5;"></div>
+      </div>
+      <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
       </div>
       <!-- Kept so the old code paths that disable it still work, but no
            longer something to find and press. -->
@@ -3742,6 +3758,47 @@ async function getMyTrades(){
 // Schwab requires signing in again every 7 days — there is no way to
 // avoid it, and when it lapses every sync, import and live update stops
 // at that one point. This opens Schwab's own sign-in page.
+// Alpaca is what turns the underlying stock price from a reconstruction
+// into a record. The keys go to the server, which keeps them; they are
+// never stored on the phone, and the secret is never sent back.
+async function saveAlpacaKeys(){
+  const out = document.getElementById('alpacaState');
+  const url = backendUrl();
+  if(!url){ toggleConnSettings(true); out.innerHTML = '<span style="color:var(--bear);">Enter your backend address above first.</span>'; return; }
+  if(!appKey()){ out.innerHTML = '<span style="color:var(--bear);">Fill in your App Key above first — saving these needs it.</span>'; return; }
+  const keyId = document.getElementById('f_alpacaKey').value.trim();
+  const secretKey = document.getElementById('f_alpacaSecret').value.trim();
+  if(!keyId || !secretKey){ out.innerHTML = '<span style="color:var(--amber);">Both boxes are needed — Alpaca gives you two values.</span>'; return; }
+  out.textContent = 'Saving…';
+  try{
+    const r = await fetch(url+'/api/alpaca/keys?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ keyId, secretKey }),
+    });
+    if(r.status === 403){ out.innerHTML = '<span style="color:var(--bear);">Your App Key does not match the one on the server.</span>'; return; }
+    if(!r.ok) throw new Error('the server said no');
+    // Not kept on the phone. The server holds them from here.
+    document.getElementById('f_alpacaSecret').value = '';
+    out.innerHTML = '<span style="color:var(--bull);">Alpaca connected. New trades will get the real stock price at the second you filled. To fix the ones already in your journal, tap "Reset &amp; Re-import Trades".</span>';
+  }catch(e){
+    out.innerHTML = '<span style="color:var(--bear);">Could not save them just now. Check the two values and try again.</span>';
+  }
+}
+
+async function refreshAlpacaState(){
+  const out = document.getElementById('alpacaState');
+  const url = backendUrl();
+  if(!out || !url) return;
+  try{
+    const r = await fetch(url+'/api/alpaca/status');
+    if(!r.ok) return;
+    const st = await r.json();
+    out.innerHTML = st.connected
+      ? `<span style="color:var(--bull);">Alpaca is connected${st.keyEnding ? ` (key ending ${escapeHtml(st.keyEnding)})` : ''} — stock prices come from the real market.</span>`
+      : '<span style="color:var(--text-dim);">Alpaca is not connected. Stock prices on your trades are estimates until it is.</span>';
+  }catch(e){ /* the app works perfectly well without this */ }
+}
+
 function reconnectSchwab(){
   const url = backendUrl();
   if(!url){ toggleConnSettings(true); showStatus('err', 'Enter your backend address below first.'); return; }
@@ -4476,6 +4533,7 @@ loadStopRuleSettings();
 renderBacktestPickers();
 renderDashboard();
 autoCollectOnOpen();
+refreshAlpacaState();
 
 // Presentation last, so a problem here can never stop the journal itself
 // from loading — the app is fully usable before any of this runs.
