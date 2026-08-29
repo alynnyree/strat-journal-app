@@ -526,6 +526,9 @@
       <div class="stat"><div class="label">Avg R:R (planned)</div><div class="val num" id="statRR">0.0</div></div>
       <div class="stat"><div class="label">Trades Logged</div><div class="val num" id="statCount">0</div></div>
     </div>
+    <div id="statFeeNote" style="font-size:11.5px; color:var(--text-dim); margin:-4px 0 14px; text-align:center;"></div>
+    <div style="display:none;">
+    </div>
 
     <div class="card" style="margin-top:14px;" id="riskTrackingCard">
       <h3>Risk Rules</h3>
@@ -2612,12 +2615,35 @@ function renderRiskTracking(trades){
   el.innerHTML = row('Today', todayPnl, dailyMax) + row('This week', weekPnl, weeklyMax);
 }
 
+// What a trade actually made him: after fees where they are recorded,
+// before fees where they are not. A trade with no fee on file is not a
+// free trade, so its figure is used as-is rather than pretending.
+function realPnl(t){
+  return t.pnlNet != null ? t.pnlNet : (t.pnlDollar || 0);
+}
+
 function renderDashboard(){
   const trades = loadTrades();
   const count = trades.length;
-  const wins = trades.filter(t=>t.winLoss==='Win').length;
-  const netPnl = trades.reduce((s,t)=>s+(t.pnlDollar||0),0);
+  // Fees turn a small win into a small loss, so a win must be decided on
+  // the money that actually arrived, not on the price move alone.
+  const wins = trades.filter(t => t.pnlDollar == null
+    ? t.winLoss === 'Win'
+    : realPnl(t) >= 0).length;
+  const netPnl = trades.reduce((s,t)=>s+realPnl(t),0);
   const avgRR = count ? (trades.reduce((s,t)=>s+(t.rrPlanned||0),0)/count) : 0;
+
+  const feesKnown = trades.filter(t=>t.fees != null);
+  const feeTotal = feesKnown.reduce((s,t)=>s+t.fees, 0);
+  const feeNote = document.getElementById('statFeeNote');
+  if(feeNote){
+    feeNote.innerHTML = !feesKnown.length
+      ? ''
+      : `${fmtMoney(feeTotal)} of that is Schwab's fees`
+        + (feesKnown.length < count
+            ? ` — recorded on ${feesKnown.length} of ${count} trades so far`
+            : '');
+  }
 
   document.getElementById('statPnl').textContent = fmtMoney(netPnl);
   document.getElementById('statPnl').className = 'val num ' + (netPnl>=0?'pos':'neg');
@@ -2640,8 +2666,8 @@ function renderDashboard(){
   trades.forEach(t=>{
     const key = t.strat || 'Unclassified (needs setup)';
     bySetup[key] = bySetup[key] || {count:0, pnl:0, wins:0};
-    bySetup[key].count++; bySetup[key].pnl += (t.pnlDollar||0);
-    if(t.winLoss==='Win') bySetup[key].wins++;
+    bySetup[key].count++; bySetup[key].pnl += realPnl(t);
+    if(t.pnlDollar == null ? t.winLoss === 'Win' : realPnl(t) >= 0) bySetup[key].wins++;
   });
   const sb = document.getElementById('setupBreakdown');
   const keys = Object.keys(bySetup);
@@ -2796,12 +2822,20 @@ function renderJournal(){
     const closed = trades.filter(t=>t.pnlDollar != null);
     if(!closed.length){ sum.textContent = ''; }
     else {
-      const pnl = closed.reduce((a,t)=>a+t.pnlDollar, 0);
-      const wins = closed.filter(t=>t.pnlDollar >= 0).length;
+      const real = t => (t.pnlNet != null ? t.pnlNet : t.pnlDollar);
+      const pnl = closed.reduce((a,t)=>a+real(t), 0);
+      const wins = closed.filter(t=>real(t) >= 0).length;
       const rate = Math.round(wins / closed.length * 100);
       const colour = pnl >= 0 ? 'var(--bull)' : 'var(--bear)';
+      const feesKnown = closed.filter(t=>t.fees != null);
+      const feeTotal = feesKnown.reduce((a,t)=>a+t.fees, 0);
+      const feeLine = feesKnown.length
+        ? ` · ${fmtMoney(feeTotal)} in fees${feesKnown.length < closed.length
+            ? ` (on ${feesKnown.length} of ${closed.length})` : ''}`
+        : '';
       sum.innerHTML = `<span style="color:${colour}; font-weight:600;">${fmtMoney(pnl)}</span>`
-        + ` · ${closed.length} trade${closed.length===1?'':'s'} · ${wins} won, ${closed.length-wins} lost · ${rate}% win rate`;
+        + ` · ${closed.length} trade${closed.length===1?'':'s'} · ${wins} won, ${closed.length-wins} lost · ${rate}% win rate`
+        + feeLine;
     }
   }
 
@@ -2819,8 +2853,15 @@ function renderJournal(){
     }
   }
   list.innerHTML = trades.map(t=>{
-    const pnlKnown = t.pnlDollar!=null;
-    const pnlClass = !pnlKnown ? '' : (t.pnlDollar>=0?'pos':'neg');
+    // The big number is what actually reached his account -- after fees
+    // when they are known, before fees when they are not, and labelled
+    // either way so the two are never confused.
+    const shown = t.pnlNet != null ? t.pnlNet : t.pnlDollar;
+    const pnlKnown = shown != null;
+    const pnlClass = !pnlKnown ? '' : (shown>=0?'pos':'neg');
+    const pnlNote = t.pnlNet != null
+      ? `<div style="font-size:10px; color:var(--text-dim); text-align:right; margin-top:2px;">after fees · ${fmtMoney(t.pnlDollar)} before</div>`
+      : '';
     const setupBadge = t.strat
       ? `<span class="badge setup">${t.strat}${t.stratUsedScreenshot ? ' 📷' : ''}</span>`
       : `<span class="badge" style="background:var(--panel); color:var(--amber); border:1px solid var(--amber);">⚠ Needs Setup</span>`;
@@ -2844,7 +2885,7 @@ function renderJournal(){
           <span class="tc-ticker">${t.ticker}</span>
           <span class="badge ${t.dir.toLowerCase()}" style="margin-left:6px;">${t.dir}</span>
         </div>
-        <div class="tc-pnl num ${pnlClass}">${pnlKnown ? fmtMoney(t.pnlDollar) : 'Open'}</div>
+        <div><div class="tc-pnl num ${pnlClass}">${pnlKnown ? fmtMoney(shown) : 'Open'}</div>${pnlNote}</div>
       </div>
       <div class="tc-badges">
         ${setupBadge}
@@ -2860,6 +2901,7 @@ function renderJournal(){
         <div>Under: ${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}</div>
         <div>Stop: ${t.stop!=null?'$'+t.stop.toFixed(2):'—'}${t.stopAuto?' <span style="color:var(--gold); font-size:10px;">AUTO</span>':''}</div>
         ${t.stopReason?`<div style="grid-column:1/-1; color:var(--text-dim); font-size:11px; line-height:1.4; margin-top:2px;">${t.stopReason}</div>`:''}
+        <div>Fees: ${t.fees!=null?'$'+t.fees.toFixed(2):'<span style="color:var(--text-dim);">not recorded</span>'}</div>
         <div>R:R Plan: ${t.rrPlanned!=null?t.rrPlanned.toFixed(1):'—'}</div>
         <div>Realized R:R: ${t.realizedRR!=null?t.realizedRR.toFixed(2)+':1':'—'}</div>
       </div>
@@ -3893,6 +3935,13 @@ async function autoImportPendingTrades(url, pending){
       ftfcDirection: t.ftfcDirection||null, ftfcTimeframesInRun: t.ftfcTimeframesInRun||[],
       replayData: t.replayData || null,
       pnlDollar, pnlPercent,
+      // Schwab's fees, as they actually came out of the account. Null on
+      // a trade imported before fees were recorded — which must read as
+      // "not known", never as "no fee was charged".
+      entryFees: t.entryFees ?? null, exitFees: t.exitFees ?? null,
+      fees: t.fees ?? null,
+      pnlNet: t.pnlNet ?? (t.fees != null && pnlDollar != null
+        ? Math.round((pnlDollar - t.fees) * 100) / 100 : null),
       winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
       notes: '', shotEntry: null, shotExit: null,
       fillStatus: t.fillStatus || 'Closed', contractsOpened: t.contractsOpened || t.contracts || 1,
