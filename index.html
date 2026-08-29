@@ -595,13 +595,16 @@
       <button id="btnBackfill" onclick="runBackfillNow()" style="display:none;"></button>
     </div>
 
-    <div class="card">
-      <h3>All Trades</h3>
-      <div id="journalList"></div>
-      <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
+        <!-- Setup lives behind one line. Putting it above the trade list made
+         the trades unreachable; putting it below made the settings
+         unreachable — the list grows without limit, so anything sharing a
+         page with it loses. Collapsed, it costs one line and nothing is
+         buried either way. -->
+    <div id="journalSetupToggle" onclick="toggleJournalSetup()" style="cursor:pointer; padding:4px 0 10px; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+      <span id="journalSetupArrow">›</span> Settings, import &amp; export
     </div>
-
-    <div class="card">
+    <div id="journalSetup" style="display:none;">
+<div class="card">
       <h3>Import Schwab CSV (fallback, no backend needed)</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:8px;">
         Export "Transactions" from Schwab as CSV and import here. Auto-fills ticker, OCC symbol, price, date/time.
@@ -713,7 +716,15 @@
       <button class="secondary" onclick="exportCsvSheet()">Export Journal (CSV)</button>
       <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="wipeData()">Erase All Trades</button>
     </div>
-  </div>
+      </div>
+
+    <div class="card">
+      <h3>All Trades</h3>
+      <div id="journalList"></div>
+      <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
+    </div>
+
+</div>
 
   <!-- NEW TRADE -->
   <div class="view" id="view-new">
@@ -3402,6 +3413,17 @@ const BACKFILL_DONE_KEY = 'strat_backfilled';
 
 function connSettingsOpen(){
   return document.getElementById('connSettings').style.display !== 'none';
+}
+
+function toggleJournalSetup(){
+  const box = document.getElementById('journalSetup');
+  const arrow = document.getElementById('journalSetupArrow');
+  const open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  if(arrow) arrow.textContent = open ? '⌄' : '›';
+  // Sections inside were never measurable while hidden, so bind and
+  // reveal them now that they have a real position.
+  if(open && typeof revealSweep === 'function') revealSweep();
 }
 
 function toggleConnSettings(force){
