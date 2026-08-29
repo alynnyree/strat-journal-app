@@ -80,8 +80,47 @@ via the `TASKS.md` commit log.
     lines. The line now names the contract in full, says how many, and
     shows the exit date on anything not closed the same day.
 
-    **Still to do on his phone:** remove the 132 extra copies, then tap
-    "Get My Trades" to pull January through April in.
+    **Duplicates removed on his phone 2026-08-29: 233 down to 101.**
+
+26. **Make the history import say what it is actually doing** (2026-08-29).
+    **Status: BUILT AND TESTED (strat-journal-app PR #44,
+    strat-journal-backend PR #29) — 19 + 16 checks. Not yet run against
+    the live Schwab connection.**
+
+    Straight after the duplicates were cleaned, he tapped "Get My Trades"
+    to pull January through April in and was told, seven seconds later,
+    "Schwab had nothing new — if you know a trade is missing, it may be
+    older than the history Schwab will hand back."
+
+    The app could not know either half of that. The server replies the
+    instant the import *starts*; a year of history is a dozen requests to
+    Schwab followed by working out the timeframes, prices, setup and stop
+    for every trade found — minutes. So the all-clear was announced over
+    a job still running, and the retention line was a guess presented as
+    a finding. The loop also stopped as soon as a round brought nothing,
+    which for a slow background job meant it exited after one round.
+
+    Underneath that sat a second blind spot: any 30-day window Schwab
+    refuses is caught, written to a server log nobody reads, and skipped.
+    Twelve refused windows and twelve genuinely empty ones produce an
+    identical answer. "Schwab would not give me this" and "you have no
+    trades from then" are completely different things and nothing
+    distinguished them.
+
+    Fixed on both sides. The server now records what really happened —
+    windows asked, answered and refused, the reason Schwab gave, and the
+    oldest date it actually served data for — and reports its progress as
+    it goes. The app follows that and reports only what the server says.
+    Matched trades are also queued *before* the slow detail-gathering, so
+    they show up in seconds rather than minutes.
+
+    **Still unanswered, and the point of all this:** whether January to
+    April can be fetched at all. The next real run will now say which
+    windows Schwab refused and how far back it truly served, instead of
+    leaving it to guesswork.
+
+    **Still to do on his phone:** tap "Get My Trades" once the server has
+    restarted itself, and report what the new message says.
 
 24. **One button to import, trades always present on open, and the fix
     for a Journal that displayed as a blank page** (2026-08-27).

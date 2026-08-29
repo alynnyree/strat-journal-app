@@ -214,6 +214,21 @@ Uses **The Strat**. Key concepts the code implements:
   real) while win rate, average win/loss and the per-setup breakdown were
   all quietly wrong. Identity for a trade is: contract, entry minute,
   exit minute, both fill prices, size. Applies to any future import path.
+- **Never report an outcome for work that has not finished, and never
+  dress a guess as a finding.** The import button waited seven seconds,
+  then said "Schwab had nothing new — it may be older than the history
+  Schwab will hand back." The server answers the moment the import
+  STARTS; a year of history takes minutes. So the all-clear was reported
+  over a job still running, and the retention line was invented — nothing
+  had measured it. Worse, the loop stopped as soon as a round brought
+  nothing, so a slow background job exited it after one round. If a job
+  is asynchronous, follow its actual state; if the state is unknown, say
+  it is unknown.
+- **A caught-and-logged failure inside a loop is an invisible failure.**
+  `getOptionFills` skips any 30-day window Schwab refuses, logging to a
+  server log nobody reads. Twelve refused windows and twelve empty ones
+  give an identical answer: no trades. Any loop that swallows per-item
+  errors must count them and hand the count back to the caller.
 - **A default date range is silent data loss.** Backfill defaulted to 90
   days on BOTH sides — and the frontend passed its own hardcoded 90, so
   raising only the server's default would have changed nothing. A journal
