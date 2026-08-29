@@ -203,6 +203,25 @@ Uses **The Strat**. Key concepts the code implements:
   are hidden; and there is a second, independent sweep on scroll so a
   missed notification cannot strand a section. Applies to any future
   animation, not just this one.
+- **A record must be identified by what it IS, never by the reference
+  number it was handed.** Imported trades were de-duplicated on their
+  internal id. "Reset & Re-import" reissues the same trades with fresh
+  ids, so every re-import wrote them all down again — 161 contracts in
+  the journal that were never bought, across 52 contract-days, some
+  trades stored character-for-character five times. It survived months
+  unnoticed because duplicated wins and duplicated losses cancelled out
+  and left total P&L looking nearly right (−$1,116 journal vs −$1,101
+  real) while win rate, average win/loss and the per-setup breakdown were
+  all quietly wrong. Identity for a trade is: contract, entry minute,
+  exit minute, both fill prices, size. Applies to any future import path.
+- **A default date range is silent data loss.** Backfill defaulted to 90
+  days on BOTH sides — and the frontend passed its own hardcoded 90, so
+  raising only the server's default would have changed nothing. A journal
+  that should have started 2 January started in mid-May, and nothing
+  anywhere said "there is more history I did not ask for." When a range
+  is bounded, either cover the whole plausible history or say on screen
+  what was left out — and check both ends for a second hardcoded copy of
+  the same number.
 - **An edit that fails partway can write nothing while its follow-up
   edits succeed.** A Python replace script hit an assertion on its third
   substitution and so never wrote the file, but the next script added

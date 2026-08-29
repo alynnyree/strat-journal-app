@@ -9,6 +9,62 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+25. **Stop the journal recording the same trade twice, and fetch a full
+    year of history** (2026-08-29).
+    **Status: BUILT AND TESTED (strat-journal-app PR #42,
+    strat-journal-backend PR #28) — 32 new browser checks plus all
+    fourteen existing suites. Not yet confirmed on the phone or against
+    real broker data.**
+
+    Found by checking the owner's own broker export against his journal:
+    **161 contracts were recorded that he never bought**, spread across
+    52 contract-days, with some trades stored character-for-character
+    five times over. Separately, **108 trading days of real history were
+    missing entirely** — 19 in January, 19 in February, 34 in March, 33
+    in April, 2 in May, 1 in June.
+
+    It went unnoticed for months because his total profit and loss looked
+    almost right: −$1,116 in the journal against −$1,101 in reality.
+    That closeness was an accident. Duplicated wins and duplicated losses
+    happened to cancel each other out. Every other number — win rate,
+    average win, average loss, which setup makes money — was being
+    computed off a journal that was substantially wrong.
+
+    Two separate causes, both fixed:
+    - **The repeats.** When trades came in from the broker, the app
+      decided whether it already had one by comparing the internal
+      reference number the trade had been given. "Reset & Re-import"
+      hands the same trades back with brand-new reference numbers, so
+      every one of them looked new and was written down again — and the
+      owner had been told to press that button after backend changes, so
+      it kept happening. Trades are now recognised by what they *are*:
+      the contract, the minute in, the minute out, both fill prices, and
+      the size.
+    - **The missing months.** Both the app and the server only ever asked
+      the broker for the last 90 days. His trading began 2 January, which
+      is exactly why the journal began in mid-May. Both now ask for a
+      year, and the server accepts up to three years if asked.
+
+    Also added: a **"Check for Duplicate Trades"** action on the Journal
+    tab under "Settings, import & export". Deliberately two steps — it
+    reports what it found and waits for a second tap before deleting
+    anything. Where copies differ, the one carrying his own work is kept:
+    his notes, his setup tag, his screenshots, his stop, and his own
+    typed entry ahead of the broker feed's copy. Anything the machine
+    computed is rebuilt on the next sync, so nothing of value is lost.
+
+    Tested against his real 4 June case (ten journal entries for seven
+    actual trades, three of them recorded twice), plus: checking alone
+    deletes nothing; genuinely different trades are left alone (a minute
+    apart, a different exit price, a different size, a put instead of a
+    call, a different day); re-importing adds no second copy while a
+    genuinely new trade still comes in; an empty journal doesn't fall
+    over; and no errors are thrown on the page in any scenario.
+
+    **Still to do on his phone:** tap "Check for Duplicate Trades" once
+    and confirm the count, then "Reset & Re-import Trades" to pull
+    January through April in.
+
 24. **One button to import, trades always present on open, and the fix
     for a Journal that displayed as a blank page** (2026-08-27).
     **Status: BUILT AND TESTED (strat-journal-app PRs #38, #39) — 22 + 12
@@ -555,8 +611,27 @@ project "complete":**
    actually opens Bar Replay in practice before investing further in it,
    but the technical case for keeping it stands on its own regardless.
 
-   Propose an approach and get sign-off before writing any code — nothing
-   here is built yet.
+   **Status update 2026-08-28: BUILT (strat-journal-backend PR #27,
+   strat-journal-app PR #40) — 41 + 26 + 25 checks.** The owner asked for
+   it outright, which overtook the proposal step. Built deliberately as
+   two separate halves: the computer finds every occurrence of a chosen
+   setup in real past price data and counts what actually happened next
+   — how often it won, how often it lost, how big each was, and which
+   timeframe it did best on — and only then does the AI read those
+   finished numbers and describe the patterns in them. The AI is not
+   permitted to produce a figure of its own, so nothing it reports can
+   be invented. The screen sits at the top of the AI tab: pick a ticker,
+   one or more setups, one or more timeframes, how far back, and a
+   target.
+
+   **Not yet run against real market data.** And the multi-timeframe ask
+   — broadening formation drawn on the 30-minute chart, entry taken off
+   its bottom on the 5-minute — is designed but not built. It is limited
+   by how far back the broker keeps minute-by-minute price data, roughly
+   a month, which is why a cheaper outside source of history was
+   researched (Alpaca's free tier gives seven-plus years of
+   minute-by-minute stock data at no cost, which is what this needs —
+   stock data for SPY and IWM, not expensive options data).
 
 9. **Fix candle-shrinking during playback.** The chart view was re-fitting
     itself every single frame, so candles got thinner and thinner as more
