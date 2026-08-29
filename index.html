@@ -11,34 +11,113 @@
 <meta name="apple-mobile-web-app-title" content="Strat Journal">
 <link rel="apple-touch-icon" href="icon-180.png?v=2">
 <style>
+  /* Anton (Latin subset, SIL Open Font License) embedded rather than
+     linked. Two reasons: the app is installed to the home screen and must
+     look right with no signal, and a late-arriving headline font reflows
+     the page under your thumb. 12KB is cheaper than that. */
+  @font-face{
+    font-family:"Anton";
+    font-style:normal;
+    font-weight:400;
+    font-display:block;
+    src:url(data:font/woff2;base64,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) format("woff2");
+  }
+</style>
+<style>
+  /* Colour is doing real work here, not decoration.
+     - The ground is near-black with a faint GREEN undertone rather than
+       the old blue one. Blue-black reads clinical and cold; a warm-dark
+       ground reads focused and premium, and lets green sit on it without
+       vibrating.
+     - Text is a warm off-white (the colour of paper and banknotes), not
+       a blue-white. Easier on the eye for long sessions and it makes the
+       whole surface feel like a ledger rather than a dashboard.
+     - GREEN is the primary accent: growth, gain, permission to act. It
+       is the colour the eye should find first.
+     - GOLD is the reward colour — achievement, something earned. Used
+       sparingly so it keeps its weight; if everything is gold, nothing
+       is.
+     - RED is deliberately DESATURATED from the old #E5484D. A loss has
+       to register, but a journal that shouts at you after a red day is a
+       journal you stop opening. It states the fact without punishing.
+     This is also why the reference site's own red accent was NOT copied:
+     in this app red already means a losing trade, so using it for
+     headings would have every screen reading as a loss. */
   :root{
-    --bg: #0B0F14;
-    --panel: #121822;
-    --panel-2: #182130;
-    --border: #24303F;
-    --text: #E7EDF4;
-    --text-dim: #8C9AAD;
-    --bull: #2FBF71;
-    --bull-dim: #1B5C3A;
-    --bear: #E5484D;
-    --bear-dim: #6E2224;
-    --amber: #F2B94A;
+    --bg: #080B09;
+    --panel: #0F1411;
+    --panel-2: #151B17;
+    --border: #232C26;
+    --text: #F0EEE6;
+    --text-dim: #8A9189;
+    --bull: #00C776;
+    --bull-dim: #0B3D28;
+    --bear: #C4453F;
+    --bear-dim: #3A1A18;
+    /* Trophy gold, not mustard. A single flat swatch always reads as
+       yellow no matter how you pick it — what makes metal look like
+       metal is the RANGE across it: a pale champagne highlight, a
+       saturated core, and a deep shadow, plus a glow so it looks lit
+       rather than painted. Hence four values and a gradient instead of
+       one hex code. */
+    --gold: #F7C948;
+    --gold-lite: #FFEEB0;
+    --gold-deep: #A9761C;
+    --gold-dim: #3A2C0E;
+    --gold-grad: linear-gradient(150deg, #FFEEB0 0%, #F7C948 34%, #C9931F 58%, #FFE08A 78%, #F7C948 100%);
+    --gold-glow: 0 0 14px rgba(247,201,72,0.45);
+    /* Kept the name --amber so every existing use picks up the new gold
+       with no churn. */
+    --amber: #F7C948;
     --mono: "SF Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif;
+    /* Heavy condensed uppercase for headlines and a serif italic for the
+       quiet asides — the two voices the reference design alternates
+       between. Both fall back to stacks that already exist on iPhone, so
+       a failed font load degrades rather than breaks. */
+    --display: "Anton", "HelveticaNeue-CondensedBold", "Haettenschweiler", "Arial Narrow", var(--sans);
+    --serif: Georgia, "Times New Roman", serif;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;}
   body{padding-bottom:70px;}
-  h1,h2,h3{font-family:var(--sans); font-weight:700; margin:0 0 8px 0;}
+  h1,h2{font-family:var(--display); font-weight:400; margin:0 0 8px 0; text-transform:uppercase; letter-spacing:0.5px; line-height:1.02;}
+  h3{font-family:var(--sans); font-weight:700; margin:0 0 8px 0;}
   .num{font-family:var(--mono);}
+
+  /* A quiet serif italic aside — the reference design's second voice,
+     used for the sentence under a headline rather than for anything you
+     need to act on. */
+  /* Paints the gold gradient THROUGH the letterforms and lights it from
+     behind. background-clip:text is what turns a flat fill into
+     something that catches the light across a glyph. */
+  .metal-gold{
+    background:var(--gold-grad);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    filter:drop-shadow(0 0 9px rgba(247,201,72,0.4));
+  }
+
+  .aside{font-family:var(--serif); font-style:italic; font-size:13.5px; color:var(--text-dim); line-height:1.5;}
+
+  /* Numbered index row: rank, heavy condensed name, italic aside, and
+     the figure right-aligned in the accent colour. This is the shape the
+     reference uses for every list, and it is what a trade list wants to
+     be — scannable down the left, valued down the right. */
+  .idx-row{display:flex; align-items:baseline; gap:12px; padding:14px 0; border-bottom:1px solid var(--border);}
+  .idx-row .n{font-family:var(--mono); font-size:10.5px; color:var(--text-dim); letter-spacing:1px; min-width:20px;}
+  .idx-row .body{flex:1; min-width:0;}
+  .idx-row .t{font-family:var(--display); font-size:17px; text-transform:uppercase; letter-spacing:0.4px; line-height:1.1;}
+  .idx-row .s{font-family:var(--serif); font-style:italic; font-size:12px; color:var(--text-dim); margin-top:2px;}
+  .idx-row .v{font-family:var(--mono); font-weight:700; font-size:15px; white-space:nowrap;}
   .header{
-    position:sticky; top:0; z-index:20; background:linear-gradient(180deg, #0B0F14 80%, rgba(11,15,20,0));
+    position:sticky; top:0; z-index:20; background:linear-gradient(180deg, #080B09 82%, rgba(8,11,9,0));
     padding:14px 16px 8px 16px; display:flex; align-items:center; justify-content:space-between;
   }
   .brand{display:flex; align-items:center; gap:10px;}
-  .brand .mark{width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg, var(--bull), var(--amber)); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; color:#0B0F14; font-size:13px;}
-  .brand .name{font-weight:800; letter-spacing:0.2px; font-size:16px;}
-  .brand .sub{font-size:10px; color:var(--text-dim); letter-spacing:1.5px; text-transform:uppercase; margin-top:-2px;}
+  .brand .mark{width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg, var(--bull), var(--gold-lite)); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; color:#080B09; font-size:13px;}
+  .brand .name{font-family:var(--display); font-weight:400; letter-spacing:1px; font-size:19px; text-transform:uppercase;}
+  .brand .sub{font-size:9px; color:var(--gold-lite); text-shadow:0 0 10px rgba(247,201,72,0.35); letter-spacing:2.6px; text-transform:uppercase; margin-top:-2px;}
 
   .ladder{display:flex; gap:2px; padding:0 16px 10px 16px;}
   .ladder .seg{flex:1; height:4px; border-radius:2px; background:var(--border);}
@@ -46,31 +125,53 @@
   .ladder .seg.bear{background:var(--bear);}
 
   main{padding:0 16px;}
-  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px;}
-  .card h3{font-size:13px; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-dim); margin-bottom:12px;}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:18px 16px 20px; margin-bottom:16px;}
+  /* Section label: a short gold rule, then wide-letterspaced small caps.
+     The rule is what makes a plain heading read as a chapter marker. */
+  .card h3{
+    font-size:11px; text-transform:uppercase; letter-spacing:2.4px; color:var(--text-dim);
+    margin-bottom:14px; display:flex; align-items:center; gap:10px; font-weight:700;
+  }
+  .card h3::before{
+    content:""; width:22px; height:2px; flex:none; border-radius:1px;
+    background:linear-gradient(90deg, var(--gold-deep), var(--gold-lite) 55%, var(--gold));
+    box-shadow:var(--gold-glow);
+  }
 
   .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-  .stat{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px;}
-  .stat .label{font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.6px;}
-  .stat .val{font-family:var(--mono); font-size:22px; font-weight:700; margin-top:4px;}
-  .pos{color:var(--bull);} .neg{color:var(--bear);}
+  .stat{background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:14px 12px;}
+  .stat .label{font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.6px; font-weight:700;}
+  .stat .val{font-family:var(--display); font-size:30px; font-weight:400; margin-top:6px; letter-spacing:0.5px; line-height:1;}
+  /* Positive reinforcement, deliberately asymmetric: a gain gets a faint
+     glow so a good number feels like it lit up, a loss gets the colour
+     and nothing else. The app should mark a win, not punish a loss. */
+  .pos{color:var(--bull);}
+  .stat .val.pos{text-shadow:0 0 22px rgba(0,199,118,0.35);}
+  .neg{color:var(--bear);}
 
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
-  th{text-align:left; color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:0.5px; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap;}
-  td{padding:8px; border-bottom:1px solid var(--border); font-family:var(--mono); white-space:nowrap;}
+  th{text-align:left; color:var(--text-dim); font-weight:700; text-transform:uppercase; font-size:9.5px; letter-spacing:1.6px; padding:8px 8px; border-bottom:1px solid var(--border); white-space:nowrap;}
+  td{padding:12px 8px; border-bottom:1px solid var(--border); font-family:var(--mono); white-space:nowrap;}
   .tbl-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
-  .badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:10.5px; font-weight:700; font-family:var(--sans);}
+  .badge{display:inline-block; padding:3px 9px; border-radius:3px; font-size:9px; font-weight:700; font-family:var(--sans); text-transform:uppercase; letter-spacing:1.4px; vertical-align:middle;}
   .badge.win{background:var(--bull-dim); color:var(--bull);}
   .badge.loss{background:var(--bear-dim); color:var(--bear);}
   .badge.open{background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border);}
-  .badge.long{background:#1B3A5C; color:#5FA8E0;}
-  .badge.short{background:#4A2C5C; color:#C084E0;}
-  .badge.setup{background:#2A2416; color:var(--amber);}
+  /* Long/Short are FACTS about a trade, not verdicts on it. The old blue
+     and purple pulled the eye away from the money column and fought the
+     warm palette; neutral outlined chips let direction sit quietly as
+     metadata. Green stays reserved for gain, so nothing else may borrow
+     it. */
+  .badge.long, .badge.short{background:transparent; color:var(--text-dim); border:1px solid var(--border);}
+  .badge.setup{
+    background:var(--gold-dim); color:var(--gold-lite);
+    border:1px solid rgba(247,201,72,0.45); box-shadow:0 0 10px rgba(247,201,72,0.18) inset;
+  }
 
-  label{display:block; font-size:12px; color:var(--text-dim); margin:12px 0 5px 0; font-weight:600;}
+  label{display:block; font-size:10px; color:var(--text-dim); margin:14px 0 6px 0; font-weight:700; text-transform:uppercase; letter-spacing:1.6px;}
   input, select, textarea{
     width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-    padding:11px 12px; border-radius:8px; font-size:15px; font-family:var(--sans);
+    padding:12px; border-radius:4px; font-size:15px; font-family:var(--sans);
   }
   input.num, .rr-input{font-family:var(--mono);}
   textarea{min-height:70px; resize:vertical;}
@@ -100,31 +201,112 @@
   .shot-box img{width:100%; height:100%; object-fit:cover;}
 
   button.primary{
-    width:100%; background:var(--bull); color:#06130B; border:none; border-radius:10px;
-    padding:14px; font-weight:800; font-size:15px; margin-top:16px; cursor:pointer;
+    width:100%; background:var(--bull); color:#04130C; border:none; border-radius:4px;
+    padding:15px; font-weight:800; font-size:13px; margin-top:18px; cursor:pointer;
+    text-transform:uppercase; letter-spacing:2px;
   }
+  /* The outlined, wide-letterspaced action from the reference. Reads as
+     an invitation rather than a control. */
   button.secondary{
-    width:100%; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:10px;
-    padding:12px; font-weight:600; font-size:14px; margin-top:8px; cursor:pointer;
+    width:100%; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;
+    padding:13px; font-weight:700; font-size:11.5px; margin-top:10px; cursor:pointer;
+    text-transform:uppercase; letter-spacing:1.8px;
   }
   button.ghost{background:none; border:none; color:var(--amber); font-family:var(--sans); font-size:12px; font-weight:700; padding:6px;}
 
   .navbar{
-    position:fixed; bottom:0; left:0; right:0; background:#0D131B; border-top:1px solid var(--border);
+    position:fixed; bottom:0; left:0; right:0; background:#0B0F0C; border-top:1px solid var(--border);
     display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom)) 4px; z-index:30;
   }
-  .navbar .item{flex:1; text-align:center; padding:6px 0; color:var(--text-dim); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; cursor:pointer;}
+  .navbar .item{flex:1; text-align:center; padding:6px 0; color:var(--text-dim); font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; cursor:pointer;}
   .navbar .item.active{color:var(--bull);}
   .navbar .item .ic{font-size:17px; display:block; margin-bottom:2px;}
 
   .view{display:none;} .view.active{display:block;}
+
+  /* ---- Opening screen -------------------------------------------------
+     Modelled on the reference recording: a mark, a numeral counting up in
+     the display face, a rule filling underneath it, and a wide-spaced
+     caps line. It sits over everything and fades out on its own. */
+  .intro{
+    position:fixed; inset:0; z-index:200; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:0; opacity:1; transition:opacity 520ms ease;
+  }
+  .intro.out{opacity:0; pointer-events:none;}
+  .intro .mark{
+    font-size:52px; line-height:1; margin-bottom:18px;
+    opacity:0; transform:translateY(10px); animation:introRise 700ms 80ms ease forwards;
+  }
+  /* Applied only when the symbol is a plain character. An emoji is
+     already a full-colour picture — clipping a gradient through it would
+     strip its colour and leave a gold blob — so an emoji keeps its own
+     colours and just gets lit from behind instead. */
+  .intro .mark.metal-gold{filter:drop-shadow(0 0 22px rgba(247,201,72,0.55));}
+  .intro .mark.emoji{filter:drop-shadow(0 0 26px rgba(247,201,72,0.5));}
+  /* A drawn mark, not a character. A crowned pawn is the one chess piece
+     that means what this app is for — the piece that starts smallest and
+     is the only one that can become anything. Drawn rather than typed so
+     the gold gradient runs through the actual shape and the glow sits
+     around its real silhouette. */
+  .intro .mark.chess{filter:drop-shadow(0 0 24px rgba(247,201,72,0.5));}
+  .chess-mark{width:84px; height:auto; display:block;}
+  .intro .count{
+    font-family:var(--display); font-size:64px; line-height:0.9; letter-spacing:1px;
+    color:var(--text); font-weight:400;
+    opacity:0; animation:introRise 700ms 200ms ease forwards;
+  }
+  /* The rule is the progress bar — the accent fills left to right as the
+     numeral climbs, so the two read as one movement rather than two. */
+  .intro .rule{
+    width:min(260px, 62vw); height:1px; background:var(--border); margin:16px 0 14px;
+    position:relative; overflow:hidden;
+  }
+  .intro .rule i{
+    position:absolute; inset:0 auto 0 0; width:0%;
+    background:linear-gradient(90deg, var(--bull), var(--gold-lite));
+    box-shadow:0 0 12px rgba(247,201,72,0.5);
+  }
+  .intro .line{
+    font-size:10px; text-transform:uppercase; letter-spacing:4px; color:var(--text-dim);
+    text-align:center; padding:0 24px;
+    opacity:0; animation:introRise 700ms 340ms ease forwards;
+  }
+  .intro .sub{
+    font-family:var(--serif); font-style:italic; font-size:14px; color:var(--text-dim);
+    margin-top:16px; text-align:center; padding:0 32px; line-height:1.5;
+    opacity:0; animation:introRise 800ms 620ms ease forwards;
+  }
+  .intro .skip{
+    position:absolute; bottom:calc(26px + env(safe-area-inset-bottom)); font-size:9.5px;
+    text-transform:uppercase; letter-spacing:2.4px; color:var(--text-dim); opacity:0;
+    animation:introRise 700ms 1100ms ease forwards;
+  }
+  @keyframes introRise{to{opacity:1; transform:translateY(0);}}
+
+  /* ---- Scroll transitions --------------------------------------------
+     Sections lift into place as they come into view, the way the
+     reference site introduces each block instead of having it just be
+     there. The hidden state is applied ONLY when body carries
+     .motion-on, which the script adds — so if anything goes wrong with
+     the script, or motion is switched off, every section is simply
+     visible rather than permanently invisible. */
+  body.motion-on .reveal{opacity:0; transform:translateY(18px);}
+  body.motion-on .reveal.in{
+    opacity:1; transform:none;
+    transition:opacity 620ms cubic-bezier(.2,.7,.3,1), transform 620ms cubic-bezier(.2,.7,.3,1);
+  }
+  @media (prefers-reduced-motion: reduce){
+    body.motion-on .reveal{opacity:1; transform:none;}
+    .intro .mark, .intro .count, .intro .line, .intro .sub, .intro .skip{animation:none; opacity:1; transform:none;}
+  }
   .empty{text-align:center; padding:30px 10px; color:var(--text-dim); font-size:13px;}
   .pill-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
   .pill{padding:6px 12px; border-radius:20px; border:1px solid var(--border); font-size:12px; color:var(--text-dim); cursor:pointer;}
   .pill.sel{background:var(--amber); color:#241C05; border-color:var(--amber); font-weight:700;}
 
-  .ai-msg{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; font-size:13px; line-height:1.5;}
-  .ai-msg .tag{font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:var(--amber); font-weight:800; margin-bottom:5px;}
+  .ai-msg{background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:12px; margin-bottom:10px; font-size:13px; line-height:1.5;}
+  .ai-msg .tag{font-size:10px; text-transform:uppercase; letter-spacing:1.6px; color:var(--gold-lite); text-shadow:0 0 9px rgba(247,201,72,0.3); font-weight:800; margin-bottom:5px;}
   .spin{width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--amber); border-radius:50%; animation:sp 0.7s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
   @keyframes sp{to{transform:rotate(360deg);}}
 
@@ -142,7 +324,7 @@
   button.secondary.busy::after{content:" ..."}
 
   .modal-overlay{
-    display:none; position:fixed; inset:0; background:rgba(6,9,13,0.85); z-index:50;
+    display:none; position:fixed; inset:0; background:rgba(4,6,5,0.88); z-index:50;
     align-items:flex-end; justify-content:center;
   }
   .modal-overlay.show{display:flex;}
@@ -153,7 +335,7 @@
   .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
   .modal-head .t{font-weight:800; font-size:15px;}
   .modal-close{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); border-radius:50%; width:28px; height:28px; text-align:center; line-height:26px; cursor:pointer; font-size:14px;}
-  .replay-canvas-wrap{background:#070A0F; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px; position:relative;}
+  .replay-canvas-wrap{background:#060806; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px; position:relative;}
   .modal-box.fs{
     max-width:100vw; width:100vw; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh;
     border-radius:0; display:flex; flex-direction:column; padding:10px 10px calc(10px + env(safe-area-inset-bottom));
@@ -167,7 +349,7 @@
   .replay-draw-canvas{position:absolute; inset:0; z-index:1; pointer-events:none;}
   .replay-ohlc-overlay{
     position:absolute; top:6px; left:6px; z-index:2; pointer-events:none;
-    background:rgba(11,15,20,0.72); border:1px solid var(--border); border-radius:5px;
+    background:rgba(8,11,9,0.75); border:1px solid var(--border); border-radius:5px;
     padding:4px 7px; font-family:var(--mono); font-size:10.5px; color:var(--text); line-height:1.4; white-space:nowrap;
   }
   .replay-legend{display:flex; gap:14px; font-size:11px; color:var(--text-dim); margin-top:6px;}
@@ -204,6 +386,28 @@
   .trade-card .tc-pnl{font-weight:800; font-size:17px;}
   .trade-card .tc-badges{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
   .trade-card .tc-details{font-size:11.5px; color:var(--text-dim); font-family:var(--mono); display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; margin-bottom:12px;}
+  /* Notes are the one part of a trade written in sentences, so they get
+     the reading typeface rather than the monospaced one the figures use —
+     a paragraph set in mono reads like a receipt. Clamped to three lines
+     so one long note cannot push every other trade off the screen; tap to
+     open it out. */
+  .trade-card .tc-notes{
+    background:var(--panel); border-left:2px solid var(--gold); border-radius:0 4px 4px 0;
+    padding:8px 10px; margin-bottom:12px; cursor:pointer;
+  }
+  .trade-card .tc-notes-label{
+    display:block; font-family:var(--sans); font-size:9px; letter-spacing:1.6px;
+    text-transform:uppercase; color:var(--text-dim); margin-bottom:4px;
+  }
+  /* The clamp goes on the TEXT, not on the padded box. Clamping the box
+     lets a sliver of the next line show through inside its own padding,
+     which looks like a rendering fault rather than a deliberate trim. */
+  .trade-card .tc-notes-body{
+    font-size:12.5px; line-height:1.5; color:var(--text); white-space:pre-wrap;
+  }
+  .trade-card .tc-notes.clamped .tc-notes-body{
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
   .trade-card .tc-actions{display:flex; gap:8px;}
   .trade-card .tc-actions button{
     flex:1; padding:12px 4px; border-radius:8px; font-size:13px; font-weight:700;
@@ -214,6 +418,86 @@
 </style>
 </head>
 <body>
+<!-- Painted over the app on open. Deliberately in the markup rather than
+     built by the main script, and shown by the tiny script just below,
+     so it is already on screen before the app renders — an opening that
+     appears a moment AFTER the page does is not an opening. -->
+<div class="intro" id="introScreen" style="display:none;" onclick="skipIntro()">
+  <!-- The drawn mark lives in a template so BOTH the pre-paint script
+       below and the settings preview can clone it, instead of each
+       carrying its own copy of the drawing that could drift apart. -->
+  <template id="chessMarkTpl"><svg class="chess-mark" viewBox="0 0 100 142" role="img" aria-label="Crowned pawn">
+  <defs>
+    <linearGradient id="cmGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFEEB0"/><stop offset="34%" stop-color="#F7C948"/>
+      <stop offset="58%" stop-color="#C9931F"/><stop offset="78%" stop-color="#FFE08A"/>
+      <stop offset="100%" stop-color="#F7C948"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#cmGold)">
+    <!-- Base, built as stepped tiers the way the reference drawing has
+         it, widest at the floor. -->
+    <rect x="14" y="128" width="72" height="9" rx="4"/>
+    <rect x="19" y="119" width="62" height="10" rx="4"/>
+    <path d="M28 120 C28 110 34 102 40 98 L60 98 C66 102 72 110 72 120 Z"/>
+    <!-- Stem: a concave taper, narrow under the collar and flaring out. -->
+    <path d="M41 98 C38 88 39 80 42 75 L58 75 C61 80 62 88 59 98 Z"/>
+    <!-- Collar under the head. -->
+    <path d="M31 76 L69 76 L63 67 L37 67 Z"/>
+    <rect x="34" y="62" width="32" height="4" rx="2"/>
+    <circle cx="50" cy="44" r="18"/>
+    <!-- Crown, tilted and resting ON the head so the band overlaps the
+         sphere's top-left, as it does in the drawing. -->
+    <g transform="translate(37,29) rotate(-26) scale(0.94)">
+      <rect x="-21" y="5" width="42" height="6" rx="2"/>
+      <path d="M-20 6 L-20 -3 L-11 4 L0 -14 L11 4 L20 -3 L20 6 Z"/>
+      <circle cx="-20" cy="-6" r="2.8"/><circle cx="0" cy="-17" r="3.2"/><circle cx="20" cy="-6" r="2.8"/>
+    </g>
+  </g>
+</svg></template>
+  <div class="mark chess" id="introMark"></div>
+  <div class="count" id="introCount">00</div>
+  <div class="rule"><i id="introFill"></i></div>
+  <div class="line" id="introLine">OPENING THE JOURNAL</div>
+  <!-- Defaults live in the markup, not only in the script: on a
+       first-ever open there is nothing saved yet, and the pre-paint
+       script above has nothing to fill these in from. -->
+  <div class="sub" id="introSub">Discipline compounds.</div>
+  <div class="skip">Tap to skip</div>
+</div>
+<script>
+  // Runs before the rest of the page so there is no flash of the app
+  // first. Self-contained on purpose: it must not depend on anything the
+  // main script sets up later, and any failure here must leave the app
+  // usable rather than stuck behind a stalled opening.
+  (function(){
+    try{
+      var raw = localStorage.getItem('strat_intro');
+      var cfg = raw ? JSON.parse(raw) : null;
+      if(cfg && cfg.on === false) return;
+      var el = document.getElementById('introScreen');
+      if(true){
+        cfg = cfg || {};
+        var mk = document.getElementById('introMark');
+        var sym = cfg.symbol || 'chess';
+        if(sym === 'chess'){
+          mk.className = 'mark chess';
+          mk.appendChild(document.getElementById('chessMarkTpl').content.cloneNode(true));
+        } else {
+          mk.textContent = sym;
+          // An emoji is already a full-colour picture; painting a gold
+          // gradient through it would strip its colour to a gold blob.
+          var isEmoji = /\p{Extended_Pictographic}/u.test(sym);
+          mk.className = 'mark ' + (isEmoji ? 'emoji' : 'metal-gold');
+        }
+        if(cfg.line != null) document.getElementById('introLine').textContent = cfg.line;
+        if(cfg.sub != null) document.getElementById('introSub').textContent = cfg.sub; // '' is a real choice — he may not want a line at all
+      }
+      el.style.display = 'flex';
+      window.__introPending = true;
+    }catch(e){ /* never let the opening keep the app from loading */ }
+  })();
+</script>
 
 <div class="header">
   <div class="brand">
@@ -225,7 +509,11 @@
   </div>
   <div id="connBadge" style="font-size:11px; color:var(--text-dim);"><span class="conn-dot off"></span>Not connected</div>
 </div>
-<div id="setupDebug" style="font-size:10.5px; color:var(--text-dim); padding:2px 16px 6px 16px;"></div>
+<!-- Kept in the page but hidden. It was added to chase a specific
+     problem with settings not saving on the phone, and that problem is
+     long fixed — but the wiring below still fills it in, so it stays
+     available if that ever needs diagnosing again. -->
+<div id="setupDebug" style="display:none; font-size:10.5px; color:var(--text-dim); padding:2px 16px 6px 16px;"></div>
 <div class="ladder" id="heroLadder"></div>
 
 <main>
@@ -266,36 +554,141 @@
     <div class="card">
       <h3>Schwab Connection</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5; margin-bottom:10px;">
-        A background job on your backend checks Schwab every few minutes on its own —
-        whether your phone is open or not — and matched trades are pulled straight
-        into your Journal below the next time you open the app. No tagging step.
+        Your trades come in on their own. The server watches Schwab every few
+        minutes whether your phone is open or not, and the app collects
+        anything new every time you open it — so normally there is nothing
+        here to press.
       </div>
-      <label>Backend URL</label>
-      <input id="f_backendUrl" placeholder="https://your-backend.example.com">
-      <label>App Key</label>
-      <input id="f_appKey" placeholder="the APP_SECRET value from your Render environment variables">
-      <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">Required for screenshot matching and AI Analyst — same value as your backend's APP_SECRET.</div>
-      <button class="secondary" id="btnConnect" onclick="connectBackend()">Connect</button>
-      <button class="secondary" id="btnRefresh" onclick="pollBackend()">Check for New Trades</button>
-      <button class="secondary" id="btnBackfill" onclick="runBackfillNow()">Import Trade History (one-time)</button>
-      <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" id="btnReset" onclick="resetAndReimport()">Reset &amp; Re-import Trades</button>
+      <div id="connState" style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;">
+        <span class="conn-dot off" id="connStateDot"></span>
+        <span id="connStateText">Not connected</span>
+      </div>
+
+      <!-- The one button. Everything the four old buttons did, with the
+           app deciding which is needed instead of asking. -->
+      <button class="primary" id="btnGetTrades" onclick="getMyTrades()" style="margin-top:0;">Get My Trades</button>
       <div class="status-banner" id="syncStatus"></div>
-      <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
+
+      <!-- Setup, tucked away. These are things you fill in once and never
+           touch again, so they do not belong on the screen you look at
+           every day. Opens itself only when there is nothing connected. -->
+      <div id="connSettingsToggle" onclick="toggleConnSettings()" style="margin-top:14px; cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+        <span id="connSettingsArrow">›</span> Connection settings
+      </div>
+      <div id="connSettings" style="display:none; margin-top:10px;">
+        <label>Backend URL</label>
+        <input id="f_backendUrl" placeholder="https://your-backend.example.com">
+        <label>App Key</label>
+        <input id="f_appKey" placeholder="the APP_SECRET value from your Render environment variables">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">Required for screenshot matching and AI Analyst — same value as your backend's APP_SECRET.</div>
+        <button class="secondary" id="btnConnect" onclick="connectBackend()">Save &amp; Connect</button>
+        <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" id="btnReset" onclick="resetAndReimport()">Reset &amp; Re-import Trades</button>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
+          Only needed after a change to how trades are matched — it rebuilds
+          everything from Schwab.
+        </div>
+        <div class="sync-log" id="syncLog"><div>Not connected yet.</div></div>
+      </div>
+      <!-- Kept so the old code paths that disable it still work, but no
+           longer something to find and press. -->
+      <button id="btnRefresh" onclick="pollBackend()" style="display:none;"></button>
+      <button id="btnBackfill" onclick="runBackfillNow()" style="display:none;"></button>
     </div>
 
-    <div class="card">
-      <h3>All Trades</h3>
-      <div id="journalList"></div>
-      <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
+        <!-- Setup lives behind one line. Putting it above the trade list made
+         the trades unreachable; putting it below made the settings
+         unreachable — the list grows without limit, so anything sharing a
+         page with it loses. Collapsed, it costs one line and nothing is
+         buried either way. -->
+    <div id="journalSetupToggle" onclick="toggleJournalSetup()" style="cursor:pointer; padding:4px 0 10px; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+      <span id="journalSetupArrow">›</span> Settings, import &amp; export
     </div>
-
-    <div class="card">
+    <div id="journalSetup" style="display:none;">
+<div class="card">
       <h3>Import Schwab CSV (fallback, no backend needed)</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:8px;">
         Export "Transactions" from Schwab as CSV and import here. Auto-fills ticker, OCC symbol, price, date/time.
       </div>
       <input type="file" id="csvInput" accept=".csv" onchange="handleCsv(this)">
       <div class="sync-log" id="csvLog"></div>
+    </div>
+
+    <div class="card">
+      <h3>Stop Loss Rule</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
+        Your rule, taught to the journal once: the stop goes at the bottom of
+        the candle before your entry (the top, if you were Short) — or at its
+        halfway point when that candle was a large one. Trades that come in
+        from Schwab get their stop worked out automatically, so your
+        risk-vs-reward figure fills itself in.
+      </div>
+      <div class="strat-opt" id="stopRuleOnToggle" onclick="toggleStopRule()">
+        <div class="t">Work stops out automatically: <span id="stopRuleOnLabel">On</span></div>
+        <div class="d">Never touches a stop you typed in yourself.</div>
+      </div>
+      <label style="margin-top:14px;">Timeframe you usually trade</label>
+      <select id="f_srTimeframe">
+        <option value="1m">1 minute</option><option value="3m">3 minute</option>
+        <option value="5m">5 minute</option><option value="10m">10 minute</option>
+        <option value="15m">15 minute</option><option value="30m">30 minute</option>
+        <option value="1H">1 hour</option>
+      </select>
+      <label style="margin-top:12px;">When is a candle "large"?</label>
+      <input id="f_srMultiple" class="num" type="number" step="0.1" min="1.1" max="20" placeholder="1.5">
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">
+        How many times bigger than a normal recent candle it has to be before
+        the stop moves up to the halfway mark. <b>1.5</b> means half again as
+        big as usual. Set it high (say 10) if you'd rather always use the
+        bottom of the candle.
+      </div>
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:8px;">
+        You said your timeframe varies. If it varies <i>by setup</i>, set each
+        one below and you'll rarely have to change it on a trade.
+      </div>
+      <div id="stopRulePerSetup"></div>
+      <button class="primary" onclick="saveStopRuleSettings()">Save Stop Rule</button>
+      <div id="stopRuleStatus" style="font-size:12px; color:var(--text-dim); margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>Opening &amp; Motion</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
+        The short opening you see when the app starts, and the way sections
+        lift into place as you scroll. Both can be turned off, and the
+        opening's wording is yours to write.
+      </div>
+      <div class="strat-opt" id="introOnToggle" onclick="toggleIntroSetting('on')">
+        <div class="t">Opening screen: <span id="introOnLabel">On</span></div>
+        <div class="d">Shows for a couple of seconds each time the app is opened. Tap it to skip.</div>
+      </div>
+      <div class="strat-opt" id="motionOnToggle" onclick="toggleIntroSetting('motion')" style="margin-top:8px;">
+        <div class="t">Scroll transitions: <span id="motionOnLabel">On</span></div>
+        <div class="d">Sections fade and lift as they come into view instead of just being there.</div>
+      </div>
+      <label style="margin-top:14px;">Symbol</label>
+      <div class="pill-row" id="introPresets">
+        <div class="pill" onclick="pickIntroSymbol('chess')">♟ Crowned pawn</div>
+        <div class="pill" onclick="pickIntroSymbol('◆')">◆</div>
+        <div class="pill" onclick="pickIntroSymbol('▲')">▲</div>
+        <div class="pill" onclick="pickIntroSymbol('🏆')">🏆</div>
+      </div>
+      <input id="f_introSymbol" type="text" maxlength="12" placeholder="chess" style="margin-top:8px;">
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">
+        Tap one above, or type any letter or emoji of your own. Leave it as
+        <b>chess</b> for the drawn crowned pawn.
+      </div>
+      <label style="margin-top:12px;">Line underneath</label>
+      <input id="f_introLine" type="text" maxlength="40" placeholder="OPENING THE JOURNAL">
+      <label style="margin-top:12px;">Introduction (optional)</label>
+      <input id="f_introSub" type="text" maxlength="80" placeholder="Discipline compounds.">
+      <label style="margin-top:12px;">How long it stays</label>
+      <select id="f_introMs">
+        <option value="1200">Quick — about 1 second</option>
+        <option value="2000" selected>Normal — about 2 seconds</option>
+        <option value="3200">Slow — about 3 seconds</option>
+      </select>
+      <button class="secondary" onclick="previewIntro()">Show Me</button>
+      <button class="primary" onclick="saveIntroSettings()">Save Opening</button>
     </div>
 
     <div class="card">
@@ -319,11 +712,21 @@
 
     <div class="card">
       <h3>Data</h3>
+      <button class="secondary" onclick="findDuplicateTrades()">Check for Duplicate Trades</button>
+      <div id="dupeOut" style="font-size:12.5px; color:var(--text-dim); margin-top:8px; line-height:1.5;"></div>
       <button class="secondary" onclick="exportData()">Export All Trades (JSON)</button>
       <button class="secondary" onclick="exportCsvSheet()">Export Journal (CSV)</button>
       <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="wipeData()">Erase All Trades</button>
     </div>
-  </div>
+      </div>
+
+    <div class="card">
+      <h3>All Trades</h3>
+      <div id="journalList"></div>
+      <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
+    </div>
+
+</div>
 
   <!-- NEW TRADE -->
   <div class="view" id="view-new">
@@ -363,6 +766,18 @@
         <div><label>Planned R:R</label><input id="f_rr" class="num" type="number" step="0.1" placeholder="2.5"></div>
       </div>
       <div class="status-banner" id="riskCheckBanner" style="margin-top:8px;"></div>
+      <label style="margin-top:12px;">Work the stop out from my rule</label>
+      <div class="row2">
+        <select id="f_stopTimeframe">
+          <option value="">Use my usual timeframe</option>
+          <option value="1m">1 minute</option><option value="3m">3 minute</option>
+          <option value="5m">5 minute</option><option value="10m">10 minute</option>
+          <option value="15m">15 minute</option><option value="30m">30 minute</option>
+          <option value="1H">1 hour</option>
+        </select>
+        <button class="secondary" style="margin-top:0;" onclick="computeStopFromRule()">Work It Out</button>
+      </div>
+      <div id="stopRuleOut" style="font-size:11.5px; color:var(--text-dim); margin-top:6px;"></div>
     </div>
 
     <div class="card">
@@ -446,6 +861,53 @@
   <!-- AI ANALYST -->
   <div class="view" id="view-ai">
     <div class="card">
+      <h3>Backtest</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:12px; line-height:1.5;">
+        Pick a setup, a stretch of time and one or more timeframes. Every
+        occurrence is found in real Schwab candles and played forward using
+        <b>your own stop rule</b>, so you can see what it actually did — then
+        the AI reads those results back to you.
+      </div>
+
+      <label>Ticker</label>
+      <input id="bt_ticker" type="text" placeholder="SPY" value="SPY">
+
+      <label style="margin-top:12px;">Setups to test</label>
+      <div class="pill-row" id="bt_setups"></div>
+
+      <label style="margin-top:12px;">Timeframes to compare</label>
+      <div class="pill-row" id="bt_timeframes"></div>
+
+      <div class="row2" style="margin-top:12px;">
+        <div>
+          <label>How far back</label>
+          <select id="bt_days">
+            <option value="7">Last week</option>
+            <option value="30" selected>Last month</option>
+            <option value="35">As far back as minutes go (35 days)</option>
+            <option value="365">Last year (daily bars only)</option>
+          </select>
+        </div>
+        <div>
+          <label>Target</label>
+          <select id="bt_target">
+            <option value="1">1R</option>
+            <option value="1.5">1.5R</option>
+            <option value="2" selected>2R</option>
+            <option value="3">3R</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">
+        Schwab only keeps about 35 days of minute-by-minute history, so
+        anything longer than that can only be tested on daily bars.
+      </div>
+
+      <button class="primary" id="btRunBtn" onclick="runBacktest()">Run Backtest</button>
+      <div id="btOutput"></div>
+    </div>
+
+    <div class="card">
       <h3>AI Analyst</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
         Reviews every logged trade for setup performance, late/early entries, sub-2:1 R:R setups you took anyway, and exits before target.
@@ -457,14 +919,17 @@
     <div class="card">
       <h3>Test Classification</h3>
       <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:10px;">
-        Upload a made-up chart — drawn, AI-generated, pulled from the internet — and the AI classifies it strictly from the picture, with no other hints (no direction, no FTFC, no Broadening Formation). Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
+        Upload a made-up chart — drawn, AI-generated, pulled from the internet — and the AI classifies it strictly from what it sees, with no other hints (no direction, no FTFC, no Broadening Formation). Nothing here is saved as a real trade. Tell it whether it got the pattern right so you build up a record to review later.
       </div>
 
-      <label>Chart picture</label>
+      <label>Chart picture or short clip</label>
       <div class="shot-row">
-        <div class="shot-box" id="testShotBox" onclick="document.getElementById('testShotInput').click()">+ Add picture</div>
+        <div class="shot-box" id="testShotBox" onclick="document.getElementById('testShotInput').click()">+ Add picture or clip</div>
       </div>
-      <input type="file" id="testShotInput" accept="image/*" style="display:none;" onchange="handleTestShot(this)">
+      <input type="file" id="testShotInput" accept="image/*,video/*" style="display:none;" onchange="handleTestShot(this)">
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">
+        A screen recording works as well as a still — keep clips under about 20 seconds (10MB) so they send from your phone.
+      </div>
 
       <label style="margin-top:10px;">Or describe the setup in words instead (if you have no picture)</label>
       <textarea id="testDescription" placeholder="e.g. inside bar, then a directional bar breaking up, then another directional bar breaking down..."></textarea>
@@ -538,6 +1003,453 @@ function showView(name){
   document.querySelectorAll('.navbar .item').forEach(i=>i.classList.toggle('active', i.dataset.view===name));
   if(name==='dashboard') renderDashboard();
   if(name==='journal') renderJournal();
+  // A hidden tab has no size, so nothing in it could be measured. Now
+  // that it is on screen, bind and reveal whatever is actually visible.
+  revealScan();
+  revealSweep();
+}
+
+// ---- Backtest --------------------------------------------------------
+// Every number shown here is counted on the server from real Schwab
+// candles. The AI's reading is displayed separately and clearly labelled,
+// so a comment is never mistaken for a measurement.
+const BT_SETUPS = ['2-1-2 Continuation','2-1-2 Reversal','3-1-2 Reversal','2-2 Continuation','2-2 Reversal','3-2-2 Reversal','1-2-2 Rev Strat','1 Bar Rev Strat','PMG'];
+const BT_TFS = ['1m','3m','5m','10m','15m','30m','1H','1D'];
+let btSetupsChosen = new Set(['2-2 Continuation']);
+let btTfsChosen = new Set(['5m','15m']);
+
+function renderBacktestPickers(){
+  const sBox = document.getElementById('bt_setups');
+  const tBox = document.getElementById('bt_timeframes');
+  if(sBox) sBox.innerHTML = BT_SETUPS.map(x=>
+    `<div class="pill${btSetupsChosen.has(x)?' sel':''}" onclick="toggleBtSetup('${x.replace(/'/g,"\\'")}')">${x}</div>`).join('');
+  if(tBox) tBox.innerHTML = BT_TFS.map(x=>
+    `<div class="pill${btTfsChosen.has(x)?' sel':''}" onclick="toggleBtTf('${x}')">${x}</div>`).join('');
+}
+function toggleBtSetup(x){ btSetupsChosen.has(x) ? btSetupsChosen.delete(x) : btSetupsChosen.add(x); renderBacktestPickers(); }
+function toggleBtTf(x){ btTfsChosen.has(x) ? btTfsChosen.delete(x) : btTfsChosen.add(x); renderBacktestPickers(); }
+
+async function runBacktest(){
+  const url = backendUrl();
+  const out = document.getElementById('btOutput');
+  if(!url){ out.innerHTML = `<div class="ai-msg"><div class="tag">Not connected</div>Connect your backend on the Journal tab first.</div>`; return; }
+  if(!btSetupsChosen.size){ out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing picked</div>Choose at least one setup to test.</div>`; return; }
+  if(!btTfsChosen.size){ out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing picked</div>Choose at least one timeframe.</div>`; return; }
+
+  const btn = document.getElementById('btRunBtn');
+  btn.disabled = true;
+  out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Waking the server...</div>`;
+  try{ await fetch(url+'/health'); }catch(e){ /* the real call below is what matters */ }
+  out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Reading the candles and playing every occurrence forward. This can take a minute.</div>`;
+
+  try{
+    const r = await fetch(url+'/ai/backtest?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ticker: document.getElementById('bt_ticker').value.trim() || 'SPY',
+        setups: [...btSetupsChosen], timeframes: [...btTfsChosen],
+        days: parseInt(document.getElementById('bt_days').value,10),
+        targetR: parseFloat(document.getElementById('bt_target').value),
+      })
+    });
+    const data = await r.json();
+    if(!r.ok){ out.innerHTML = `<div class="ai-msg"><div class="tag">Couldn't run it</div>${escapeHtml(data.error||('status '+r.status))}</div>`; return; }
+    renderBacktestResults(data);
+  }catch(e){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Couldn't run it</div>${escapeHtml(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+function renderBacktestResults(data){
+  const out = document.getElementById('btOutput');
+  const found = (data.results||[]).filter(r=>r.summary.occurrences>0);
+  if(!found.length){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">Nothing found</div>
+      None of those setups appeared on those timeframes in that stretch of time.
+      ${(data.notes||[]).map(n=>`<div style="margin-top:6px; color:var(--text-dim);">${escapeHtml(n)}</div>`).join('')}</div>`;
+    return;
+  }
+  // Best first, by total R — the figure that actually says whether it paid.
+  found.sort((a,b)=>b.summary.totalR - a.summary.totalR);
+
+  const row = r => {
+    const s = r.summary;
+    const cls = s.totalR > 0 ? 'pos' : (s.totalR < 0 ? 'neg' : '');
+    // Anything under 30 occurrences is flagged. A win rate on 8 trades
+    // tells nobody anything, and it must not be shown as if it did.
+    const thin = s.occurrences < 30
+      ? `<div style="font-size:11px; color:var(--gold); margin-top:4px;">⚠ Only ${s.occurrences} of these happened — too few to trust the percentage.</div>` : '';
+    return `
+    <div class="ai-msg">
+      <div class="tag">${escapeHtml(r.setup)} · ${escapeHtml(r.timeframe)}</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+        <span class="num" style="font-size:15px; font-weight:700;">${s.winRate}% won</span>
+        <span class="num ${cls}" style="font-size:15px; font-weight:700;">${s.totalR > 0 ? '+' : ''}${s.totalR}R</span>
+      </div>
+      <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">
+        ${s.occurrences} occurrence${s.occurrences===1?'':'s'} · ${s.wins} won, ${s.losses} lost<br>
+        Reached target ${s.hitTarget} · stopped out ${s.stoppedOut} · ran out of time ${s.ranOut}<br>
+        Average ${s.avgR}R per trade · searched ${r.barsSearched} candles from ${r.from.slice(0,10)} to ${r.to.slice(0,10)}
+      </div>
+      ${thin}
+    </div>`;
+  };
+
+  const rd = data.reading;
+  const readingHtml = rd ? `
+    <div class="card" style="margin-top:14px;">
+      <h3>What the AI makes of it</h3>
+      <div style="font-size:11px; color:var(--text-dim); margin-bottom:10px;">
+        The AI did not produce any of the numbers above — it was handed them and asked what it sees.
+      </div>
+      <div class="ai-msg"><div class="tag">Reading · ${escapeHtml(rd.verdict||'')}</div>${escapeHtml(rd.headline||'')}</div>
+      ${rd.timeframeComparison ? `<div class="ai-msg"><div class="tag">Timeframes</div>${escapeHtml(rd.timeframeComparison)}</div>` : ''}
+      ${(rd.patterns||[]).length ? `<div class="ai-msg"><div class="tag">What it noticed</div>${rd.patterns.map(x=>`<div style="margin-top:4px;">· ${escapeHtml(x)}</div>`).join('')}</div>` : ''}
+      ${(rd.cautions||[]).length ? `<div class="ai-msg"><div class="tag">Be careful of</div>${rd.cautions.map(x=>`<div style="margin-top:4px;">· ${escapeHtml(x)}</div>`).join('')}</div>` : ''}
+    </div>` : (data.readingError ? `<div class="ai-msg" style="margin-top:12px;"><div class="tag">No AI reading</div>The numbers above are still real — the AI just couldn't be reached (${escapeHtml(data.readingError)}).</div>` : '');
+
+  out.innerHTML = `
+    <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.6px; margin:14px 0 8px;">
+      Counted from real candles
+    </div>
+    ${found.map(row).join('')}
+    ${(data.notes||[]).length ? `<div class="ai-msg"><div class="tag">Worth knowing</div>${data.notes.map(n=>`<div style="margin-top:4px;">· ${escapeHtml(n)}</div>`).join('')}</div>` : ''}
+    <div class="ai-msg"><div class="tag">How this was worked out</div>
+      Entry is where the trigger candle breaks the one before it. The stop is
+      your own rule. Where a single candle contained both your stop and your
+      target, it is counted as a <b>loss</b> — the candle can't say which came
+      first, and guessing in your favour is how a backtest fools you.
+    </div>
+    ${readingHtml}`;
+}
+
+// ---- Stop Loss Rule --------------------------------------------------
+// The rule itself lives on the server, because the automatic sync runs
+// there with no phone involved. This screen only reads and writes it.
+const STOP_SETUPS = ['2-1-2 Continuation','2-1-2 Reversal','3-1-2 Reversal','2-2 Continuation','2-2 Reversal','3-2-2 Reversal','1-2-2 Rev Strat','1 Bar Rev Strat','PMG'];
+const STOP_TFS = ['1m','3m','5m','10m','15m','30m','1H'];
+let stopRuleSettings = null;
+
+async function loadStopRuleSettings(){
+  const url = backendUrl();
+  if(!url) return;
+  try{
+    const r = await fetch(url+'/api/stop-rule/settings');
+    if(!r.ok) throw new Error('status '+r.status);
+    const { settings } = await r.json();
+    stopRuleSettings = settings;
+    renderStopRuleForm(settings);
+  }catch(e){
+    const el = document.getElementById('stopRuleStatus');
+    if(el) el.textContent = 'Could not reach your backend to load the stop rule.';
+  }
+}
+
+function renderStopRuleForm(cfg){
+  const on = document.getElementById('stopRuleOnToggle');
+  if(on) on.classList.toggle('sel', !!cfg.enabled);
+  const lbl = document.getElementById('stopRuleOnLabel');
+  if(lbl) lbl.textContent = cfg.enabled ? 'On' : 'Off';
+  const tf = document.getElementById('f_srTimeframe'); if(tf) tf.value = cfg.timeframe || '5m';
+  const mu = document.getElementById('f_srMultiple'); if(mu) mu.value = cfg.largeMultiple ?? 1.5;
+  const box = document.getElementById('stopRulePerSetup');
+  if(box){
+    const per = cfg.perSetup || {};
+    box.innerHTML = STOP_SETUPS.map(name=>`
+      <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+        <div style="flex:1; font-size:12.5px;">${name}</div>
+        <select data-setup="${name}" style="width:auto; min-width:130px; padding:7px 8px; font-size:13px;">
+          <option value="">Same as usual</option>
+          ${STOP_TFS.map(t=>`<option value="${t}"${per[name]===t?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>`).join('');
+  }
+}
+
+function toggleStopRule(){
+  if(!stopRuleSettings) return;
+  stopRuleSettings.enabled = !stopRuleSettings.enabled;
+  renderStopRuleForm(stopRuleSettings);
+}
+
+async function saveStopRuleSettings(){
+  const url = backendUrl();
+  const out = document.getElementById('stopRuleStatus');
+  if(!url){ out.textContent = 'Connect your backend first.'; return; }
+  const perSetup = {};
+  document.querySelectorAll('#stopRulePerSetup select').forEach(sel=>{
+    if(sel.value) perSetup[sel.dataset.setup] = sel.value;
+  });
+  const body = {
+    enabled: stopRuleSettings ? !!stopRuleSettings.enabled : true,
+    timeframe: document.getElementById('f_srTimeframe').value,
+    largeMultiple: parseFloat(document.getElementById('f_srMultiple').value) || 1.5,
+    perSetup,
+  };
+  out.textContent = 'Saving...';
+  try{
+    const r = await fetch(url+'/api/stop-rule/settings', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error('status '+r.status);
+    const { settings } = await r.json();
+    stopRuleSettings = settings;
+    renderStopRuleForm(settings);
+    // Reading the saved values back and showing them matters here: the
+    // server refuses nonsense (a multiple of 0.5 would call every candle
+    // large), so silently accepting the tap would leave him believing a
+    // setting took effect when it did not.
+    out.textContent = `Saved. Candles count as large at ${settings.largeMultiple}x, on the ${settings.timeframe} chart unless a setup says otherwise.`;
+    showStatus('ok','Stop rule saved.');
+  }catch(e){
+    out.textContent = 'Could not save — check your backend connection.';
+    showStatus('err','Could not save the stop rule.');
+  }
+}
+
+// Works the stop out for the trade currently on screen, so it can be seen
+// and sanity-checked before it is saved rather than appearing by magic.
+async function computeStopFromRule(){
+  const url = backendUrl();
+  const out = document.getElementById('stopRuleOut');
+  if(!url){ out.textContent = 'Connect your backend first.'; return; }
+  const ticker = document.getElementById('f_ticker').value.trim().toUpperCase();
+  const date = document.getElementById('f_entryDate').value;
+  const time = document.getElementById('f_entryTime').value;
+  if(!ticker || !date || !time){
+    out.textContent = 'Needs the ticker and the entry date and time first.';
+    return;
+  }
+  const entryTimestamp = new Date(`${date}T${time}`).getTime();
+  if(!entryTimestamp){ out.textContent = 'That entry date and time could not be read.'; return; }
+  out.innerHTML = '<span class="spin"></span>Working it out...';
+  try{
+    const r = await fetch(url+'/api/stop-rule/compute', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ticker, entryTimestamp,
+        dir: document.getElementById('f_dir').value,
+        strat: selectedStrat || null,
+        timeframe: document.getElementById('f_stopTimeframe').value || null,
+      })
+    });
+    const data = await r.json();
+    if(data.stop == null){
+      out.textContent = data.reason || data.error || 'No stop could be worked out for that trade.';
+      return;
+    }
+    document.getElementById('f_stop').value = data.stop.toFixed(2);
+    out.innerHTML = `<span style="color:var(--gold);">$${data.stop.toFixed(2)}</span> — ${data.reason}`;
+    if(typeof updateRiskCheck === 'function') updateRiskCheck();
+  }catch(e){
+    out.textContent = 'Could not reach your backend to work it out.';
+  }
+}
+
+// ---- Opening screen & scroll transitions -----------------------------
+// Both are presentation only: if either is switched off, or the script
+// never runs, the app behaves exactly as it did before.
+// 'chess' is a reserved value meaning "use the drawn crowned-pawn mark"
+// rather than a typed character. Anything else is taken literally.
+const CHESS_SYMBOL = 'chess';
+const INTRO_DEFAULTS = { on:true, motion:true, symbol:CHESS_SYMBOL, line:'OPENING THE JOURNAL', sub:'Discipline compounds.', ms:2000 };
+
+function loadIntroCfg(){
+  try{ return Object.assign({}, INTRO_DEFAULTS, JSON.parse(localStorage.getItem('strat_intro')||'{}')); }
+  catch(e){ return Object.assign({}, INTRO_DEFAULTS); }
+}
+function saveIntroCfg(cfg){ localStorage.setItem('strat_intro', JSON.stringify(cfg)); }
+
+// Runs the counter and the filling rule together, then fades out. Uses
+// the clock rather than a fixed number of steps so it lasts the same
+// time on a slow phone as a fast one.
+// Sets the opening's symbol and picks its treatment. Kept in one place
+// so the preview and the real opening can never disagree about it.
+function setIntroMark(symbol){
+  const mk = document.getElementById('introMark');
+  if(!mk) return;
+  if(symbol === CHESS_SYMBOL){
+    const tpl = document.getElementById('chessMarkTpl');
+    mk.className = 'mark chess';
+    mk.textContent = '';
+    if(tpl) mk.appendChild(tpl.content.cloneNode(true));
+    return;
+  }
+  mk.textContent = symbol;
+  const isEmoji = /\p{Extended_Pictographic}/u.test(symbol);
+  mk.className = 'mark ' + (isEmoji ? 'emoji' : 'metal-gold');
+}
+
+let introTimer = null;
+function playIntro(ms){
+  const el = document.getElementById('introScreen');
+  const countEl = document.getElementById('introCount');
+  const fillEl = document.getElementById('introFill');
+  if(!el) return;
+  clearTimeout(introTimer);
+  el.classList.remove('out');
+  el.style.display = 'flex';
+  const start = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - start) / ms);
+    countEl.textContent = String(Math.round(p * 100)).padStart(2, '0');
+    fillEl.style.width = (p * 100) + '%';
+    if(p < 1) requestAnimationFrame(step);
+    else introTimer = setTimeout(closeIntro, 260);
+  };
+  requestAnimationFrame(step);
+}
+
+function closeIntro(){
+  const el = document.getElementById('introScreen');
+  if(!el) return;
+  el.classList.add('out');
+  // Only hidden after the fade finishes, so it doesn't vanish abruptly.
+  setTimeout(()=>{ el.style.display = 'none'; }, 560);
+  window.__introPending = false;
+}
+
+function skipIntro(){ clearTimeout(introTimer); closeIntro(); }
+
+function previewIntro(){
+  const ms = parseInt(document.getElementById('f_introMs').value, 10) || 2000;
+  setIntroMark(document.getElementById('f_introSymbol').value.trim() || INTRO_DEFAULTS.symbol);
+  document.getElementById('introLine').textContent = document.getElementById('f_introLine').value.trim();
+  document.getElementById('introSub').textContent = document.getElementById('f_introSub').value.trim();
+  playIntro(ms);
+}
+
+// Fills the box from a preset and shows it straight away, so choosing a
+// symbol is a look-at-it decision rather than a type-and-hope one.
+function pickIntroSymbol(sym){
+  document.getElementById('f_introSymbol').value = sym;
+  markIntroPreset(sym);
+  previewIntro();
+}
+
+function markIntroPreset(sym){
+  document.querySelectorAll('#introPresets .pill').forEach(el=>{
+    el.classList.toggle('sel', el.getAttribute('onclick').includes(`'${sym}'`));
+  });
+}
+
+function toggleIntroSetting(which){
+  const cfg = loadIntroCfg();
+  if(which === 'on') cfg.on = !cfg.on; else cfg.motion = !cfg.motion;
+  saveIntroCfg(cfg);
+  applyIntroSettingsToForm(cfg);
+  applyMotionSetting(cfg);
+  showStatus('ok', which === 'on'
+    ? `Opening screen turned ${cfg.on ? 'on' : 'off'}.`
+    : `Scroll transitions turned ${cfg.motion ? 'on' : 'off'}.`);
+}
+
+function applyIntroSettingsToForm(cfg){
+  const set = (id, on) => {
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('sel', on);
+  };
+  set('introOnToggle', cfg.on); set('motionOnToggle', cfg.motion);
+  const l1 = document.getElementById('introOnLabel'); if(l1) l1.textContent = cfg.on ? 'On' : 'Off';
+  const l2 = document.getElementById('motionOnLabel'); if(l2) l2.textContent = cfg.motion ? 'On' : 'Off';
+  const sym = document.getElementById('f_introSymbol'); if(sym) sym.value = cfg.symbol;
+  markIntroPreset(cfg.symbol);
+  const ln = document.getElementById('f_introLine'); if(ln) ln.value = cfg.line;
+  const sb = document.getElementById('f_introSub'); if(sb) sb.value = cfg.sub;
+  const ms = document.getElementById('f_introMs'); if(ms) ms.value = String(cfg.ms);
+}
+
+function saveIntroSettings(){
+  const cfg = loadIntroCfg();
+  cfg.symbol = document.getElementById('f_introSymbol').value.trim() || INTRO_DEFAULTS.symbol;
+  cfg.line = document.getElementById('f_introLine').value.trim();
+  cfg.sub = document.getElementById('f_introSub').value.trim();
+  cfg.ms = parseInt(document.getElementById('f_introMs').value, 10) || 2000;
+  saveIntroCfg(cfg);
+  showStatus('ok', 'Opening saved — you\'ll see it next time you open the app.');
+}
+
+// ---- scroll transitions ----
+let revealObserver = null;
+
+// Never hides anything that is already on screen.
+//
+// This caused a real failure worth not repeating. Sections were being
+// bound while their tab was still hidden, so they were set to invisible
+// and then waited on a browser notification that never arrived for
+// them. The result was a Journal tab holding 233 trades that rendered
+// perfectly and displayed as a blank page — a decoration silently hid
+// the entire contents of the app.
+//
+// The rule now: anything on screen at the moment it is bound is
+// revealed immediately with no animation, and anything in a tab that is
+// not open yet is not touched at all until that tab is shown. Only
+// things genuinely below the fold get hidden and animated in. Content
+// being visible always beats content arriving prettily.
+function revealScan(){
+  if(!revealObserver) return;
+  document.querySelectorAll('.card, .idx-row').forEach(el=>{
+    if(el.dataset.revealBound) return;
+    // offsetParent is null for anything inside a hidden tab. Leave it
+    // alone — it gets bound when that tab opens and its position is real.
+    if(!el.offsetParent) return;
+    el.dataset.revealBound = '1';
+    el.classList.add('reveal');
+    if(el.getBoundingClientRect().top < window.innerHeight){
+      el.classList.add('in');
+    } else {
+      revealObserver.observe(el);
+    }
+  });
+}
+
+// A second, independent path to becoming visible. If the browser's
+// notification is ever missed, scrolling or opening a tab still reveals
+// things — the animation must never be the ONLY way content appears.
+let revealSweepQueued = false;
+function revealSweep(){
+  if(revealSweepQueued) return;
+  revealSweepQueued = true;
+  requestAnimationFrame(()=>{
+    revealSweepQueued = false;
+    if(!document.body.classList.contains('motion-on')) return;
+    revealScan();
+    document.querySelectorAll('.reveal:not(.in)').forEach(el=>{
+      const r = el.getBoundingClientRect();
+      if(r.top < window.innerHeight && r.bottom > 0) el.classList.add('in');
+    });
+  });
+}
+
+function initMotion(){
+  const cfg = loadIntroCfg();
+  applyMotionSetting(cfg);
+}
+
+function applyMotionSetting(cfg){
+  if(!cfg.motion){
+    document.body.classList.remove('motion-on');
+    if(revealObserver){ revealObserver.disconnect(); revealObserver = null; }
+    // Anything already waiting to appear must be released, not stranded.
+    document.querySelectorAll('.reveal').forEach(el=>el.classList.add('in'));
+    return;
+  }
+  if(!('IntersectionObserver' in window)) return; // no support: leave everything visible
+  document.body.classList.add('motion-on');
+  if(!revealObserver){
+    revealObserver = new IntersectionObserver((entries)=>{
+      entries.forEach(e=>{
+        if(!e.isIntersecting) return;
+        e.target.classList.add('in');
+        revealObserver.unobserve(e.target); // reveal once; re-animating on every scroll past is nauseating
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
+  }
+  revealScan();
+  // A second, independent path to becoming visible, so a missed
+  // notification can never leave a section stuck invisible.
+  window.addEventListener('scroll', revealSweep, { passive: true });
+  window.addEventListener('resize', revealSweep, { passive: true });
 }
 
 // ---- Timeframe grid ----
@@ -1757,16 +2669,32 @@ function renderDashboard(){
   const rt = document.getElementById('recentTrades');
   if(!count){ rt.innerHTML = '<div class="empty">No trades logged yet. Tap "New" below to add your first one.</div>'; }
   else {
-    rt.innerHTML = trades.slice(0,5).map(t=>`
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border);">
-        <div>
-          <span style="font-weight:700;">${t.ticker}</span>
-          <span class="badge ${t.dir.toLowerCase()}" style="margin-left:6px;">${t.dir}</span>
-          <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${t.strat || 'Needs setup'} · ${t.entryDate||''}</div>
+    // Numbered index rows: rank down the left, the ticker set large in the
+    // display face, the setup as a quiet italic aside, and the money
+    // right-aligned. Scannable down one edge, valued down the other.
+    rt.innerHTML = trades.slice(0,5).map((t,i)=>`
+      <div class="idx-row">
+        <div class="n">${String(i+1).padStart(2,'0')}</div>
+        <div class="body">
+          <div class="t">${t.ticker} <span class="badge ${t.dir.toLowerCase()}" style="vertical-align:middle;">${t.dir}</span></div>
+          <div class="s">${t.strat || 'Needs setup'}${t.entryDate?` · ${t.entryDate}`:''}</div>
         </div>
-        <div class="num ${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}" style="font-weight:700;">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</div>
+        <div class="v ${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</div>
       </div>`).join('');
   }
+}
+
+// Notes are free text the trader typed. Dropped into the page unescaped,
+// a note containing "<" would silently swallow the rest of the card — so
+// it is escaped before it ever reaches the markup.
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function toggleTradeNotes(el){
+  el.classList.toggle('clamped');
 }
 
 function renderJournal(){
@@ -1805,10 +2733,12 @@ function renderJournal(){
         <div>Exit: ${t.exitDate||''} ${t.exitTime||''}</div>
         <div>Opt: $${t.optEntry.toFixed(2)} → ${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</div>
         <div>Under: ${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}</div>
-        <div>Stop: ${t.stop!=null?'$'+t.stop.toFixed(2):'—'}</div>
+        <div>Stop: ${t.stop!=null?'$'+t.stop.toFixed(2):'—'}${t.stopAuto?' <span style="color:var(--gold); font-size:10px;">AUTO</span>':''}</div>
+        ${t.stopReason?`<div style="grid-column:1/-1; color:var(--text-dim); font-size:11px; line-height:1.4; margin-top:2px;">${t.stopReason}</div>`:''}
         <div>R:R Plan: ${t.rrPlanned!=null?t.rrPlanned.toFixed(1):'—'}</div>
         <div>Realized R:R: ${t.realizedRR!=null?t.realizedRR.toFixed(2)+':1':'—'}</div>
       </div>
+      ${(t.notes||'').trim() ? `<div class="tc-notes clamped" onclick="toggleTradeNotes(this)"><span class="tc-notes-label">Notes</span><div class="tc-notes-body">${escapeHtml(t.notes.trim())}</div></div>` : ''}
       <div class="tc-actions">
         ${t.replayData ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
         <button onclick="editTrade('${t.id}')">✎ Edit</button>
@@ -1960,22 +2890,74 @@ async function classifyUnclassifiedTrades(){
 // review later, so the classifier's real-world accuracy can be judged
 // over time.
 let currentTestShot = null;
+let currentTestShotIsVideo = false;
+let currentTestTeachShot = null; // the shrunk copy that travels with future classifications
 let lastTestClassifyResult = null; // {strategy, confidence, reasoning} — needed when submitting feedback
+
+// A clip has to survive the trip from the phone AND fit inside what the AI
+// will accept in one request. Refusing an oversized file here, with a
+// reason, beats a long upload that dies with an unexplained error.
+const MAX_TEST_CLIP_BYTES = 10 * 1024 * 1024;
+
+// How big the teaching copy of a picture is allowed to be. Chart patterns
+// are shapes — candle bodies, wicks, trend lines — and shapes survive
+// shrinking far better than fine detail does, so a small copy still shows
+// what a correction meant. This is what keeps corrections from slowing
+// classification down: the full-size picture stays in the log for the
+// owner to look at, while only this small one is ever re-sent to the AI.
+const TEACH_SHOT_MAX_PX = 512;
+const TEACH_SHOT_QUALITY = 0.6;
+
+function makeTeachShot(dataUrl){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const scale = Math.min(1, TEACH_SHOT_MAX_PX / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', TEACH_SHOT_QUALITY));
+      }catch(e){ resolve(null); } // shrinking failing must never block the upload
+    };
+    img.onerror = ()=>resolve(null);
+    img.src = dataUrl;
+  });
+}
 
 function handleTestShot(input){
   const file = input.files[0];
   if(!file) return;
+  const isVideo = (file.type || '').startsWith('video/');
+  if(isVideo && file.size > MAX_TEST_CLIP_BYTES){
+    showStatus('err', 'That clip is too big — trim it to about 20 seconds and try again.');
+    input.value = '';
+    return;
+  }
   const reader = new FileReader();
-  reader.onload = e=>{
+  reader.onload = async e=>{
     currentTestShot = e.target.result;
-    document.getElementById('testShotBox').innerHTML = `<img src="${e.target.result}"><div class="close-x" onclick="event.stopPropagation(); clearTestShot()">✕</div>`;
+    currentTestShotIsVideo = isVideo;
+    // Only stills get a teaching copy. A clip is far too heavy to re-send
+    // on every future classification, so a corrected clip teaches through
+    // its written correction instead.
+    currentTestTeachShot = isVideo ? null : await makeTeachShot(e.target.result);
+    const preview = isVideo
+      ? `<video src="${currentTestShot}" muted playsinline controls style="max-width:100%; max-height:100%; border-radius:6px;"></video>`
+      : `<img src="${currentTestShot}">`;
+    document.getElementById('testShotBox').innerHTML = `${preview}<div class="close-x" onclick="event.stopPropagation(); clearTestShot()">✕</div>`;
   };
   reader.readAsDataURL(file);
 }
 
 function clearTestShot(){
   currentTestShot = null;
-  document.getElementById('testShotBox').innerHTML = '+ Add picture';
+  currentTestShotIsVideo = false;
+  currentTestTeachShot = null;
+  const inp = document.getElementById('testShotInput');
+  if(inp) inp.value = ''; // otherwise picking the same file twice in a row does nothing
+  document.getElementById('testShotBox').innerHTML = '+ Add picture or clip';
 }
 
 // Sends the classify request, retrying on its own if the connection drops
@@ -2062,7 +3044,8 @@ async function runTestClassification(){
         ${result.reasoning}
       </div>
       <div class="ai-msg">
-        <div class="tag">FTFC: <span class="${yesNoClass(result.ftfc)}">${yesNoLabel(result.ftfc)}</span></div>
+        <div class="tag">Timeframe continuity: <span class="${ftfcClass(result.ftfc)}">${ftfcLabel(result.ftfc)}</span></div>
+        ${result.ftfcTimeframes ? `<div style="font-size:12px; color:var(--text-dim); margin-bottom:4px;">Read as: ${result.ftfcTimeframes}</div>` : ''}
         ${result.ftfcReasoning || ''}
       </div>
       <div class="ai-msg">
@@ -2088,11 +3071,30 @@ async function runTestClassification(){
   btn.disabled = false;
 }
 
+// Timeframe continuity has four states, not two. The owner's own rule
+// confirms it at any 4+ consecutive timeframes agreeing, so a run of two
+// or three is a real state worth naming rather than rounding to a No —
+// "Partial" is that. Entries saved before this used yes/no/true/false,
+// which are translated here so the old log still reads correctly.
+const FTFC_STATES = ['confirmed','partial','none','unclear'];
+const FTFC_LABELS = { confirmed:'Confirmed (4+ in a row)', partial:'Partial', none:'None', unclear:'Unclear' };
+function ftfcNorm(v){
+  if(v === true) return 'confirmed';
+  if(v === false) return 'none';
+  if(v == null || v === '') return null;
+  const t = String(v).toLowerCase();
+  if(t === 'yes' || t === 'true') return 'confirmed';
+  if(t === 'no' || t === 'false') return 'none';
+  return FTFC_STATES.includes(t) ? t : t;
+}
+const ftfcLabel = v => FTFC_LABELS[ftfcNorm(v)] || 'Unclear';
+const ftfcClass = v => { const n = ftfcNorm(v); return n === 'confirmed' ? 'pos' : (n === 'none' ? 'neg' : ''); };
+
 // Correction form, layered the same way the answer is: one dropdown for
-// the combo, one toggle each for FTFC and Broadening Formation. Each
-// toggle starts on whatever the AI guessed, so correcting one thing
-// doesn't accidentally overwrite the two it already got right.
-let testActualFtfc = false;
+// the combo, one for timeframe continuity, one toggle for Broadening
+// Formation. Each starts on whatever the AI guessed, so correcting one
+// thing doesn't accidentally overwrite the ones it already got right.
+let testActualFtfc = 'unclear';
 let testActualBroadening = false;
 
 function showTestIncorrectForm(){
@@ -2100,16 +3102,22 @@ function showTestIncorrectForm(){
   const predicted = lastTestClassifyResult || {};
   // Seed each toggle from the AI's own read; "unclear" seeds to No, since
   // the owner is being asked to state what it actually was.
-  testActualFtfc = predicted.ftfc === 'yes';
+  testActualFtfc = ftfcNorm(predicted.ftfc) || 'unclear';
   testActualBroadening = predicted.broadeningFormation === 'yes';
   const selected = strats.includes(predicted.strategy) ? predicted.strategy : strats[0];
   document.getElementById('testIncorrectForm').innerHTML = `
     <label style="margin-top:10px;">Which combo was it actually?</label>
     <select id="testActualStrat">${strats.map(s=>`<option value="${s}"${s===selected?' selected':''}>${s}</option>`).join('')}</select>
-    <div class="strat-opt${testActualFtfc?' sel':''}" id="testActualFtfcToggle" onclick="toggleTestActual('ftfc')" style="margin-top:10px;">
-      <div class="t">FTFC: ${testActualFtfc ? 'Yes' : 'No'}</div>
+    <label style="margin-top:10px;">What was the timeframe continuity actually?</label>
+    <select id="testActualFtfcSelect" onchange="testActualFtfc = this.value;">
+      ${FTFC_STATES.map(v=>`<option value="${v}"${v===testActualFtfc?' selected':''}>${FTFC_LABELS[v]}</option>`).join('')}
+    </select>
+    <label style="margin-top:10px;">Which timeframes, and which way? (optional)</label>
+    <input id="testActualFtfcTimeframes" type="text" placeholder="e.g. 1D up, 4H up, 1H up, 15m down" value="${(predicted.ftfcTimeframes || '').replace(/"/g,'&quot;')}">
+    <div style="font-size:11.5px; color:var(--text-dim); margin-top:4px;">
+      This is the most useful thing you can correct — it teaches the journal how you read a split ladder, not just the verdict.
     </div>
-    <div class="strat-opt broadening-opt${testActualBroadening?' sel':''}" id="testActualBroadeningToggle" onclick="toggleTestActual('broadening')">
+    <div class="strat-opt broadening-opt${testActualBroadening?' sel':''}" id="testActualBroadeningToggle" onclick="toggleTestActual('broadening')" style="margin-top:10px;">
       <div class="t">Broadening Formation: ${testActualBroadening ? 'Yes' : 'No'}</div>
     </div>
     <label style="margin-top:10px;">Notes (optional)</label>
@@ -2119,12 +3127,10 @@ function showTestIncorrectForm(){
 }
 
 function toggleTestActual(which){
-  const isFtfc = which === 'ftfc';
-  const newVal = isFtfc ? !testActualFtfc : !testActualBroadening;
-  if(isFtfc) testActualFtfc = newVal; else testActualBroadening = newVal;
-  const el = document.getElementById(isFtfc ? 'testActualFtfcToggle' : 'testActualBroadeningToggle');
-  el.classList.toggle('sel', newVal);
-  el.querySelector('.t').textContent = (isFtfc ? 'FTFC: ' : 'Broadening Formation: ') + (newVal ? 'Yes' : 'No');
+  testActualBroadening = !testActualBroadening;
+  const el = document.getElementById('testActualBroadeningToggle');
+  el.classList.toggle('sel', testActualBroadening);
+  el.querySelector('.t').textContent = 'Broadening Formation: ' + (testActualBroadening ? 'Yes' : 'No');
 }
 
 // Blocks the same classification being saved twice — a double-tap, or
@@ -2153,13 +3159,16 @@ async function submitTestFeedback(wasCorrect){
     predictedConfidence: lastTestClassifyResult.confidence,
     predictedReasoning: lastTestClassifyResult.reasoning,
     predictedFtfc: lastTestClassifyResult.ftfc,
+    predictedFtfcTimeframes: lastTestClassifyResult.ftfcTimeframes,
     predictedBroadeningFormation: lastTestClassifyResult.broadeningFormation,
     image: currentTestShot || undefined,
+    teachImage: currentTestTeachShot || undefined,
     description: document.getElementById('testDescription').value.trim() || undefined,
   };
   if(!wasCorrect){
     payload.actualStrategy = document.getElementById('testActualStrat').value;
     payload.actualFtfc = testActualFtfc;
+    payload.actualFtfcTimeframes = (document.getElementById('testActualFtfcTimeframes')?.value || '').trim() || undefined;
     payload.actualBroadeningFormation = testActualBroadening;
     payload.userNotes = document.getElementById('testFeedbackNotes').value.trim() || undefined;
   }
@@ -2219,11 +3228,72 @@ async function loadTestFeedbackHistory(){
             <span style="color:var(--text-dim); font-size:11px; white-space:nowrap;">${when}</span>
             <span style="color:var(--text-dim);" id="testFbArrow-${f.id}">›</span>
           </div>
+          <div style="display:none;" id="testFbConfirm-${f.id}"></div>
           <div id="testFbDetail-${f.id}" style="display:none; padding:0 0 12px;"></div>
         </div>`;
     }).join('');
   }catch(e){
     el.innerHTML = '<div class="empty">Could not load history — try again.</div>';
+  }
+}
+
+// Full-size view. The row's inline picture is deliberately small so the
+// log stays scannable, but a chart is the whole point of an entry and a
+// thumbnail is not enough to actually re-judge one — this opens it filling
+// the screen, over everything else, tapped anywhere to close.
+function openTestFeedbackPreview(id){
+  const f = testFeedbackById[id];
+  if(!f || !f.image) return;
+  const isVid = String(f.image).startsWith('data:video/');
+  const wrap = document.createElement('div');
+  wrap.id = 'testFbPreview';
+  wrap.style.cssText = 'position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.94); display:flex; align-items:center; justify-content:center; padding:12px;';
+  wrap.innerHTML = `
+    ${isVid
+      ? `<video src="${f.image}" controls autoplay muted playsinline style="max-width:100%; max-height:100%;"></video>`
+      : `<img src="${f.image}" style="max-width:100%; max-height:100%; object-fit:contain;">`}
+    <div style="position:absolute; top:14px; right:16px; font-size:30px; line-height:1; color:#fff;">✕</div>`;
+  // Tapping the picture itself must not close it — on a phone that makes
+  // pinch-zooming to inspect candles almost impossible.
+  wrap.onclick = e => { if(e.target === wrap || e.target.textContent === '✕') closeTestFeedbackPreview(); };
+  document.body.appendChild(wrap);
+}
+
+function closeTestFeedbackPreview(){
+  const el = document.getElementById('testFbPreview');
+  if(el) el.remove();
+}
+
+// Deleting one entry. Worth a confirm step rather than a bare button:
+// corrections are permanent and every one shapes future classifications,
+// so this is both the fix for a bad lesson and a way to lose a good one.
+function confirmDeleteTestFeedback(id){
+  const box = document.getElementById('testFbConfirm-'+id);
+  if(!box) return;
+  box.innerHTML = `
+    <div style="padding:8px 0 12px; font-size:12.5px;">
+      <div style="margin-bottom:8px; color:var(--bear);">Delete this entry for good? The journal will stop learning from it.</div>
+      <div style="display:flex; gap:8px;">
+        <button class="secondary" style="margin-top:0; color:var(--bear); border-color:var(--bear-dim);" onclick="deleteTestFeedback('${id}')">Yes, delete</button>
+        <button class="secondary" style="margin-top:0;" onclick="document.getElementById('testFbConfirm-${id}').style.display='none';">Keep it</button>
+      </div>
+    </div>`;
+  box.style.display = 'block';
+}
+
+async function deleteTestFeedback(id){
+  const url = backendUrl();
+  if(!url) return;
+  const box = document.getElementById('testFbConfirm-'+id);
+  if(box) box.querySelectorAll('button').forEach(b=>{ b.disabled = true; });
+  try{
+    const r = await fetch(url+'/ai/test-classify-feedback/'+encodeURIComponent(id)+'?key='+encodeURIComponent(appKey()), { method:'DELETE' });
+    if(!r.ok) throw new Error('status '+r.status);
+    showStatus('ok', 'Entry deleted.');
+    loadTestFeedbackHistory();
+  }catch(e){
+    if(box) box.querySelectorAll('button').forEach(b=>{ b.disabled = false; });
+    showStatus('err', 'Could not delete that entry — try again.');
   }
 }
 
@@ -2254,17 +3324,24 @@ function toggleTestFeedbackDetail(id){
   };
   const yn = v => v == null ? null : (v === true ? 'yes' : (v === false ? 'no' : v));
 
+  const isVid = String(f.image || '').startsWith('data:video/');
   box.innerHTML = `
-    ${f.image ? `<img src="${f.image}" style="max-width:100%; border-radius:6px; margin-bottom:8px;">` : '<div style="color:var(--text-dim); font-size:12px; margin-bottom:6px;">(no picture — description only)</div>'}
+    ${f.image ? `${isVid
+      ? `<video src="${f.image}" controls muted playsinline style="max-width:100%; border-radius:6px; margin-bottom:6px;"></video>`
+      : `<img src="${f.image}" style="max-width:100%; border-radius:6px; margin-bottom:6px;">`}
+      <button class="secondary fb-preview" style="margin-top:0; margin-bottom:8px;" onclick="openTestFeedbackPreview('${f.id}')">⛶ View full size</button>`
+      : '<div style="color:var(--text-dim); font-size:12px; margin-bottom:6px;">(no picture — description only)</div>'}
     <div style="font-size:12.5px;">
       ${layer('Combo', f.predictedStrategy, f.actualStrategy)}
-      ${layer('FTFC', f.predictedFtfc, yn(f.actualFtfc))}
+      ${layer('Timeframe continuity', f.predictedFtfc && ftfcLabel(f.predictedFtfc), f.actualFtfc != null ? ftfcLabel(f.actualFtfc) : null)}
+      ${layer('Timeframes read', f.predictedFtfcTimeframes, f.actualFtfcTimeframes)}
       ${layer('Broadening', f.predictedBroadeningFormation, yn(f.actualBroadeningFormation))}
       ${f.predictedConfidence ? `<div style="margin-top:3px;"><span style="color:var(--text-dim);">Confidence:</span> ${f.predictedConfidence}</div>` : ''}
       ${f.description ? `<div style="margin-top:6px;"><span style="color:var(--text-dim);">Your description:</span> ${f.description}</div>` : ''}
       ${f.predictedReasoning ? `<div style="margin-top:6px; color:var(--text-dim);">Its reasoning: ${f.predictedReasoning}</div>` : ''}
       ${f.userNotes ? `<div style="margin-top:6px;"><span style="color:var(--text-dim);">Your notes:</span> ${f.userNotes}</div>` : ''}
       <div style="margin-top:6px; color:var(--text-dim); font-size:11px;">${new Date(f.timestamp).toLocaleString()}</div>
+      <button class="secondary fb-delete" style="margin-top:10px; color:var(--bear); border-color:var(--bear-dim);" onclick="confirmDeleteTestFeedback('${f.id}')">Delete this entry</button>
     </div>`;
   box.style.display = 'block';
   if(arrow) arrow.textContent = '⌄';
@@ -2310,17 +3387,144 @@ async function connectBackend(){
     const r = await fetch(url.replace(/\/$/,'')+'/health');
     if(!r.ok) throw new Error('Server responded with status '+r.status);
     const d = await r.json();
-    document.getElementById('connBadge').innerHTML = '<span class="conn-dot on"></span>Connected';
+    const n = loadTrades().length;
+    setConnState(true, `Connected · ${n} trade${n === 1 ? '' : 's'} in your journal`);
     showStatus('ok', 'Connected to your backend.');
     log('syncLog', 'Connected: '+JSON.stringify(d));
     pollBackend();
   }catch(e){
-    document.getElementById('connBadge').innerHTML = '<span class="conn-dot off"></span>Not connected';
+    // Says plainly that the trades already saved are unaffected. Losing
+    // the connection does not lose the journal, and seeing "not
+    // connected" without that reassurance is exactly what makes someone
+    // think they have to re-import everything.
+    const saved = loadTrades().length;
+    setConnState(false, saved
+      ? `Not connected — your ${saved} saved trade${saved === 1 ? '' : 's'} are still here`
+      : 'Not connected');
     showStatus('err', `Couldn't reach that backend (${e.message}). Have you deployed it yet? See the README in the backend zip — this needs a live Render/Railway URL, not the zip file itself.`);
     log('syncLog', 'Could not reach backend: '+e.message);
   }
   setBusy('btnConnect', false);
 }
+// ---- One button, and no button at all in the normal case ------------
+// There used to be four buttons here that all sounded like "get my
+// trades" — Connect, Check for New Trades, Import Trade History, and
+// Reset & Re-import — and choosing between them was a decision the owner
+// should never have had to make. This works out which is needed.
+const BACKFILL_DONE_KEY = 'strat_backfilled';
+
+function connSettingsOpen(){
+  return document.getElementById('connSettings').style.display !== 'none';
+}
+
+function toggleJournalSetup(){
+  const box = document.getElementById('journalSetup');
+  const arrow = document.getElementById('journalSetupArrow');
+  const open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  if(arrow) arrow.textContent = open ? '⌄' : '›';
+  // Sections inside were never measurable while hidden, so bind and
+  // reveal them now that they have a real position.
+  if(open && typeof revealSweep === 'function') revealSweep();
+}
+
+function toggleConnSettings(force){
+  const box = document.getElementById('connSettings');
+  const arrow = document.getElementById('connSettingsArrow');
+  const open = force === undefined ? !connSettingsOpen() : force;
+  box.style.display = open ? 'block' : 'none';
+  if(arrow) arrow.textContent = open ? '⌄' : '›';
+}
+
+async function getMyTrades(){
+  const url = backendUrl();
+  const btn = document.getElementById('btnGetTrades');
+  if(!url){
+    // Nothing to get trades FROM — open the setup rather than showing an
+    // error he can do nothing about.
+    toggleConnSettings(true);
+    showStatus('err', 'Enter your backend address below first, then tap Save & Connect.');
+    return;
+  }
+  btn.disabled = true;
+  const original = btn.textContent;
+  const before = loadTrades().length;
+  try{
+    // ALWAYS re-asks Schwab for the full history, every time. An earlier
+    // version did this only once and then remembered it was done — which
+    // meant that if a run missed trades, there was no way left to go and
+    // get them except a hidden Reset button. A button whose whole job is
+    // "force it" must actually force it.
+    btn.textContent = 'Asking Schwab…';
+    showStatus('info', 'Asking Schwab for your full trade history — this can take a minute.');
+    await runBackfillNow(true);
+    localStorage.setItem(BACKFILL_DONE_KEY, '1');
+
+    // The backfill hands trades to the queue in the background, so one
+    // immediate look can miss them. Keep checking for a while rather
+    // than reporting "up to date" on a queue that is still filling —
+    // that false all-clear is what made this feel broken.
+    // The backfill fills the queue in the background, so one immediate
+    // look can miss everything. Keep checking for a few seconds rather
+    // than reporting "up to date" on a queue that is still filling —
+    // that false all-clear is what made this feel broken. Stops as soon
+    // as a round brings nothing new.
+    btn.textContent = 'Collecting…';
+    let found = 0;
+    for(let attempt = 0; attempt < 4; attempt++){
+      const countBefore = loadTrades().length;
+      await pollBackend(true);
+      const gained = loadTrades().length - countBefore;
+      found = loadTrades().length - before;
+      if(attempt > 0 && gained === 0) break;
+      await new Promise(r=>setTimeout(r, 1800));
+    }
+    renderJournal(); renderDashboard();
+    const total = loadTrades().length;
+    if(found > 0){
+      showStatus('ok', `${found} trade${found===1?'':'s'} added. You now have ${total} in your journal.`);
+    } else {
+      showStatus('ok', `Schwab had nothing new — still ${total} trades. If you know a trade is missing, it may be older than the history Schwab will hand back.`);
+    }
+    setConnState(true, `Connected · ${total} trade${total===1?'':'s'} in your journal`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// Runs quietly whenever the app opens. This is the real answer to "I
+// don't want to upload my trades all the time" — in normal use there is
+// nothing to press, because it has already happened by the time the
+// Journal is on screen. Failures stay silent: a dropped signal on
+// startup is not something to interrupt him about, and the button is
+// still there if he wants to force it.
+async function autoCollectOnOpen(){
+  const url = backendUrl();
+  if(!url){ setConnState(false, 'Not connected'); toggleConnSettings(true); return; }
+  setConnState(true, 'Connected — checking for new trades…');
+  try{
+    await pollBackend(true);
+    const n = loadTrades().length;
+    setConnState(true, `Connected · ${n} trade${n === 1 ? '' : 's'} in your journal`);
+  }catch(e){
+    setConnState(true, 'Connected — could not reach the server just now');
+  }
+}
+
+// One source of truth for "am I connected". There were two indicators —
+// the badge in the corner and the line on the Journal card — driven by
+// different things, so the corner could read "Not connected" while the
+// card read "Connected". Two contradicting answers is worse than one.
+function setConnState(connected, text){
+  const dot = document.getElementById('connStateDot');
+  const label = document.getElementById('connStateText');
+  if(dot) dot.className = 'conn-dot ' + (connected ? 'on' : 'off');
+  if(label) label.textContent = text;
+  const badge = document.getElementById('connBadge');
+  if(badge) badge.innerHTML = `<span class="conn-dot ${connected ? 'on' : 'off'}"></span>${connected ? 'Connected' : 'Not connected'}`;
+}
+
 async function pollBackend(silent=false){
   const url = backendUrl();
   if(!url){ if(!silent) showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
@@ -2332,10 +3536,14 @@ async function pollBackend(silent=false){
     const pending = data.pending||[];
     if(pending.length){
       const imported = await autoImportPendingTrades(url, pending);
-      // Always surface this, silent or not — a trade actually landing in
-      // the Journal is worth knowing about regardless of how the check
-      // was triggered.
-      showStatus('ok', `${imported} trade(s) auto-imported to your Journal.`);
+      // Only speak up when something actually landed. "0 trade(s)
+      // auto-imported" reads as a failure, and worse, it used to
+      // overwrite the summary the Get My Trades button had just written.
+      if(imported > 0){
+        showStatus('ok', `${imported} trade(s) auto-imported to your Journal.`);
+      } else if(!silent){
+        showStatus('ok', 'No new trades — you\'re up to date.');
+      }
       log('syncLog', `${imported} trade(s) auto-imported to Journal`);
     } else if(!silent) {
       showStatus('ok', 'No new trades — you\'re up to date.');
@@ -2357,12 +3565,33 @@ async function pollBackend(silent=false){
 // and the trade is flagged with a "Needs Setup" badge in the Journal table
 // so it's still easy to find and fill in later via Edit — but nothing
 // blocks it from showing up as a real Journal entry immediately.
+// Identifies a trade by WHAT IT IS, not by the reference number it was
+// given. This is the fix for the duplication that put 161 contracts in
+// the owner's journal that he never bought.
+//
+// The old check compared reference numbers. "Reset & Re-import" hands the
+// same trades back with FRESH reference numbers, so the check saw them as
+// new and imported them a second time — and he had been told to press
+// that button after backend changes. Two identical trades cannot happen
+// in reality: the same contract, entered at the same minute, exited at
+// the same minute, at the same two prices, is one trade seen twice.
+function tradeFingerprint(t){
+  const n = v => (v == null ? '' : Number(v).toFixed(4));
+  return [t.occ || t.ticker || '', t.entryDate || '', t.entryTime || '',
+          t.exitDate || '', t.exitTime || '', n(t.optEntry), n(t.optExit),
+          t.contracts ?? ''].join('|');
+}
+
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
+  const existingPrints = new Set(trades.map(tradeFingerprint));
   let imported = 0;
   for(const t of pending){
     if(existingIds.has(t.id)) continue; // already imported (e.g. a prior delete-from-pending failed silently)
+    const print = tradeFingerprint(t);
+    if(existingPrints.has(print)) continue; // same trade, new reference number
+    existingPrints.add(print);
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
@@ -2411,15 +3640,18 @@ async function resetAndReimport(){
     setBusy('btnReset', false);
   }
 }
-async function runBackfillNow(){
+async function runBackfillNow(quiet=false){
   const url = backendUrl();
   if(!url){ showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
-  setBusy('btnBackfill', true);
+  if(!quiet) setBusy('btnBackfill', true);
   showStatus('info', 'Requesting historical backfill — this can take a moment...');
   log('syncLog', 'Requesting historical backfill...');
   try{
     const r = await fetch(url+'/api/trades/backfill', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:90})
+      // A full year, not 90 days. 90 days is why his journal started in
+      // mid-May when his trading started on 2 January: four months of real
+      // trades were simply never asked for, and nothing said so.
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365})
     });
     if(!r.ok) throw new Error('Server responded with status '+r.status);
     // The backend responds as soon as the backfill STARTS, not once it's
@@ -2435,7 +3667,7 @@ async function runBackfillNow(){
     showStatus('err', `Backfill failed to start (${e.message}). Make sure you've completed Schwab login (/auth/schwab/login) first.`);
     log('syncLog', 'Backfill failed to start: '+e.message);
   }
-  setBusy('btnBackfill', false);
+  if(!quiet) setBusy('btnBackfill', false);
 }
 async function autoFillEnrichment(){
   const url = backendUrl();
@@ -2684,6 +3916,89 @@ function exportCsvSheet(){
   a.download = 'strat-journal.csv';
   a.click();
 }
+// Finds trades that are the same trade recorded more than once, and
+// offers to remove the copies. Deliberately a TWO-STEP action: it reports
+// what it found and waits, because deleting trades on the strength of a
+// rule the owner has not seen the results of would be unforgivable if the
+// rule were wrong.
+//
+// When copies differ, the one carrying the most of HIS work is kept — his
+// notes, his setup tag, his screenshots, his stop. Machine-computed data
+// is recomputed on the next sync, so losing it costs nothing.
+let pendingDupeRemoval = null;
+
+function ownWorkScore(t){
+  let n = 0;
+  if((t.notes||'').trim()) n += 8;
+  if(t.strat) n += 4;
+  if(t.shotEntry) n += 3;
+  if(t.shotExit) n += 3;
+  if(t.stop != null && t.stop !== 0) n += 2;
+  if(t.rrPlanned != null && t.rrPlanned !== 0) n += 2;
+  if(t.replayData) n += 1;
+  if((t.ftfcTimeframesInRun||[]).length) n += 1;
+  // A trade he typed in himself outranks one the broker feed produced,
+  // so a tie never throws away his own entry.
+  if(t.source !== 'schwab-auto') n += 5;
+  return n;
+}
+
+function findDuplicateTrades(){
+  const trades = loadTrades();
+  const groups = new Map();
+  for(const t of trades){
+    const k = tradeFingerprint(t);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+  const dupeGroups = [...groups.values()].filter(g => g.length > 1);
+  const out = document.getElementById('dupeOut');
+  if(!dupeGroups.length){
+    pendingDupeRemoval = null;
+    out.innerHTML = `<span style="color:var(--bull);">No duplicates found — all ${trades.length} trades are distinct.</span>`;
+    return;
+  }
+  // Keep the copy carrying the most of his own work; the rest go.
+  const keep = new Set();
+  let removing = 0;
+  for(const g of dupeGroups){
+    const best = g.slice().sort((a,b)=>ownWorkScore(b)-ownWorkScore(a))[0];
+    keep.add(best.id);
+    removing += g.length - 1;
+  }
+  // Store the exact list of entries to drop, by their own reference, so
+  // that nothing else can be caught by it later.
+  const dropIds = new Set();
+  for(const g of dupeGroups){
+    for(const t of g){ if(!keep.has(t.id)) dropIds.add(t.id); }
+  }
+  pendingDupeRemoval = { dupeGroups, keep, dropIds, removing };
+  const examples = dupeGroups.slice(0,3).map(g=>{
+    const t = g[0];
+    return `<div style="margin-top:4px;">· ${escapeHtml(t.ticker||'')} ${escapeHtml(t.entryDate||'')} ${escapeHtml(t.entryTime||'')} → ${escapeHtml(t.exitTime||'')} at $${t.optEntry} → $${t.optExit} — recorded <b>${g.length}</b> times</div>`;
+  }).join('');
+  out.innerHTML = `
+    <div style="color:var(--gold);">Found ${dupeGroups.length} trade(s) recorded more than once — ${removing} extra cop${removing===1?'y':'ies'} in total.</div>
+    ${examples}
+    ${dupeGroups.length>3?`<div style="margin-top:4px;">…and ${dupeGroups.length-3} more.</div>`:''}
+    <div style="margin-top:8px;">You would be left with <b>${trades.length - removing}</b> trades. Nothing is sent anywhere — this only tidies what is on your phone.</div>
+    <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="removeDuplicateTrades()">Remove the ${removing} extra cop${removing===1?'y':'ies'}</button>`;
+}
+
+function removeDuplicateTrades(){
+  if(!pendingDupeRemoval){ findDuplicateTrades(); return; }
+  const { dropIds } = pendingDupeRemoval;
+  const trades = loadTrades();
+  const kept = trades.filter(t => !dropIds.has(t.id));
+  const dropped = trades.length - kept.length;
+  saveTrades(kept);
+  pendingDupeRemoval = null;
+  renderJournal(); renderDashboard();
+  document.getElementById('dupeOut').innerHTML =
+    `<span style="color:var(--bull);">Removed ${dropped} extra cop${dropped===1?'y':'ies'}. You now have ${kept.length} trades.</span>`;
+  showStatus('ok', `${dropped} duplicate trade(s) removed.`);
+}
+
 function wipeData(){
   if(confirm('Erase all logged trades? This cannot be undone.')){
     localStorage.removeItem('strat_trades');
@@ -2692,7 +4007,20 @@ function wipeData(){
 }
 
 loadRiskSettings();
+loadStopRuleSettings();
+renderBacktestPickers();
 renderDashboard();
+autoCollectOnOpen();
+
+// Presentation last, so a problem here can never stop the journal itself
+// from loading — the app is fully usable before any of this runs.
+(function(){
+  const cfg = loadIntroCfg();
+  applyIntroSettingsToForm(cfg);
+  initMotion();
+  if(cfg.on && window.__introPending) playIntro(cfg.ms);
+  else closeIntro();
+})();
 </script>
 </body>
 </html>
