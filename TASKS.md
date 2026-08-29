@@ -209,6 +209,42 @@ via the `TASKS.md` commit log.
     **Still to do on his phone:** tap "Check My Numbers" with the Schwab
     export and report what it says.
 
+30. **A month menu instead of one endless list; the numbers button
+    removed** (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app
+    PR #48) — 28 + 11 checks. Not yet confirmed on his phone.**
+
+    He asked for both directly. The Journal drew every trade at once; at
+    299 trades that is four months of scrolling to reach last week. It
+    now opens on the newest month and offers a menu of every month with
+    trades in it, each with its count, plus an "All months" choice. Each
+    month carries its own line — profit, won and lost, win rate — so a
+    month can be read without adding it up by eye. A trade held across a
+    month end is filed under the month it CLOSED in, matching the list's
+    order.
+
+    "Check My Numbers" is gone, at his request. A button nobody presses
+    verifies nothing.
+
+    **He also asked whether timestamps can be checked against his Schwab
+    file. They cannot, and this is settled, not an opinion:** the file's
+    columns are Date, Action, Symbol, Description, Quantity, Price, Fees
+    & Comm, Amount — and the Date column holds "07/23/2026" with no clock
+    time anywhere in the file. Dates it can confirm; times are not in the
+    data. Schwab's website may offer a different report that includes
+    times; worth checking if this ever matters again.
+
+    So the clock conversion got its own checks instead, which is more
+    durable anyway: 11 hand-worked cases over `toEasternParts` covering
+    summer and winter, BOTH daylight-saving changeovers, midnight (which
+    some systems report as hour 24), a 21:30 Eastern trade that is 01:30
+    UTC the next day and must roll back to the right day, and all 1440
+    minutes of a trading day converting back exactly. All pass. That
+    closes the one gap the spreadsheet never could.
+
+    Five checks in the ordering suite now ask for "All months" first,
+    since they compare order across months and would otherwise read one
+    month and report an ordering fault that is not there.
+
 29. **Order by when a trade CLOSED; mark trades Schwab did not send**
     (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app PR #47) —
     10 checks. Not yet confirmed on his phone.**

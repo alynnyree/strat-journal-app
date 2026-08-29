@@ -246,6 +246,13 @@ Uses **The Strat**. Key concepts the code implements:
   watched for errors on the page. **Always check the page for thrown
   errors in browser tests**, and re-verify that a multi-part edit
   actually landed rather than assuming it did.
+- **The Schwab CSV export carries NO times.** Its columns are Date,
+  Action, Symbol, Description, Quantity, Price, Fees & Comm, Amount, and
+  Date is "07/23/2026". It can confirm dates, prices, sizes and P&L — it
+  can never confirm entry/exit times. Those are covered by direct checks
+  on `toEasternParts` instead (summer/winter, both DST changeovers,
+  midnight-as-24, and a late-evening trade that must not roll onto the
+  next UTC day).
 - **"Most recent" means most recently FINISHED, not most recently
   started.** Having given the Journal a sort, it sorted by entry — so a
   NIO position opened 24 June and closed 23 July sat below every trade
