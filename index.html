@@ -568,9 +568,10 @@
       <h3>Schwab Connection</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5; margin-bottom:10px;">
         Your trades come in on their own. The server watches Schwab every few
-        minutes whether your phone is open or not, and the app collects
-        anything new every time you open it — so normally there is nothing
-        here to press.
+        minutes whether your phone is open or not, and finishes anything it
+        started even if Schwab interrupts it. This page collects whatever
+        has arrived — when you open it, and every half minute after. There
+        is normally nothing here to press.
       </div>
       <div id="connState" style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;">
         <span class="conn-dot off" id="connStateDot"></span>
@@ -3770,9 +3771,18 @@ function showReconnect(show){
 // run out. Schwab words this several ways, none of them plainly.
 function isSchwabLoginExpired(text){
   const t = String(text||'').toLowerCase();
-  return t.includes('invalid_grant') || t.includes('unsupported_token_type')
-      || t.includes('refresh token') || t.includes('no refresh token')
-      || t.includes('not connected — run') || t.includes('expired or revoked');
+  if(t.includes('invalid_grant') || t.includes('unsupported_token_type')
+     || t.includes('refresh token') || t.includes('no refresh token')
+     || t.includes('not connected — run') || t.includes('not connected - run')
+     || t.includes('expired or revoked')) return true;
+  // Anything about a token that failed, expired or was rejected is the
+  // sign-in, whatever words it arrives in. Getting this wrong is costly
+  // in one direction only: treating it as a passing glitch means the
+  // server quietly retries forever while the one thing that would fix it
+  // — him signing in again — is never suggested.
+  return t.includes('token') &&
+    (t.includes('refresh fail') || t.includes('token refresh') || t.includes('expired')
+     || t.includes('invalid') || t.includes('revoked') || t.includes('reauth'));
 }
 
 // Turns whatever the server reports into something readable. Raw text
@@ -3792,21 +3802,21 @@ function plainErrorText(raw){
   // the screen with "<HTML><HEAD><TITLE>Access Denied".
   if(low.includes('access denied') || low.includes("don't have permission")
      || low.includes('403 forbidden')){
-    return 'Schwab turned the request away — this normally means too many requests too quickly, which a full re-import can trigger. Nothing is broken and nothing is lost. Wait about fifteen minutes and tap "Get My Trades" again.';
+    return 'Schwab turned the request away, which normally means too many requests too quickly — a full re-import can trigger it. Nothing is broken and nothing is lost';
   }
   if(low.includes('429') || low.includes('too many requests') || low.includes('rate limit')){
-    return 'Schwab asked us to slow down — too many requests too quickly. Wait about fifteen minutes and tap "Get My Trades" again. Nothing is lost.';
+    return 'Schwab asked us to slow down — too many requests too quickly. Nothing is lost';
   }
   if(low.includes('<html') || low.includes('<!doctype')){
-    return 'Schwab sent back a web page instead of an answer, which usually means their service is briefly refusing requests. Wait a few minutes and tap "Get My Trades" again.';
+    return 'Schwab sent back a web page instead of an answer, which usually means their service is briefly refusing requests';
   }
   if(low.includes('timeout') || low.includes('etimedout') || low.includes('econnreset')){
-    return 'The connection to Schwab dropped partway through. Nothing is lost — tap "Get My Trades" again.';
+    return 'The connection to Schwab dropped partway through. Nothing is lost';
   }
   // Never let raw web code or a wall of server text reach the screen.
   const clean = t.replace(/<[^>]*>/g, ' ').replace(/&#\d+;/g, '').replace(/\s+/g, ' ').trim();
   if(!clean || clean.length > 160 || /[{}\\]|https?:\/\//.test(clean)){
-    return 'Schwab returned something the app could not make sense of. Nothing is lost — wait a few minutes and tap "Get My Trades" again.';
+    return 'Schwab returned something the app could not make sense of. Nothing is lost';
   }
   return clean;
 }
@@ -3834,6 +3844,16 @@ async function fetchBackfillStatus(url){
   }catch(e){ return null; }
 }
 
+// Whether the server will have another go on its own. It retries a
+// blocked or interrupted import up to eight times, so in almost every
+// case the honest answer to "what should I do" is nothing.
+const MAX_SERVER_RETRIES = 8;
+function willRetryItself(status){
+  if(!status || status.status !== 'failed') return false;
+  if(isSchwabLoginExpired(status.error)) return false;  // only he can fix this one
+  return (status.attempts || 0) < MAX_SERVER_RETRIES;
+}
+
 function backfillProgressText(status, found){
   const gotSoFar = found > 0 ? ` ${found} so far.` : '';
   if(!status) return `Asking Schwab for your history — this takes a few minutes.${gotSoFar}`;
@@ -3850,17 +3870,23 @@ function backfillResultMessage(status, found, total){
   if(status && status.status === 'failed'){
     const expired = isSchwabLoginExpired(status.error);
     showReconnect(expired);
+    // A lapsed sign-in is the one failure only he can fix. Everything
+    // else the server picks up again by itself, so telling him to tap
+    // would be asking him to do a job already being done.
     if(expired) return ['err', plainErrorText(status.error)];
     const why = plainErrorText(status.error).replace(/[.\s]+$/, '');
-    return ['err', `The import stopped: ${why}. Your ${total} saved trade${total===1?'':'s'} ${total===1?'is':'are'} untouched.`];
+    if(willRetryItself(status)){
+      return ['info', `${why}. Nothing for you to do — the server picks this up again on its own in about fifteen minutes and keeps going until it is finished. You can close the app; anything it finds will be here when you come back.`];
+    }
+    return ['err', `The import stopped: ${why}. Your ${total} saved trade${total===1?'':'s'} ${total===1?'is':'are'} untouched. Tap "Get My Trades" when you want to try again.`];
   }
   const stillRunning = status && status.status === 'running';
   if(found > 0){
-    const more = stillRunning ? ' It is still running, so more may follow — tap again in a few minutes.' : '';
+    const more = stillRunning ? ' It is still running and more will follow on their own — nothing to tap.' : '';
     return ['ok', `${found} trade${found===1?'':'s'} added. You now have ${total} in your journal.${more}`];
   }
   if(stillRunning){
-    return ['info', `Still working — Schwab is slow with a year of history. Your journal stays at ${total} for now; open the app again in a few minutes and anything found will be waiting.`];
+    return ['info', `Still working — Schwab is slow with a year of history. Nothing for you to do: it carries on whether this page is open or not, and trades appear here on their own as they arrive. Your journal is at ${total} so far.`];
   }
   if(status && status.windowsFailed > 0){
     const f = (status.failures && status.failures[0]) || {};
