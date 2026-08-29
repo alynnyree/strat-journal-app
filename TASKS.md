@@ -155,9 +155,59 @@ via the `TASKS.md` commit log.
     while the server's own Schwab connection had been dead long enough
     for a month of trades to go unfetched. It now asks both.
 
-    **Still to do on his phone:** tap "Reconnect to Schwab", sign in, then
-    "Get My Trades", and report what the message says. That run is what
-    finally answers whether January to April can be fetched.
+    **Confirmed working on his phone 2026-08-29:** he reconnected, tapped
+    "Get My Trades", and 90 trades came in — 101 to 191, with January to
+    April finally arriving. The history WAS fetchable all along; the
+    lapsed sign-in was the whole obstacle.
+
+28. **Newest trade first, a sign-in warning, and a way to check the
+    numbers** (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app
+    PR #46, strat-journal-backend PR #31) — 44 checks. Not yet confirmed
+    on his phone.** Three things he raised on seeing the import land.
+
+    **The trade list was in no order at all.** He said his most recent
+    trades were NIO but a 4 May trade sat at the top. Worse than a wrong
+    sort: the list was drawn in the order trades happened to be written
+    down, with no sorting anywhere. New trades go in at the front, so the
+    January-to-April import — which arrived LAST — went in ABOVE the
+    May-to-July trades already there. Now sorted by when the trade was
+    entered, newest first.
+
+    **A warning before the sign-in lapses**, which he asked for directly.
+    The connection line carries a countdown; inside two days it offers
+    the Reconnect button early and says plainly that nothing is broken
+    yet. The seven days run from when he last signed in, not from the
+    last automatic renewal — renewing does not restart Schwab's clock.
+    Where the server cannot say, nothing is claimed.
+
+    **"How are we sure the prices and P&L are correct?"** Assurance is
+    not evidence, so this adds the evidence: a "Check My Numbers" tool
+    that reads his Schwab transactions spreadsheet, rebuilds the
+    completed trades from it with the same first-in-first-out matching a
+    broker uses, and compares every one — contract, both dates, both fill
+    prices, size and profit. Matching is on contract, dates and size and
+    deliberately NOT on price, since a wrong price is the thing being
+    hunted. Read-only; the file never leaves the phone.
+
+    Tested against his real export: 248 trades rebuilt, same tickers in
+    the same numbers, same total to the penny as an independent pass. A
+    wrong price, a missing trade and an extra trade are each caught; a
+    rounding-level difference is not; the wrong file is refused with a
+    reason.
+
+    Found while testing: the fill sort answered "same date?" with -1
+    rather than 0 — not a consistent answer — and same-day fills paired
+    arbitrarily, splitting six trades differently out of the same file.
+
+    **What this tool cannot check:** underlying stock prices are not in
+    the Schwab export. Those are looked up afterwards from candle data,
+    and for trades older than about 35 days the minute-by-minute data is
+    gone, so they show as blank. That is the "Under: — / —" on his older
+    trades — expected, not a fault. Fees are also not counted on either
+    side, so both are compared on the same basis.
+
+    **Still to do on his phone:** tap "Check My Numbers" with the Schwab
+    export and report what it says.
 
 24. **One button to import, trades always present on open, and the fix
     for a Journal that displayed as a blank page** (2026-08-27).

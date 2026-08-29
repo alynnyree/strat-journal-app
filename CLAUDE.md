@@ -246,6 +246,18 @@ Uses **The Strat**. Key concepts the code implements:
   watched for errors on the page. **Always check the page for thrown
   errors in browser tests**, and re-verify that a multi-part edit
   actually landed rather than assuming it did.
+- **A list with no sort is not "in order", it is in write order.** The
+  Journal drew trades in whatever order they sat in storage. Imports add
+  at the front, so the January-to-April backfill — fetched last — landed
+  ABOVE the May-to-July trades already there, and the owner reasonably
+  reported the log as inaccurate. Any list shown to him needs an explicit
+  order.
+- **A comparator must answer "these two are equal" with 0.** The Schwab
+  file reader sorted fills with `a.date === b.date ? (isBuy ? -1 : 1) : …`,
+  so two same-day buys each compared as "me first". Six trades split
+  differently out of the same file. Equal inputs return 0; the sort is
+  stable and input order survives.
+
 - **Schwab's sign-in lasts SEVEN DAYS and cannot be extended.** The login
   flow has to be repeated by hand every week. When it lapses,
   `getValidAccessToken()` throws and every sync, history import and the
