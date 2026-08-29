@@ -3927,6 +3927,21 @@ function exportCsvSheet(){
 // is recomputed on the next sync, so losing it costs nothing.
 let pendingDupeRemoval = null;
 
+// Turns the broker's contract code ("NIO   260821P00005000") into
+// something readable ("NIO 21 Aug 2026 $5 Put"). Falls back to the plain
+// ticker if the code is missing or not in that shape.
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function contractLabel(t){
+  const raw = (t.occ || '').trim();
+  const m = raw.match(/^([A-Z.]+)\s*(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
+  if(!m) return raw || t.ticker || '';
+  const [, root, yy, mm, dd, cp, strike8] = m;
+  const month = MONTH_ABBR[parseInt(mm,10)-1] || mm;
+  const strike = (parseInt(strike8,10) / 1000);
+  const strikeText = Number.isInteger(strike) ? String(strike) : String(strike);
+  return `${root} ${parseInt(dd,10)} ${month} 20${yy} $${strikeText} ${cp==='C'?'Call':'Put'}`;
+}
+
 function ownWorkScore(t){
   let n = 0;
   if((t.notes||'').trim()) n += 8;
@@ -3975,7 +3990,17 @@ function findDuplicateTrades(){
   pendingDupeRemoval = { dupeGroups, keep, dropIds, removing };
   const examples = dupeGroups.slice(0,3).map(g=>{
     const t = g[0];
-    return `<div style="margin-top:4px;">· ${escapeHtml(t.ticker||'')} ${escapeHtml(t.entryDate||'')} ${escapeHtml(t.entryTime||'')} → ${escapeHtml(t.exitTime||'')} at $${t.optEntry} → $${t.optExit} — recorded <b>${g.length}</b> times</div>`;
+    // Show the exit DATE too whenever the trade was not closed the same
+    // day. Without it a position held for a month reads as though it was
+    // sold before it was bought. And show which contract and how many, so
+    // two genuinely different trades cannot print as identical lines.
+    const sameDay = !t.exitDate || t.exitDate === t.entryDate;
+    const out = sameDay ? escapeHtml(t.exitTime||'')
+                        : `${escapeHtml(t.exitDate||'')} ${escapeHtml(t.exitTime||'')}`;
+    const size = t.contracts || 1;
+    return `<div style="margin-top:6px;">· ${escapeHtml(contractLabel(t))} — ${size} contract${size===1?'':'s'}<br>
+      &nbsp;&nbsp;${escapeHtml(t.entryDate||'')} ${escapeHtml(t.entryTime||'')} → ${out} at $${t.optEntry} → $${t.optExit}<br>
+      &nbsp;&nbsp;recorded <b>${g.length}</b> times</div>`;
   }).join('');
   out.innerHTML = `
     <div style="color:var(--gold);">Found ${dupeGroups.length} trade(s) recorded more than once — ${removing} extra cop${removing===1?'y':'ies'} in total.</div>
