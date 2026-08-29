@@ -139,6 +139,10 @@
   }
 
   .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .fee-note{font-size:11.5px; color:var(--text-dim); line-height:1.5;
+    margin:10px 0 0; padding:10px 12px; background:var(--panel-2);
+    border:1px solid var(--border); border-radius:5px;}
+  .fee-note:empty{display:none;}
   .stat{background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:14px 12px;}
   .stat .label{font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.6px; font-weight:700;}
   .stat .val{font-family:var(--display); font-size:30px; font-weight:400; margin-top:6px; letter-spacing:0.5px; line-height:1;}
@@ -530,9 +534,11 @@
       <div class="stat"><div class="label">Avg R:R (planned)</div><div class="val num" id="statRR">0.0</div></div>
       <div class="stat"><div class="label">Trades Logged</div><div class="val num" id="statCount">0</div></div>
     </div>
-    <div id="statFeeNote" style="font-size:11.5px; color:var(--text-dim); margin:-4px 0 14px; text-align:center;"></div>
-    <div style="display:none;">
-    </div>
+    <!-- Its own strip below the figures. It was pulled UP by four pixels
+         to sit closer to them, which on a phone put it on top of the two
+         lower tiles and cut the text off. Nothing sits on top of anything
+         now: the figures end, then this begins. -->
+    <div id="statFeeNote" class="fee-note"></div>
 
     <div class="card" style="margin-top:14px;" id="riskTrackingCard">
       <h3>Risk Rules</h3>
@@ -2814,6 +2820,22 @@ function setJournalMonth(value){
   if(card && card.scrollIntoView) card.scrollIntoView({ block:'start' });
 }
 
+// Says how good the underlying stock price is. It has always been a
+// reconstruction -- the close of the last candle before the fill --
+// and on an older trade that candle could be 30 minutes or a whole day
+// wide. Realized R:R is worked out from it, so showing a rough figure as
+// though it were exact quietly makes that number look trustworthy when
+// it is not. With Alpaca connected the price can be the actual trade
+// that printed at that second, and then it really is exact.
+function underlyingNote(t){
+  if(t.undEntry == null && t.undExit == null) return '';
+  const exact = t.undEntryExact === true && t.undExitExact === true;
+  if(exact) return ' <span style="color:var(--bull); font-size:10px;">exact</span>';
+  const known = t.undEntrySource || t.undExitSource;
+  if(!known) return '';
+  return ' <span style="color:var(--text-dim); font-size:10px;">approx.</span>';
+}
+
 function renderJournal(){
   const all = tradesNewestFirst();
   const list = document.getElementById('journalList');
@@ -2930,7 +2952,7 @@ function renderJournal(){
         <div>Entry: ${t.entryDate||''} ${t.entryTime||''}</div>
         <div>Exit: ${t.exitDate||''} ${t.exitTime||''}</div>
         <div>Opt: $${t.optEntry.toFixed(2)} → ${t.optExit==null?'—':'$'+t.optExit.toFixed(2)}</div>
-        <div>Under: ${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}</div>
+        <div>Under: ${t.undEntry!=null?'$'+t.undEntry.toFixed(2):'—'} / ${t.undExit!=null?'$'+t.undExit.toFixed(2):'—'}${underlyingNote(t)}</div>
         <div>Stop: ${t.stop!=null?'$'+t.stop.toFixed(2):'—'}${t.stopAuto?' <span style="color:var(--gold); font-size:10px;">AUTO</span>':''}</div>
         ${t.stopReason?`<div style="grid-column:1/-1; color:var(--text-dim); font-size:11px; line-height:1.4; margin-top:2px;">${t.stopReason}</div>`:''}
         <div>Fees: ${t.fees!=null?'$'+t.fees.toFixed(2):'<span style="color:var(--text-dim);">not recorded</span>'}</div>
@@ -3763,7 +3785,30 @@ function plainErrorText(raw){
   }
   const t = String(raw||'').trim();
   if(!t) return 'The import stopped, but no reason was given.';
-  return t.length > 220 ? t.slice(0,220)+'…' : t;
+  const low = t.toLowerCase();
+  // Schwab's gatekeeper turns you away after too many requests in a short
+  // time, and answers with a page of web code rather than a message.
+  // Dumping that on screen is useless to him -- and it happened, filling
+  // the screen with "<HTML><HEAD><TITLE>Access Denied".
+  if(low.includes('access denied') || low.includes("don't have permission")
+     || low.includes('403 forbidden')){
+    return 'Schwab turned the request away — this normally means too many requests too quickly, which a full re-import can trigger. Nothing is broken and nothing is lost. Wait about fifteen minutes and tap "Get My Trades" again.';
+  }
+  if(low.includes('429') || low.includes('too many requests') || low.includes('rate limit')){
+    return 'Schwab asked us to slow down — too many requests too quickly. Wait about fifteen minutes and tap "Get My Trades" again. Nothing is lost.';
+  }
+  if(low.includes('<html') || low.includes('<!doctype')){
+    return 'Schwab sent back a web page instead of an answer, which usually means their service is briefly refusing requests. Wait a few minutes and tap "Get My Trades" again.';
+  }
+  if(low.includes('timeout') || low.includes('etimedout') || low.includes('econnreset')){
+    return 'The connection to Schwab dropped partway through. Nothing is lost — tap "Get My Trades" again.';
+  }
+  // Never let raw web code or a wall of server text reach the screen.
+  const clean = t.replace(/<[^>]*>/g, ' ').replace(/&#\d+;/g, '').replace(/\s+/g, ' ').trim();
+  if(!clean || clean.length > 160 || /[{}\\]|https?:\/\//.test(clean)){
+    return 'Schwab returned something the app could not make sense of. Nothing is lost — wait a few minutes and tap "Get My Trades" again.';
+  }
+  return clean;
 }
 
 // Asks the server whether ITS connection to Schwab is alive. The green
@@ -3970,6 +4015,10 @@ async function autoImportPendingTrades(url, pending){
       // Schwab's fees, as they actually came out of the account. Null on
       // a trade imported before fees were recorded — which must read as
       // "not known", never as "no fee was charged".
+      // Where the underlying price came from, so a reconstruction is
+      // never shown as though it were a record.
+      undEntrySource: t.undEntrySource ?? null, undExitSource: t.undExitSource ?? null,
+      undEntryExact: t.undEntryExact ?? null, undExitExact: t.undExitExact ?? null,
       entryFees: t.entryFees ?? null, exitFees: t.exitFees ?? null,
       fees: t.fees ?? null,
       pnlNet: t.pnlNet ?? (t.fees != null && pnlDollar != null
