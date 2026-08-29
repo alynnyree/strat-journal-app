@@ -712,6 +712,8 @@
 
     <div class="card">
       <h3>Data</h3>
+      <button class="secondary" onclick="findDuplicateTrades()">Check for Duplicate Trades</button>
+      <div id="dupeOut" style="font-size:12.5px; color:var(--text-dim); margin-top:8px; line-height:1.5;"></div>
       <button class="secondary" onclick="exportData()">Export All Trades (JSON)</button>
       <button class="secondary" onclick="exportCsvSheet()">Export Journal (CSV)</button>
       <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="wipeData()">Erase All Trades</button>
@@ -3563,12 +3565,33 @@ async function pollBackend(silent=false){
 // and the trade is flagged with a "Needs Setup" badge in the Journal table
 // so it's still easy to find and fill in later via Edit — but nothing
 // blocks it from showing up as a real Journal entry immediately.
+// Identifies a trade by WHAT IT IS, not by the reference number it was
+// given. This is the fix for the duplication that put 161 contracts in
+// the owner's journal that he never bought.
+//
+// The old check compared reference numbers. "Reset & Re-import" hands the
+// same trades back with FRESH reference numbers, so the check saw them as
+// new and imported them a second time — and he had been told to press
+// that button after backend changes. Two identical trades cannot happen
+// in reality: the same contract, entered at the same minute, exited at
+// the same minute, at the same two prices, is one trade seen twice.
+function tradeFingerprint(t){
+  const n = v => (v == null ? '' : Number(v).toFixed(4));
+  return [t.occ || t.ticker || '', t.entryDate || '', t.entryTime || '',
+          t.exitDate || '', t.exitTime || '', n(t.optEntry), n(t.optExit),
+          t.contracts ?? ''].join('|');
+}
+
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
+  const existingPrints = new Set(trades.map(tradeFingerprint));
   let imported = 0;
   for(const t of pending){
     if(existingIds.has(t.id)) continue; // already imported (e.g. a prior delete-from-pending failed silently)
+    const print = tradeFingerprint(t);
+    if(existingPrints.has(print)) continue; // same trade, new reference number
+    existingPrints.add(print);
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
@@ -3625,7 +3648,10 @@ async function runBackfillNow(quiet=false){
   log('syncLog', 'Requesting historical backfill...');
   try{
     const r = await fetch(url+'/api/trades/backfill', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:90})
+      // A full year, not 90 days. 90 days is why his journal started in
+      // mid-May when his trading started on 2 January: four months of real
+      // trades were simply never asked for, and nothing said so.
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365})
     });
     if(!r.ok) throw new Error('Server responded with status '+r.status);
     // The backend responds as soon as the backfill STARTS, not once it's
@@ -3890,6 +3916,89 @@ function exportCsvSheet(){
   a.download = 'strat-journal.csv';
   a.click();
 }
+// Finds trades that are the same trade recorded more than once, and
+// offers to remove the copies. Deliberately a TWO-STEP action: it reports
+// what it found and waits, because deleting trades on the strength of a
+// rule the owner has not seen the results of would be unforgivable if the
+// rule were wrong.
+//
+// When copies differ, the one carrying the most of HIS work is kept — his
+// notes, his setup tag, his screenshots, his stop. Machine-computed data
+// is recomputed on the next sync, so losing it costs nothing.
+let pendingDupeRemoval = null;
+
+function ownWorkScore(t){
+  let n = 0;
+  if((t.notes||'').trim()) n += 8;
+  if(t.strat) n += 4;
+  if(t.shotEntry) n += 3;
+  if(t.shotExit) n += 3;
+  if(t.stop != null && t.stop !== 0) n += 2;
+  if(t.rrPlanned != null && t.rrPlanned !== 0) n += 2;
+  if(t.replayData) n += 1;
+  if((t.ftfcTimeframesInRun||[]).length) n += 1;
+  // A trade he typed in himself outranks one the broker feed produced,
+  // so a tie never throws away his own entry.
+  if(t.source !== 'schwab-auto') n += 5;
+  return n;
+}
+
+function findDuplicateTrades(){
+  const trades = loadTrades();
+  const groups = new Map();
+  for(const t of trades){
+    const k = tradeFingerprint(t);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+  const dupeGroups = [...groups.values()].filter(g => g.length > 1);
+  const out = document.getElementById('dupeOut');
+  if(!dupeGroups.length){
+    pendingDupeRemoval = null;
+    out.innerHTML = `<span style="color:var(--bull);">No duplicates found — all ${trades.length} trades are distinct.</span>`;
+    return;
+  }
+  // Keep the copy carrying the most of his own work; the rest go.
+  const keep = new Set();
+  let removing = 0;
+  for(const g of dupeGroups){
+    const best = g.slice().sort((a,b)=>ownWorkScore(b)-ownWorkScore(a))[0];
+    keep.add(best.id);
+    removing += g.length - 1;
+  }
+  // Store the exact list of entries to drop, by their own reference, so
+  // that nothing else can be caught by it later.
+  const dropIds = new Set();
+  for(const g of dupeGroups){
+    for(const t of g){ if(!keep.has(t.id)) dropIds.add(t.id); }
+  }
+  pendingDupeRemoval = { dupeGroups, keep, dropIds, removing };
+  const examples = dupeGroups.slice(0,3).map(g=>{
+    const t = g[0];
+    return `<div style="margin-top:4px;">· ${escapeHtml(t.ticker||'')} ${escapeHtml(t.entryDate||'')} ${escapeHtml(t.entryTime||'')} → ${escapeHtml(t.exitTime||'')} at $${t.optEntry} → $${t.optExit} — recorded <b>${g.length}</b> times</div>`;
+  }).join('');
+  out.innerHTML = `
+    <div style="color:var(--gold);">Found ${dupeGroups.length} trade(s) recorded more than once — ${removing} extra cop${removing===1?'y':'ies'} in total.</div>
+    ${examples}
+    ${dupeGroups.length>3?`<div style="margin-top:4px;">…and ${dupeGroups.length-3} more.</div>`:''}
+    <div style="margin-top:8px;">You would be left with <b>${trades.length - removing}</b> trades. Nothing is sent anywhere — this only tidies what is on your phone.</div>
+    <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="removeDuplicateTrades()">Remove the ${removing} extra cop${removing===1?'y':'ies'}</button>`;
+}
+
+function removeDuplicateTrades(){
+  if(!pendingDupeRemoval){ findDuplicateTrades(); return; }
+  const { dropIds } = pendingDupeRemoval;
+  const trades = loadTrades();
+  const kept = trades.filter(t => !dropIds.has(t.id));
+  const dropped = trades.length - kept.length;
+  saveTrades(kept);
+  pendingDupeRemoval = null;
+  renderJournal(); renderDashboard();
+  document.getElementById('dupeOut').innerHTML =
+    `<span style="color:var(--bull);">Removed ${dropped} extra cop${dropped===1?'y':'ies'}. You now have ${kept.length} trades.</span>`;
+  showStatus('ok', `${dropped} duplicate trade(s) removed.`);
+}
+
 function wipeData(){
   if(confirm('Erase all logged trades? This cannot be undone.')){
     localStorage.removeItem('strat_trades');
