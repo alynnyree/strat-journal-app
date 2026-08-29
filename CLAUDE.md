@@ -246,6 +246,18 @@ Uses **The Strat**. Key concepts the code implements:
   watched for errors on the page. **Always check the page for thrown
   errors in browser tests**, and re-verify that a multi-part edit
   actually landed rather than assuming it did.
+- **The underlying price is a RECONSTRUCTION, not a record.** Schwab's
+  trade record never says where SPY was at the fill. `getUnderlyingPriceAt`
+  takes the close of the last candle before the trade, cascading
+  1m → 5m → 30m → daily as older data runs out, so an old trade's
+  underlying can come from a 30-minute close or the previous day. Realized
+  R:R is computed from it and inherits the error. Never describe it as
+  exact.
+- **Fees are derived from the CASH, not from Schwab's fee lines.** A buy
+  pays the contracts' value plus fees, a sell brings in that value minus
+  fees, so `|netAmount| − price×100×qty` is the fee — arithmetic verified
+  on all 480 of his real fills. An unknown fee is stored as null, never 0,
+  and a null on either side makes the trade's fee and net P&L null too.
 - **The Schwab CSV export carries NO times.** Its columns are Date,
   Action, Symbol, Description, Quantity, Price, Fees & Comm, Amount, and
   Date is "07/23/2026". It can confirm dates, prices, sizes and P&L — it

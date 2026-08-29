@@ -209,6 +209,64 @@ via the `TASKS.md` commit log.
     **Still to do on his phone:** tap "Check My Numbers" with the Schwab
     export and report what it says.
 
+31. **Count Schwab's fees** (2026-08-29). **Status: BUILT AND TESTED
+    (strat-journal-app PR #49, strat-journal-backend PR #32) — 18 + 24
+    checks against his own account statement. Not yet confirmed on his
+    phone, and needs a re-import to reach the 299 trades already logged.**
+
+    He asked for this directly after being told fees were nowhere in the
+    journal. The import read the option lines out of each Schwab record
+    and skipped the fee lines entirely, so every figure on screen was
+    before fees: $696 of losses shown against $1,100.73 actually gone
+    from the account. $404.73 across the year, and 37% of his losses.
+
+    Fees are worked out from the CASH, not from Schwab's fee lines,
+    because the cash can be checked: a buy pays out the contracts' value
+    plus fees, a sell brings in that value minus fees. That arithmetic
+    had already been verified against all 480 fills in his statement.
+    Falls back to Schwab's itemised fees, refuses a gap larger than a
+    fifth of the trade, and returns "unknown" rather than a guess —
+    an unknown fee must never be recorded as a fee of zero.
+
+    **This changes what counts as a win.** A trade that gained $1.00 and
+    cost $1.63 in fees lost money, and is now shown, coloured and counted
+    as a loss. Win rate, month summaries and the per-setup breakdown all
+    follow the money rather than the price move. On his real history one
+    trade flips (45% to 44%).
+
+    Trades imported before this read "Fees: not recorded", never $0.00,
+    and keep their before-fees figure without an "after fees" label they
+    have not earned. Every total says how many trades it covers, so the
+    numbers stay honest partway through a re-import.
+
+    Verified: the fee on all 480 of his real fills is worked out exactly,
+    and the year totals to the $404.73 his statement gives. A split fill
+    divides the opening fee without losing or doubling it.
+
+32. **Underlying stock price: use Alpaca instead of reconstructing it**
+    (2026-08-29, his question). **Status: NOT STARTED. Alpaca itself is
+    still not built — approved 2026-08-28, zero lines of code exist.**
+
+    The underlying price is the one imported figure that is NOT a record.
+    Schwab's trade record says what he paid for the option but never
+    where SPY was at that instant, so `getUnderlyingPriceAt` looks it up
+    afterwards and takes the CLOSE OF THE LAST CANDLE BEFORE the fill,
+    cascading 1m to 5m to 30m to daily as older data runs out. On a
+    recent trade that is the close of the preceding minute; on an old one
+    it can be a 30-minute close or the previous day's. Realized R:R is
+    computed from it, so that figure inherits the error.
+
+    His question was whether Alpaca fixes this. It largely does, for two
+    separate reasons: minute bars going back 7+ years remove the 30-35
+    day cliff entirely, and Alpaca's historical trade data would give the
+    actual market price at the fill second rather than a candle close.
+    Both are on the free tier. The limit is the precision of Schwab's own
+    timestamp — worth checking against a real record before promising
+    second-level accuracy.
+
+    Until then, marking which underlying prices are approximate was
+    offered and not yet taken up.
+
 30. **A month menu instead of one endless list; the numbers button
     removed** (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app
     PR #48) — 28 + 11 checks. Not yet confirmed on his phone.**
