@@ -142,6 +142,10 @@
   .stat{background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:14px 12px;}
   .stat .label{font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.6px; font-weight:700;}
   .stat .val{font-family:var(--display); font-size:30px; font-weight:400; margin-top:6px; letter-spacing:0.5px; line-height:1;}
+  /* The same figure the other way round -- with fees and without. He asked
+     to see both rather than choose between them, so neither is hidden
+     behind a setting he has to remember he changed. */
+  .stat .alt{font-size:10.5px; color:var(--text-dim); margin-top:5px; line-height:1.35;}
   /* Positive reinforcement, deliberately asymmetric: a gain gets a faint
      glow so a good number feels like it lit up, a loss gets the colour
      and nothing else. The app should mark a win, not punish a loss. */
@@ -521,8 +525,8 @@
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
     <div class="stat-grid">
-      <div class="stat"><div class="label">Net P&L</div><div class="val num" id="statPnl">$0.00</div></div>
-      <div class="stat"><div class="label">Win Rate</div><div class="val num" id="statWinRate">0%</div></div>
+      <div class="stat"><div class="label">Net P&L</div><div class="val num" id="statPnl">$0.00</div><div class="alt" id="statPnlAlt"></div></div>
+      <div class="stat"><div class="label">Win Rate</div><div class="val num" id="statWinRate">0%</div><div class="alt" id="statWinRateAlt"></div></div>
       <div class="stat"><div class="label">Avg R:R (planned)</div><div class="val num" id="statRR">0.0</div></div>
       <div class="stat"><div class="label">Trades Logged</div><div class="val num" id="statCount">0</div></div>
     </div>
@@ -2633,17 +2637,37 @@ function renderDashboard(){
   const netPnl = trades.reduce((s,t)=>s+realPnl(t),0);
   const avgRR = count ? (trades.reduce((s,t)=>s+(t.rrPlanned||0),0)/count) : 0;
 
+  // The same two figures worked out the other way: on the price move
+  // alone, before Schwab took anything.
+  const grossPnl = trades.reduce((s,t)=>s+(t.pnlDollar||0),0);
+  const grossWins = trades.filter(t => t.pnlDollar == null
+    ? t.winLoss === 'Win'
+    : t.pnlDollar >= 0).length;
+
   const feesKnown = trades.filter(t=>t.fees != null);
   const feeTotal = feesKnown.reduce((s,t)=>s+t.fees, 0);
+  const anyFees = feesKnown.length > 0;
+
   const feeNote = document.getElementById('statFeeNote');
   if(feeNote){
-    feeNote.innerHTML = !feesKnown.length
-      ? ''
-      : `${fmtMoney(feeTotal)} of that is Schwab's fees`
+    feeNote.innerHTML = !anyFees
+      ? 'No fees recorded yet — every figure here is before Schwab\'s fees. Re-import your trades to bring them in.'
+      : `Fees paid: <b style="color:var(--text);">${fmtMoney(feeTotal)}</b>`
         + (feesKnown.length < count
-            ? ` — recorded on ${feesKnown.length} of ${count} trades so far`
+            ? ` — recorded on ${feesKnown.length} of ${count} trades so far, so the two figures above will keep moving apart until the rest come in`
             : '');
   }
+
+  const pnlAlt = document.getElementById('statPnlAlt');
+  if(pnlAlt) pnlAlt.innerHTML = anyFees
+    ? `after fees<br>${fmtMoney(grossPnl)} before`
+    : 'before fees';
+
+  const rateAlt = document.getElementById('statWinRateAlt');
+  const grossRate = count ? Math.round(grossWins/count*100) : 0;
+  if(rateAlt) rateAlt.innerHTML = anyFees
+    ? `after fees<br>${grossRate}% before`
+    : 'before fees';
 
   document.getElementById('statPnl').textContent = fmtMoney(netPnl);
   document.getElementById('statPnl').className = 'val num ' + (netPnl>=0?'pos':'neg');
@@ -2829,13 +2853,21 @@ function renderJournal(){
       const colour = pnl >= 0 ? 'var(--bull)' : 'var(--bear)';
       const feesKnown = closed.filter(t=>t.fees != null);
       const feeTotal = feesKnown.reduce((a,t)=>a+t.fees, 0);
-      const feeLine = feesKnown.length
-        ? ` · ${fmtMoney(feeTotal)} in fees${feesKnown.length < closed.length
-            ? ` (on ${feesKnown.length} of ${closed.length})` : ''}`
+      const gross = closed.reduce((a,t)=>a+(t.pnlDollar||0), 0);
+      const grossWins = closed.filter(t=>(t.pnlDollar||0) >= 0).length;
+      const grossRate = Math.round(grossWins / closed.length * 100);
+      // Both ways round on one line, so neither has to be worked out.
+      const secondLine = feesKnown.length
+        ? `<div style="margin-top:2px;">before fees: <b>${fmtMoney(gross)}</b>`
+          + ` · ${grossWins} won, ${closed.length-grossWins} lost · ${grossRate}% win rate`
+          + ` · ${fmtMoney(feeTotal)} in fees`
+          + (feesKnown.length < closed.length ? ` (on ${feesKnown.length} of ${closed.length})` : '')
+          + `</div>`
         : '';
-      sum.innerHTML = `<span style="color:${colour}; font-weight:600;">${fmtMoney(pnl)}</span>`
+      sum.innerHTML = `<div><span style="color:${colour}; font-weight:600;">${fmtMoney(pnl)}</span>`
         + ` · ${closed.length} trade${closed.length===1?'':'s'} · ${wins} won, ${closed.length-wins} lost · ${rate}% win rate`
-        + feeLine;
+        + (feesKnown.length ? ' <span style="opacity:0.75;">(after fees)</span>' : '')
+        + `</div>` + secondLine;
     }
   }
 
