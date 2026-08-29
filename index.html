@@ -546,6 +546,11 @@
     </div>
 
     <div class="card" style="margin-top:14px;">
+      <h3>Does Alignment Pay?</h3>
+      <div id="alignmentVerdict"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
       <h3>Setup Performance</h3>
       <div id="setupBreakdown"><div class="empty">Log trades to see which Strat setups actually make you money.</div></div>
       <div id="classifyRow" style="margin-top:10px;"></div>
@@ -2728,24 +2733,84 @@ function renderDashboard(){
     ladder.appendChild(seg);
   });
 
+  // A setup taken WITH the timeframes agreeing and the same setup taken
+  // against them are not the same trade. Pooling them averages a winner
+  // and a loser into a meaningless middle, and the verdict that comes out
+  // — "this setup doesn't work" — can be the exact opposite of the truth.
+  //
+  // The setup NAME is unchanged: he has been clear that alignment is
+  // context, not a separate setup. Only the reporting is split.
+  const isAligned = t => !!t.ftfcConfirmed;
+  const blank = () => ({count:0, pnl:0, wins:0});
+  const add = (bucket, t) => {
+    bucket.count++; bucket.pnl += realPnl(t);
+    if(t.pnlDollar == null ? t.winLoss === 'Win' : realPnl(t) >= 0) bucket.wins++;
+  };
+
   const bySetup = {};
   trades.forEach(t=>{
     const key = t.strat || 'Unclassified (needs setup)';
-    bySetup[key] = bySetup[key] || {count:0, pnl:0, wins:0};
-    bySetup[key].count++; bySetup[key].pnl += realPnl(t);
-    if(t.pnlDollar == null ? t.winLoss === 'Win' : realPnl(t) >= 0) bySetup[key].wins++;
+    bySetup[key] = bySetup[key] || { all: blank(), aligned: blank(), against: blank() };
+    add(bySetup[key].all, t);
+    add(isAligned(t) ? bySetup[key].aligned : bySetup[key].against, t);
   });
+
   const sb = document.getElementById('setupBreakdown');
   const keys = Object.keys(bySetup);
   if(!keys.length){ sb.innerHTML = '<div class="empty">Log trades to see which Strat setups actually make you money.</div>'; }
   else {
-    sb.innerHTML = keys.sort((a,b)=>bySetup[b].pnl-bySetup[a].pnl).map(k=>{
+    const money = v => `<span class="num ${v>=0?'pos':'neg'}">${fmtMoney(v)}</span>`;
+    const sub = (label, b) => !b.count ? '' :
+      `<div style="display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--text-dim); margin-top:3px;">
+        <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
+        <span>${money(b.pnl)}</span>
+      </div>`;
+    sb.innerHTML = keys.sort((a,b)=>bySetup[b].all.pnl-bySetup[a].all.pnl).map(k=>{
       const s = bySetup[k];
-      return `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
-        <div>${k}<div style="font-size:11px; color:var(--text-dim);">${s.count} trades · ${Math.round(s.wins/s.count*100)}% win</div></div>
-        <div class="num ${s.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.pnl)}</div>
+      // Only split when there is something to compare. One-sided is not a
+      // comparison, and printing an empty half would imply otherwise.
+      const worthSplitting = s.aligned.count > 0 && s.against.count > 0;
+      return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+        <div style="display:flex; justify-content:space-between; gap:10px;">
+          <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s.all.count} trades · ${Math.round(s.all.wins/s.all.count*100)}% win</div></div>
+          <div class="num ${s.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.all.pnl)}</div>
+        </div>
+        ${worthSplitting ? sub('✅ timeframes agreed', s.aligned) + sub('✕ timeframes did not', s.against) : ''}
       </div>`;
     }).join('');
+  }
+
+  // The one number that answers "is waiting for alignment worth it".
+  const alignedAll = blank(), againstAll = blank();
+  trades.forEach(t => add(isAligned(t) ? alignedAll : againstAll, t));
+  const av = document.getElementById('alignmentVerdict');
+  if(av){
+    if(!alignedAll.count || !againstAll.count){
+      av.innerHTML = `<div style="font-size:12px; color:var(--text-dim); line-height:1.5;">Once you have trades both with and without the timeframes agreeing, this will tell you whether waiting for alignment actually pays.${
+        alignedAll.count || againstAll.count ? ` So far every trade here is ${alignedAll.count ? 'aligned' : 'not aligned'}.` : ''}</div>`;
+    } else {
+      const perAligned = alignedAll.pnl / alignedAll.count;
+      const perAgainst = againstAll.pnl / againstAll.count;
+      const gap = perAligned - perAgainst;
+      const rateA = Math.round(alignedAll.wins / alignedAll.count * 100);
+      const rateB = Math.round(againstAll.wins / againstAll.count * 100);
+      const verdict = Math.abs(gap) < 1
+        ? 'Too close to call so far — alignment is not making a clear difference to your results.'
+        : (gap > 0
+            ? `Waiting for alignment is worth <b>${fmtMoney(gap)}</b> more per trade to you.`
+            : `Your aligned trades are doing <b>${fmtMoney(-gap)}</b> per trade <b>worse</b> — worth a hard look before you keep waiting for it.`);
+      av.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px;">
+          <span>✅ Timeframes agreed — ${alignedAll.count} trade${alignedAll.count===1?'':'s'} · ${rateA}% win</span>
+          <span><b>${fmtMoney(alignedAll.pnl)}</b> · ${fmtMoney(perAligned)}/trade</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; margin-top:4px;">
+          <span>✕ Timeframes did not — ${againstAll.count} trade${againstAll.count===1?'':'s'} · ${rateB}% win</span>
+          <span><b>${fmtMoney(againstAll.pnl)}</b> · ${fmtMoney(perAgainst)}/trade</span>
+        </div>
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12.5px; color:${gap>0?'var(--bull)':(Math.abs(gap)<1?'var(--text-dim)':'var(--bear)')};">${verdict}</div>
+        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Compared per trade, not as totals — you may have taken far more of one than the other.</div>`;
+    }
   }
 
   const cr = document.getElementById('classifyRow');
