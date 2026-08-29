@@ -962,7 +962,11 @@ project "complete":**
    quality — combined into one task 2026-08-23, previously tracked as two
    separate items** (hypothetical entries/stops/targets run against
    historical replay data).
-   **Status: Needs proposal first.** Owner pointed out these aren't
+   **Status: BUILT AND TESTED 2026-08-28 (strat-journal-backend PR #27,
+   strat-journal-app PR #40) — the full update is further down this entry.
+   The "needs proposal first" note below is the ORIGINAL framing, kept for
+   context; it was overtaken when he asked for it outright.**
+   Owner pointed out these aren't
    actually separate efforts: Bar Replay's reconstructed candle data is
    the same raw material backtesting would need to run hypothetical
    entries/stops/targets against, so "improve Bar Replay data quality"
@@ -1240,9 +1244,12 @@ project "complete":**
     dedicated effort.
 
 14. **Track stock share trades (buying/selling shares of a company), not
-    just options** (added 2026-08-23, owner's own question). **Status: Not
-    started — real gap confirmed by reading the actual code, not yet
-    designed.** Right now, share trades are completely invisible to this
+    just options** (added 2026-08-23, owner's own question). **Status: CANCELLED by the
+    owner 2026-08-28 — "we don't need share tracking. I won't be
+    purchasing shares with this particular brokerage." Kept here because
+    the gap below is real, and would apply again if he ever changes
+    brokerage or starts buying shares.**
+    Right now, share trades are completely invisible to this
     app — not mismatched, simply thrown away before they're ever stored.
     Confirmed in `schwabClient.js`'s `extractOptionFills()`: every fill
     from Schwab is checked with `if (ti.instrument?.assetType !== 'OPTION')
