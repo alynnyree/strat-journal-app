@@ -976,6 +976,25 @@
       <label style="margin-top:10px;">Or describe the setup in words instead (if you have no picture)</label>
       <textarea id="testDescription" placeholder="e.g. inside bar, then a directional bar breaking up, then another directional bar breaking down..."></textarea>
 
+      <!-- Optional. Given these, the timeframe alignment is MEASURED from
+           real candle data rather than read off the picture, and both go
+           to the AI together. Left blank, the tool reads everything
+           visually exactly as before — which is what most test pictures
+           need, since a screenshot from anywhere carries no date. -->
+      <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
+        <div style="font-size:12px; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
+          <b style="color:var(--text);">Optional — for a real moment in the market.</b>
+          Fill these in and the timeframe alignment is worked out from
+          actual price data instead of guessed from the picture. The
+          picture is still read for everything data cannot show: your
+          drawn lines, a broadening formation, where price sits.
+        </div>
+        <div class="row2">
+          <div><label>Ticker</label><input id="testTicker" placeholder="SPY" autocapitalize="characters" autocorrect="off" spellcheck="false"></div>
+          <div><label>Date &amp; time</label><input id="testWhen" type="datetime-local"></div>
+        </div>
+      </div>
+
       <button class="primary" id="testClassifyBtn" onclick="runTestClassification()" style="margin-top:14px;">Classify This Chart</button>
       <div id="testClassifyOutput"></div>
     </div>
@@ -3221,7 +3240,10 @@ async function fetchTestClassification(url, payload, out){
         throw Object.assign(new Error(e.error || 'Nothing to classify.'), {noRetry:true});
       }
       if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error || `Server responded with status ${r.status}`); }
-      return (await r.json()).result;
+      // The WHOLE answer, not just the classification — it now also
+      // carries what was measured from real price data, and stripping the
+      // envelope here would silently throw that away.
+      return await r.json();
     }catch(e){
       lastErr = e;
       const canRetry = !e.noRetry && attempt < TEST_CLASSIFY_RETRY_DELAYS_MS.length;
@@ -3250,9 +3272,23 @@ async function runTestClassification(){
   btn.disabled = true;
   lastTestClassifyResult = null;
 
+  // Both boxes are needed for a lookup — a ticker with no moment, or a
+  // moment with no ticker, cannot be looked up, so neither is sent alone.
+  const ticker = (document.getElementById('testTicker').value || '').trim().toUpperCase();
+  const whenRaw = (document.getElementById('testWhen').value || '').trim();
+  const both = ticker && whenRaw;
+  if((ticker || whenRaw) && !both){
+    out.innerHTML = `<div class="ai-msg"><div class="tag">One more thing</div>${ticker ? 'Add the date and time as well' : 'Add the ticker as well'} — the market can only be looked up with both. Or clear it and the chart will be read by eye.</div>`;
+    btn.disabled = false;
+    return;
+  }
   const payload = {
     image: currentTestShot || undefined,
     description: description || undefined,
+    ticker: both ? ticker : undefined,
+    // The box gives local time; the market is worked out in real time, so
+    // send the moment itself rather than a bare clock reading.
+    when: both ? new Date(whenRaw).toISOString() : undefined,
   };
 
   try{
@@ -3266,7 +3302,10 @@ async function runTestClassification(){
     try{ await fetch(url+'/health'); }catch(e){ /* non-fatal — the real call below is what matters, and it retries on its own */ }
 
     out.innerHTML = `<div class="ai-msg"><span class="spin"></span>Reading the chart...</div>`;
-    const result = await fetchTestClassification(url, payload, out);
+    const answer = await fetchTestClassification(url, payload, out);
+    const result = answer.result || answer;   // older servers return the result alone
+    const marketFtfc = answer.marketFtfc || null;
+    const marketError = answer.marketError || null;
     lastTestClassifyResult = result;
     testFeedbackSubmitting = false; // a fresh classification can be judged again
     const confBadge = result.confidence === 'high' ? 'pos' : (result.confidence === 'medium' ? '' : 'neg');
@@ -3282,7 +3321,9 @@ async function runTestClassification(){
         ${result.reasoning}
       </div>
       <div class="ai-msg">
-        <div class="tag">Timeframe continuity: <span class="${ftfcClass(result.ftfc)}">${ftfcLabel(result.ftfc)}</span></div>
+        <div class="tag">Timeframe continuity: <span class="${ftfcClass(result.ftfc)}">${ftfcLabel(result.ftfc)}</span>${marketFtfc ? ' <span style="color:var(--bull);">· measured</span>' : ''}</div>
+        ${marketFtfc ? `<div style="font-size:12px; color:var(--text-dim); margin-bottom:4px;">From real ${escapeHtml(marketFtfc.ticker)} price data: ${marketFtfc.run} of 13 timeframes agreed${marketFtfc.direction ? ` (${escapeHtml(marketFtfc.direction)})` : ''}${(marketFtfc.timeframesInRun||[]).length ? ` — ${escapeHtml(marketFtfc.timeframesInRun.join(' → '))}` : ''}. Not read off the picture.</div>` : ''}
+        ${marketError ? `<div style="font-size:12px; color:var(--amber); margin-bottom:4px;">${escapeHtml(marketError)}</div>` : ''}
         ${result.ftfcTimeframes ? `<div style="font-size:12px; color:var(--text-dim); margin-bottom:4px;">Read as: ${result.ftfcTimeframes}</div>` : ''}
         ${result.ftfcReasoning || ''}
       </div>
