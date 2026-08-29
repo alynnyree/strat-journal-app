@@ -61,9 +61,27 @@ via the `TASKS.md` commit log.
     genuinely new trade still comes in; an empty journal doesn't fall
     over; and no errors are thrown on the page in any scenario.
 
-    **Still to do on his phone:** tap "Check for Duplicate Trades" once
-    and confirm the count, then "Reset & Re-import Trades" to pull
-    January through April in.
+    **First real run on his phone, 2026-08-29:** 85 trades recorded more
+    than once, 132 extra copies, leaving 101. Checked against his broker
+    export before he removed anything: his real completed trades from
+    early May to 23 July number between 98 and 106 depending on exactly
+    where the journal starts, so 101 lands dead centre. Also confirmed
+    that **no two of his 248 real trades are identical** even comparing
+    only by day — a stricter test than the app's own rule, which compares
+    the exact minute in and minute out too — so no real trade was ever at
+    risk of being merged away.
+
+    That run also exposed a reporting fault, fixed in PR #43: the summary
+    line showed the exit *time* but not the exit *date*, so his NIO
+    position opened 24 June and closed 23 July read as "15:55 → 12:32",
+    as though sold before it was bought. And it left out the contract and
+    the size, so two genuinely different trades (3 contracts and 1, on
+    the same contract at nearly the same prices) printed as identical
+    lines. The line now names the contract in full, says how many, and
+    shows the exit date on anything not closed the same day.
+
+    **Still to do on his phone:** remove the 132 extra copies, then tap
+    "Get My Trades" to pull January through April in.
 
 24. **One button to import, trades always present on open, and the fix
     for a Journal that displayed as a blank page** (2026-08-27).
