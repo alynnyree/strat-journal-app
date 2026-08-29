@@ -742,6 +742,7 @@
 
     <div class="card">
       <h3>All Trades</h3>
+      <div id="journalOrder" style="font-size:11.5px; color:var(--text-dim); margin-bottom:10px;"></div>
       <div id="journalList"></div>
       <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
     </div>
@@ -2720,13 +2721,25 @@ function toggleTradeNotes(el){
 // Newest trade first, always. The list used to be shown in the order
 // trades happened to be written down, which is not an order at all: the
 // January-to-April import arrived last and so sat ABOVE the May-to-July
-// trades already there, putting four-month-old trades at the top and the
-// most recent ones out of sight. Sorted by when the trade was entered.
+// trades already there, putting four-month-old trades at the top.
+//
+// Ordered by when the trade FINISHED, not when it started. "My most
+// recent trades" means the ones he closed most recently — his NIO
+// position was opened on 24 June and closed on 23 July, so ordering by
+// the entry buried it below every trade opened in July, even though
+// nothing has been closed since. For a day trade the two are the same
+// day and this changes nothing; it only matters for a position held
+// across days, which is exactly the case that was wrong.
+function stamp(date, time){
+  if(!date) return null;
+  const tm = /^\d{2}:\d{2}$/.test(time||'') ? time : '00:00';
+  const parsed = Date.parse(`${date}T${tm}:00`);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 function tradeMoment(t){
-  const d = t.entryDate || t.exitDate || '';
-  const tm = t.entryTime || '00:00';
-  const parsed = Date.parse(`${d}T${tm.length === 5 ? tm : '00:00'}:00`);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return stamp(t.exitDate, t.exitTime)
+      ?? stamp(t.entryDate, t.entryTime)
+      ?? 0;
 }
 function tradesNewestFirst(){
   return loadTrades().slice().sort((a,b)=>tradeMoment(b)-tradeMoment(a));
@@ -2736,6 +2749,19 @@ function renderJournal(){
   const trades = tradesNewestFirst();
   const list = document.getElementById('journalList');
   document.getElementById('journalEmpty').style.display = trades.length ? 'none':'block';
+  // States the order and the span on screen, so it can be checked at a
+  // glance instead of taken on trust — and so a trade dated outside his
+  // real trading is obvious rather than something to scroll for.
+  const head = document.getElementById('journalOrder');
+  if(head){
+    if(!trades.length){ head.textContent = ''; }
+    else {
+      const newest = trades[0], oldest = trades[trades.length-1];
+      const day = t => (t.exitDate || t.entryDate || '—');
+      head.innerHTML = `${trades.length} trade${trades.length===1?'':'s'}, newest first · `
+        + `${escapeHtml(day(newest))} back to ${escapeHtml(day(oldest))}`;
+    }
+  }
   list.innerHTML = trades.map(t=>{
     const pnlKnown = t.pnlDollar!=null;
     const pnlClass = !pnlKnown ? '' : (t.pnlDollar>=0?'pos':'neg');
@@ -2747,6 +2773,13 @@ function renderJournal(){
       : `<span class="badge open">FTFC ${t.ftfcRun||0}/4</span>`;
     const broadeningBadge = t.offBroadeningFormation
       ? `<span class="badge" style="background:var(--panel); color:#8ec9ff; border:1px solid #3a6ea5;">📐 Broadening</span>`
+      : '';
+    // Anything Schwab did not send is marked, so a trade he does not
+    // recognise can be told apart from one he does at a glance. Sample
+    // entries from early in the project are still in there, dated after
+    // his real trading and so sitting at the top of the list.
+    const sourceBadge = (t.source && t.source !== 'schwab-auto')
+      ? `<span class="badge" style="background:var(--panel); color:var(--text-dim); border:1px solid var(--line);">✍ Added by hand</span>`
       : '';
     return `
     <div class="trade-card">
@@ -2761,6 +2794,7 @@ function renderJournal(){
         ${setupBadge}
         ${ftfcBadge}
         ${broadeningBadge}
+        ${sourceBadge}
         <span class="badge ${t.winLoss.toLowerCase()}">${t.winLoss}</span>
       </div>
       <div class="tc-details">
