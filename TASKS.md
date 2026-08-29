@@ -283,6 +283,35 @@ via the `TASKS.md` commit log.
     Alpaca is. Worth checking against a real record before promising
     second-level accuracy.
 
+35. **Stop him having to tap "Get My Trades" repeatedly** (2026-08-29).
+    **Status: BUILT AND TESTED (strat-journal-app PR #52,
+    strat-journal-backend PR #34) — 16 + 3 checks. Not yet confirmed on
+    his phone.** He asked why he keeps having to tap, and he had asked
+    once before. The honest answer had two halves.
+
+    What already worked: the 5-minute job pulls new trades, and the app
+    collects on opening AND every 30 seconds while open. Day-to-day
+    trading genuinely needs no tap.
+
+    What did not: `runBackfill` — the history import, and the same path
+    that attaches fees to existing trades — only ever ran when a human
+    triggered it, and NOTHING watched it afterwards. Schwab blocks a
+    year-long import reliably (its rate gate is what produced the "Access
+    Denied" page), and a Render restart kills one mid-run leaving it
+    marked "running" forever with nothing running. Both states waited for
+    a tap. That is why only 6 of his 305 trades had fees.
+
+    The scheduled job now resumes an unfinished import by itself: waits
+    16 minutes for Schwab's block to lift, resumes the span originally
+    asked for, treats a "running" job older than 25 minutes as dead, and
+    stops after 8 attempts rather than hammering Schwab.
+
+    Also fixed: "Schwab token refresh failed" was not matched by any of
+    the lapsed-sign-in phrases, so the ONE failure only he can fix would
+    have been handed to the server to retry silently forever. And the
+    error text had "tap Get My Trades again" baked into the cause, so the
+    new message contradicted itself.
+
 33. **The 6 August SPY trade is confirmed NOT a real trade** (2026-08-29).
     He asked for this to be checked against the conversation rather than
     assumed. Three independent pieces of evidence:

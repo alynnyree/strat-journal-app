@@ -284,6 +284,18 @@ Uses **The Strat**. Key concepts the code implements:
   differently out of the same file. Equal inputs return 0; the sort is
   stable and input order survives.
 
+- **A job nothing watches is a job he has to press a button for.** The
+  5-minute cron only looked for NEW trades. A backfill Schwab blocked, or
+  one killed mid-run by a Render restart (left marked "running" forever),
+  had nothing watching it — so the only way out was a manual tap, and he
+  reported having to tap repeatedly. Twice. Any long job that can be
+  interrupted needs something that resumes it on a schedule, with a
+  backoff and an attempt limit.
+- **Never bake an instruction into an error message.** `plainErrorText`
+  returned "…wait fifteen minutes and tap Get My Trades again" as part of
+  the cause, so when the server gained the ability to retry by itself the
+  message told him both "nothing for you to do" and "tap this". Errors
+  describe what happened; only the caller knows whether he must act.
 - **Schwab's sign-in lasts SEVEN DAYS and cannot be extended.** The login
   flow has to be repeated by hand every week. When it lapses,
   `getValidAccessToken()` throws and every sync, history import and the
