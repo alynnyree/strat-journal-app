@@ -254,29 +254,69 @@ via the `TASKS.md` commit log.
     yet the tiles read "before fees" rather than implying a comparison
     that does not exist.
 
-32. **Underlying stock price: use Alpaca instead of reconstructing it**
-    (2026-08-29, his question). **Status: NOT STARTED. Alpaca itself is
-    still not built — approved 2026-08-28, zero lines of code exist.**
+32. **Underlying stock price: Alpaca instead of reconstructing it**
+    (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app PR #51,
+    strat-journal-backend PR #33) — 22 + 19 checks. NOT yet run against
+    the live Alpaca service, and needs ALPACA_KEY_ID and ALPACA_SECRET_KEY
+    on Render before it does anything at all.**
 
-    The underlying price is the one imported figure that is NOT a record.
-    Schwab's trade record says what he paid for the option but never
-    where SPY was at that instant, so `getUnderlyingPriceAt` looks it up
-    afterwards and takes the CLOSE OF THE LAST CANDLE BEFORE the fill,
-    cascading 1m to 5m to 30m to daily as older data runs out. On a
-    recent trade that is the close of the preceding minute; on an old one
-    it can be a 30-minute close or the previous day's. Realized R:R is
-    computed from it, so that figure inherits the error.
+    The underlying price was the one imported figure that was never a
+    record. Schwab says what was paid for the option, never where SPY was
+    at that instant, so it was reconstructed as the close of the last
+    candle before the fill, cascading 1m to 5m to 30m to daily. Realized
+    R:R is computed from it and inherited the error.
 
-    His question was whether Alpaca fixes this. It largely does, for two
-    separate reasons: minute bars going back 7+ years remove the 30-35
-    day cliff entirely, and Alpaca's historical trade data would give the
-    actual market price at the fill second rather than a candle close.
-    Both are on the free tier. The limit is the precision of Schwab's own
-    timestamp — worth checking against a real record before promising
+    Alpaca's free tier fixes both halves: minute data going back years
+    rather than Schwab's ~35 days (the bigger win — it is why OLDER
+    trades were worst), and the individual exchange prints, so the price
+    at the actual second of the fill can be read rather than inferred.
+
+    Alpaca is tried first and Schwab is unchanged beneath it, so a
+    missing key or a refusal costs accuracy and never correctness.
+    Nothing is asked for inside the 15 minutes the free plan holds back.
+    Every price now records how it was obtained and whether it is exact,
+    and the trade card says "exact" or "approx." accordingly — half-exact
+    is not called exact.
+
+    **Still open:** Schwab's own timestamp precision. If Schwab reports
+    fills only to the minute, the minute is the ceiling however good
+    Alpaca is. Worth checking against a real record before promising
     second-level accuracy.
 
-    Until then, marking which underlying prices are approximate was
-    offered and not yet taken up.
+33. **The 6 August SPY trade is confirmed NOT a real trade** (2026-08-29).
+    He asked for this to be checked against the conversation rather than
+    assumed. Three independent pieces of evidence:
+    - His Schwab export covers 2 January to **25 August** and contains
+      **zero** option trades in August. The last real option trade
+      anywhere in it is 23 July. There is no SPY 770 contract in his
+      entire year.
+    - This project's conversation began **17 August** — after 6 August —
+      so the trade was not created during any work here.
+    - It is tagged "FTFC Continuation", one of the three placeholder
+      setups task 10 recorded as WRONG and replaced on 21 August, and
+      carries a $0.00 stop and an R:R plan of 0.0.
+
+    It predates this project, from the earlier work on the app. It is
+    also the ONLY trade in his journal carrying a setup at all, so the
+    entire "Setup Performance" panel is currently that one fake trade.
+    Safe to delete; it should carry the "Added by hand" mark from task 29.
+
+34. **A blocked Schwab request reached the screen as raw web code**
+    (2026-08-29). Fixed in PR #51. The import failed and put
+    "<HTML><HEAD><TITLE>Access Denied" and a server path in front of him
+    — the second time raw server text has reached his screen. Schwab's
+    gatekeeper refuses requests after too many in a short window, which a
+    full year-long re-import can trigger. Now reads as what happened,
+    that nothing is lost, and to wait fifteen minutes. Rate limits,
+    dropped connections and any other page of markup are covered the same
+    way, with a final guard: anything still containing tags, escaped
+    entities, braces or a web address is replaced wholesale rather than
+    trimmed and shown.
+
+    Also fixed: the "Fees paid" line was pulled up four pixels to sit
+    closer to the figures and ended up ON TOP of the two lower tiles,
+    cutting itself off. It has its own strip now, and the test measures
+    the gap rather than trusting the eye.
 
 30. **A month menu instead of one endless list; the numbers button
     removed** (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app
