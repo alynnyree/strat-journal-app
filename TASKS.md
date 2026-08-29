@@ -1722,7 +1722,32 @@ project "complete":**
 20. **Let the Test Classification tool do the REAL 13-timeframe FTFC
     lookup instead of reading FTFC visually** (added 2026-08-23, from
     the owner's question about how FTFC should be determined).
-    **Status: Offered, awaiting the owner's go-ahead — not built.**
+    **Status: BUILT AND TESTED 2026-08-29 (strat-journal-app PR #54,
+    strat-journal-backend PR #36) — 23 checks. Not yet confirmed on his
+    phone.** He answered it on 2026-08-29: "Every part about
+    classification should use both the real market data from Alpaca +
+    reading it off the picture."
+
+    Real trades already used both — the classifier gets the 13-timeframe
+    alignment from real candles, the underlying prices and the trade's
+    own screenshot, with the prompt telling it to weigh the picture
+    "together with the candle data, not in place of it." The test tool
+    was the half that did not.
+
+    The ticker and date/time boxes he paused are now back, but OPTIONAL —
+    which honours both the earlier pause and the instruction. Filled in,
+    the alignment is measured from real candles and handed to the model
+    as fact; blank, it reads visually exactly as before. The answer says
+    which parts were measured and which were read, and a failed lookup
+    gives a plain reason rather than a silent fallback.
+
+    **Two bugs caught before merge, both of which would have been
+    invisible:** the alignment field is `runLength`, not `run`, so the
+    measured data would never have reached the model with nothing saying
+    so; and the app discarded everything but the classification from the
+    answer, throwing the measured data away on arrival.
+
+    ORIGINAL NOTE BELOW:
 
     Worth recording clearly because it was asked directly: **for real
     trades, FTFC is already determined exactly the way the owner
