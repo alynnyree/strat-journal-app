@@ -720,20 +720,6 @@
       <h3>Data</h3>
       <button class="secondary" onclick="findDuplicateTrades()">Check for Duplicate Trades</button>
       <div id="dupeOut" style="font-size:12.5px; color:var(--text-dim); margin-top:8px; line-height:1.5;"></div>
-      <!-- The answer to "how do we know the numbers are right": check them
-           against the broker's own record, trade by trade. -->
-      <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line);">
-        <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
-          <b style="color:var(--text);">Check against Schwab.</b> Download your
-          transactions from Schwab as a spreadsheet, then pick the file here.
-          Every trade is compared — contract, dates, both prices, size and
-          profit — and anything that does not match is listed. Nothing is
-          changed and nothing is sent anywhere.
-        </div>
-        <input type="file" id="schwabCsvFile" accept=".csv,text/csv" style="font-size:12px; color:var(--text-dim);">
-        <button class="secondary" onclick="checkAgainstSchwab()">Check My Numbers</button>
-        <div id="verifyOut" style="font-size:12.5px; color:var(--text-dim); margin-top:8px; line-height:1.6;"></div>
-      </div>
       <button class="secondary" onclick="exportData()">Export All Trades (JSON)</button>
       <button class="secondary" onclick="exportCsvSheet()">Export Journal (CSV)</button>
       <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="wipeData()">Erase All Trades</button>
@@ -742,6 +728,11 @@
 
     <div class="card">
       <h3>All Trades</h3>
+      <!-- One month at a time. 299 trades on one page means scrolling
+           past four months of history to reach last week. -->
+      <label for="journalMonth" style="font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim);">Month</label>
+      <select id="journalMonth" onchange="setJournalMonth(this.value)"></select>
+      <div id="journalMonthSummary" style="font-size:12px; color:var(--text-dim); margin:8px 0 4px; line-height:1.6;"></div>
       <div id="journalOrder" style="font-size:11.5px; color:var(--text-dim); margin-bottom:10px;"></div>
       <div id="journalList"></div>
       <div class="empty" id="journalEmpty" style="display:none;">No trades yet.</div>
@@ -2745,10 +2736,75 @@ function tradesNewestFirst(){
   return loadTrades().slice().sort((a,b)=>tradeMoment(b)-tradeMoment(a));
 }
 
+// Which month the Journal is showing. Kept in memory rather than saved,
+// so opening the app always lands on the most recent month with trades
+// in it; a saved choice goes stale the moment a new month starts.
+let journalMonth = null;
+
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+
+// The month a trade belongs to is the month it CLOSED in, matching the
+// order the list is in.
+function tradeMonthKey(t){
+  const d = t.exitDate || t.entryDate || '';
+  return /^\d{4}-\d{2}/.test(d) ? d.slice(0,7) : '';
+}
+function monthLabel(key){
+  const [y,m] = key.split('-');
+  return `${MONTH_NAMES[parseInt(m,10)-1] || m} ${y}`;
+}
+
+function setJournalMonth(value){
+  journalMonth = value;
+  renderJournal();
+  // Back to the top of the list, or changing month leaves him halfway
+  // down a month he is no longer looking at.
+  const card = document.getElementById('journalMonth');
+  if(card && card.scrollIntoView) card.scrollIntoView({ block:'start' });
+}
+
 function renderJournal(){
-  const trades = tradesNewestFirst();
+  const all = tradesNewestFirst();
   const list = document.getElementById('journalList');
-  document.getElementById('journalEmpty').style.display = trades.length ? 'none':'block';
+  const picker = document.getElementById('journalMonth');
+
+  // Months that actually have trades, newest first, each with its count.
+  const counts = new Map();
+  for(const t of all){
+    const k = tradeMonthKey(t);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const months = [...counts.keys()].filter(Boolean).sort().reverse();
+
+  // Default to the newest month. Also used when the chosen month no
+  // longer exists — after deleting the last trade in it, say.
+  if(journalMonth !== 'ALL' && !counts.has(journalMonth)) journalMonth = months[0] || 'ALL';
+
+  if(picker){
+    picker.innerHTML = months.map(k =>
+      `<option value="${k}"${k===journalMonth?' selected':''}>${escapeHtml(monthLabel(k))} (${counts.get(k)})</option>`
+    ).join('') + `<option value="ALL"${journalMonth==='ALL'?' selected':''}>All months (${all.length})</option>`;
+  }
+
+  const trades = journalMonth === 'ALL' ? all : all.filter(t=>tradeMonthKey(t) === journalMonth);
+  document.getElementById('journalEmpty').style.display = all.length ? 'none':'block';
+
+  // How the month went, without having to add it up by eye.
+  const sum = document.getElementById('journalMonthSummary');
+  if(sum){
+    const closed = trades.filter(t=>t.pnlDollar != null);
+    if(!closed.length){ sum.textContent = ''; }
+    else {
+      const pnl = closed.reduce((a,t)=>a+t.pnlDollar, 0);
+      const wins = closed.filter(t=>t.pnlDollar >= 0).length;
+      const rate = Math.round(wins / closed.length * 100);
+      const colour = pnl >= 0 ? 'var(--bull)' : 'var(--bear)';
+      sum.innerHTML = `<span style="color:${colour}; font-weight:600;">${fmtMoney(pnl)}</span>`
+        + ` · ${closed.length} trade${closed.length===1?'':'s'} · ${wins} won, ${closed.length-wins} lost · ${rate}% win rate`;
+    }
+  }
+
   // States the order and the span on screen, so it can be checked at a
   // glance instead of taken on trust — and so a trade dated outside his
   // real trading is obvious rather than something to scroll for.
@@ -4250,231 +4306,6 @@ function removeDuplicateTrades(){
   document.getElementById('dupeOut').innerHTML =
     `<span style="color:var(--bull);">Removed ${dropped} extra cop${dropped===1?'y':'ies'}. You now have ${kept.length} trades.</span>`;
   showStatus('ok', `${dropped} duplicate trade(s) removed.`);
-}
-
-// Reads Schwab's own transaction export and rebuilds the completed trades
-// from it, then compares them against what the journal holds. This is the
-// only way to answer "are my numbers right" with evidence rather than
-// assurance: the broker's record is the truth, and anything the journal
-// says that disagrees with it is a fault worth knowing about.
-//
-// Deliberately read-only. It changes nothing and uploads nothing — the
-// file is read inside the phone and never leaves it.
-
-// A comma-separated line, respecting quotes around values that contain
-// commas (Schwab's descriptions do).
-function splitCsvLine(line){
-  const out = []; let cur = ''; let inQuotes = false;
-  for(let i = 0; i < line.length; i++){
-    const c = line[i];
-    if(c === '"'){
-      if(inQuotes && line[i+1] === '"'){ cur += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if(c === ',' && !inQuotes){ out.push(cur); cur = ''; }
-    else cur += c;
-  }
-  out.push(cur);
-  return out.map(v=>v.trim());
-}
-
-function csvMoney(v){
-  const t = String(v||'').replace(/[$,]/g,'').trim();
-  if(!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-}
-
-// "07/23/2026" -> "2026-07-23"
-function csvDate(v){
-  const m = String(v||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  return m ? `${m[3]}-${m[1]}-${m[2]}` : null;
-}
-
-// Schwab's option symbol: "NIO 08/21/2026 5.00 P"
-function csvSymbolParts(sym){
-  const m = String(sym||'').trim().match(/^([A-Z.]+)\s+(\d{2})\/(\d{2})\/(\d{4})\s+([\d.]+)\s+([CP])$/);
-  if(!m) return null;
-  return { root:m[1], expiry:`${m[4]}-${m[2]}-${m[3]}`, strike:parseFloat(m[5]), cp:m[6] };
-}
-
-// Pairs buys with sells the way a broker does: oldest lot closed first.
-// A sell bigger than the oldest lot is split across lots, so a 3-contract
-// exit against a 2 and a 1 becomes two trades, exactly as the journal
-// records them.
-function tradesFromSchwabCsv(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
-  if(!lines.length) return { error:'That file is empty.' };
-  const header = splitCsvLine(lines[0]).map(h=>h.replace(/^"|"$/g,''));
-  const need = ['Date','Action','Symbol','Quantity','Price'];
-  const missing = need.filter(h=>!header.includes(h));
-  if(missing.length) return { error:`That does not look like a Schwab transactions export — it has no ${missing.join(', ')} column.` };
-  const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
-
-  const fills = [];
-  for(let i = 1; i < lines.length; i++){
-    const c = splitCsvLine(lines[i]).map(v=>v.replace(/^"|"$/g,''));
-    const action = c[idx['Action']];
-    if(action !== 'Buy to Open' && action !== 'Sell to Close') continue;
-    const date = csvDate(c[idx['Date']]);
-    const qty = parseInt(c[idx['Quantity']], 10);
-    const price = csvMoney(c[idx['Price']]);
-    if(!date || !Number.isFinite(qty) || price == null) continue;
-    fills.push({ date, action, symbol:c[idx['Symbol']], qty, price });
-  }
-  if(!fills.length) return { error:'No option buys or sells found in that file. Make sure you exported your transactions, not positions or balances.' };
-
-  // Schwab exports newest first; work oldest first so first-in-first-out
-  // means what it says, with buys ahead of sells on the same day.
-  //
-  // This has to answer "are these two the same?" with 0, not with -1. An
-  // earlier version returned -1 for any two fills sharing a date, which
-  // is not a consistent answer — compare(a,b) and compare(b,a) both said
-  // "a first" — and the sort then paired same-day fills arbitrarily,
-  // splitting six trades differently from the same file each run.
-  const rank = f => (f.action === 'Buy to Open' ? 0 : 1);
-  fills.sort((a,b)=>{
-    if(a.date !== b.date) return a.date < b.date ? -1 : 1;
-    return rank(a) - rank(b);
-  });
-
-  const lots = {}; const trades = []; let orphanCloses = 0;
-  for(const f of fills){
-    if(f.action === 'Buy to Open'){
-      (lots[f.symbol] = lots[f.symbol] || []).push({ date:f.date, qty:f.qty, price:f.price });
-      continue;
-    }
-    let need = f.qty; const open = lots[f.symbol] || [];
-    while(need > 0 && open.length){
-      const lot = open[0];
-      const take = Math.min(need, lot.qty);
-      trades.push({
-        symbol:f.symbol, entryDate:lot.date, exitDate:f.date, contracts:take,
-        entryPrice:lot.price, exitPrice:f.price,
-        pnl: (f.price - lot.price) * 100 * take,
-      });
-      lot.qty -= take; need -= take;
-      if(lot.qty === 0) open.shift();
-    }
-    if(need > 0) orphanCloses++;
-  }
-  let stillOpen = 0;
-  for(const k of Object.keys(lots)) for(const l of lots[k]) if(l.qty > 0) stillOpen++;
-  return { trades, orphanCloses, stillOpen, fills: fills.length };
-}
-
-// The journal stores the contract in the broker's coded form
-// ("NIO   260821P00005000"); the spreadsheet spells it out. Compare on
-// what they agree about: which underlying, which expiry, which strike,
-// call or put.
-function contractKeyFromOcc(occ){
-  const m = String(occ||'').trim().match(/^([A-Z.]+)\s*(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
-  if(!m) return null;
-  return `${m[1]}|20${m[2]}-${m[3]}-${m[4]}|${(parseInt(m[6],10)/1000).toFixed(2)}|${m[5]}`;
-}
-function contractKeyFromCsv(sym){
-  const p = csvSymbolParts(sym);
-  return p ? `${p.root}|${p.expiry}|${p.strike.toFixed(2)}|${p.cp}` : null;
-}
-
-// Identity for matching the two sides: the contract, the day in, the day
-// out and the size. Prices are deliberately NOT part of this — a price
-// that disagrees is the very thing being looked for, so matching on it
-// would hide exactly the fault this is meant to find.
-function verifyKey(contractKey, entryDate, exitDate, contracts){
-  return [contractKey, entryDate, exitDate, contracts].join('|');
-}
-
-const CENT = 0.005; // half a cent — anything closer is rounding, not a difference
-
-async function checkAgainstSchwab(){
-  const out = document.getElementById('verifyOut');
-  const input = document.getElementById('schwabCsvFile');
-  const file = input && input.files && input.files[0];
-  if(!file){ out.innerHTML = '<span style="color:var(--amber);">Pick your Schwab file first, then tap this again.</span>'; return; }
-  out.textContent = 'Reading…';
-  let text;
-  try{ text = await file.text(); }
-  catch(e){ out.innerHTML = '<span style="color:var(--bear);">That file could not be read.</span>'; return; }
-
-  const parsed = tradesFromSchwabCsv(text);
-  if(parsed.error){ out.innerHTML = `<span style="color:var(--bear);">${escapeHtml(parsed.error)}</span>`; return; }
-
-  const journal = loadTrades();
-  const brokerByKey = new Map();
-  for(const b of parsed.trades){
-    const k = verifyKey(contractKeyFromCsv(b.symbol), b.entryDate, b.exitDate, b.contracts);
-    if(!brokerByKey.has(k)) brokerByKey.set(k, []);
-    brokerByKey.get(k).push(b);
-  }
-  const journalByKey = new Map();
-  for(const t of journal){
-    if(t.optExit == null) continue; // still open — nothing to compare against
-    const k = verifyKey(contractKeyFromOcc(t.occ), t.entryDate, t.exitDate, t.contracts);
-    if(!journalByKey.has(k)) journalByKey.set(k, []);
-    journalByKey.get(k).push(t);
-  }
-
-  const priceGaps = []; const pnlGaps = [];
-  let checked = 0, exact = 0;
-  const missingFromJournal = []; const notInBroker = [];
-
-  for(const [k, brokerList] of brokerByKey){
-    const jList = (journalByKey.get(k) || []).slice();
-    for(const b of brokerList){
-      const j = jList.shift();
-      if(!j){ missingFromJournal.push(b); continue; }
-      checked++;
-      const eGap = Math.abs((j.optEntry ?? 0) - b.entryPrice);
-      const xGap = Math.abs((j.optExit ?? 0) - b.exitPrice);
-      const pGap = Math.abs((j.pnlDollar ?? 0) - b.pnl);
-      if(eGap > CENT || xGap > CENT) priceGaps.push({ b, j, eGap, xGap });
-      else if(pGap > 0.005) pnlGaps.push({ b, j, pGap });
-      else exact++;
-    }
-  }
-  for(const [k, jList] of journalByKey){
-    const brokerCount = (brokerByKey.get(k) || []).length;
-    for(let i = brokerCount; i < jList.length; i++) notInBroker.push(jList[i]);
-  }
-
-  const brokerPnl = parsed.trades.reduce((a,b)=>a+b.pnl, 0);
-  const journalPnl = journal.reduce((a,t)=>a+(t.pnlDollar||0), 0);
-  const ok = c => `<span style="color:var(--bull);">${c}</span>`;
-  const bad = c => `<span style="color:var(--bear);">${c}</span>`;
-  const line = (label, value) => `<div style="display:flex; justify-content:space-between; gap:12px; margin-top:3px;"><span>${label}</span><span>${value}</span></div>`;
-
-  const priceRows = priceGaps.slice(0,5).map(g=>
-    `<div style="margin-top:5px;">· ${escapeHtml(g.b.symbol)} ${g.b.entryDate}<br>&nbsp;&nbsp;Schwab $${g.b.entryPrice.toFixed(2)} → $${g.b.exitPrice.toFixed(2)}<br>&nbsp;&nbsp;journal $${Number(g.j.optEntry).toFixed(2)} → $${Number(g.j.optExit).toFixed(2)}</div>`).join('');
-  const missRows = missingFromJournal.slice(0,5).map(b=>
-    `<div style="margin-top:4px;">· ${escapeHtml(b.symbol)} ${b.entryDate} → ${b.exitDate}, ${b.contracts} at $${b.entryPrice.toFixed(2)} → $${b.exitPrice.toFixed(2)}</div>`).join('');
-  const extraRows = notInBroker.slice(0,5).map(t=>
-    `<div style="margin-top:4px;">· ${escapeHtml(contractLabel(t))} ${t.entryDate} ${t.entryTime||''}</div>`).join('');
-
-  out.innerHTML = `
-    <div style="color:var(--gold); margin-bottom:6px;">Checked your journal against Schwab's own record.</div>
-    ${line('Completed trades in the Schwab file', `<b>${parsed.trades.length}</b>`)}
-    ${line('Completed trades in your journal', `<b>${journal.filter(t=>t.optExit!=null).length}</b>`)}
-    ${line('Matched and identical to the penny', exact === checked && checked > 0 ? ok(`<b>${exact}</b>`) : `<b>${exact}</b> of ${checked}`)}
-    ${priceGaps.length ? line('Prices that disagree', bad(`<b>${priceGaps.length}</b>`)) : ''}
-    ${pnlGaps.length ? line('Profit figures that disagree', bad(`<b>${pnlGaps.length}</b>`)) : ''}
-    ${missingFromJournal.length ? line('In Schwab but missing from your journal', bad(`<b>${missingFromJournal.length}</b>`)) : ''}
-    ${notInBroker.length ? line('In your journal but not in this file', `<b>${notInBroker.length}</b>`) : ''}
-    ${parsed.stillOpen ? line('Still open at the end of the file', `${parsed.stillOpen}`) : ''}
-    ${parsed.orphanCloses ? line('Sold with no matching buy in this file', `${parsed.orphanCloses}`) : ''}
-    <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--line);">
-      ${line('Profit by Schwab\'s prices', `<b>${fmtMoney(brokerPnl)}</b>`)}
-      ${line('Profit in your journal', `<b>${fmtMoney(journalPnl)}</b>`)}
-      ${line('Difference', Math.abs(brokerPnl-journalPnl) < 0.01 ? ok('<b>none</b>') : bad(`<b>${fmtMoney(journalPnl-brokerPnl)}</b>`))}
-    </div>
-    ${priceGaps.length ? `<div style="margin-top:10px; color:var(--bear);">Prices that do not match:</div>${priceRows}${priceGaps.length>5?`<div>…and ${priceGaps.length-5} more.</div>`:''}` : ''}
-    ${missingFromJournal.length ? `<div style="margin-top:10px; color:var(--bear);">In Schwab but not in your journal:</div>${missRows}${missingFromJournal.length>5?`<div>…and ${missingFromJournal.length-5} more.</div>`:''}` : ''}
-    ${notInBroker.length ? `<div style="margin-top:10px;">In your journal but not in this file — normal if the file covers a shorter period:</div>${extraRows}${notInBroker.length>5?`<div>…and ${notInBroker.length-5} more.</div>`:''}` : ''}
-    <div style="margin-top:10px; font-size:11.5px;">
-      Note: these figures are before Schwab's fees. Your journal does not
-      count fees, so both sides here are compared on the same basis.
-      Underlying stock prices are not in this file and cannot be checked
-      against it.
-    </div>`;
 }
 
 function wipeData(){
