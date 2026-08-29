@@ -243,6 +243,17 @@ via the `TASKS.md` commit log.
     and the year totals to the $404.73 his statement gives. A split fill
     divides the opening fee without losing or doubling it.
 
+    **Follow-up, same day (PR #50):** he asked to see both figures rather
+    than choose between them. The trade card already showed both; the
+    Dashboard and month summaries showed only the after-fees one. Every
+    headline figure now carries its opposite directly beneath it,
+    including win rate — which genuinely differs, since a trade that
+    gained $1.00 and cost $1.63 in fees is a win on price and a loss in
+    the account. Deliberately not a toggle: a setting he has to remember
+    he changed is worse than two numbers on screen. With no fees imported
+    yet the tiles read "before fees" rather than implying a comparison
+    that does not exist.
+
 32. **Underlying stock price: use Alpaca instead of reconstructing it**
     (2026-08-29, his question). **Status: NOT STARTED. Alpaca itself is
     still not built — approved 2026-08-28, zero lines of code exist.**
