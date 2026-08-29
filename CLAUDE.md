@@ -113,6 +113,22 @@ Uses **The Strat**. Key concepts the code implements:
   The authoritative copy of this list, with each pattern's full definition,
   lives in `aiClient.js`'s `STRATEGIES` array and must stay in sync with
   `index.html`'s Strat Setup cards (`data-v` values).
+- **THREE PLAYS, alongside the nine combos — not instead of them**
+  (confirmed 2026-08-29, in his own words: "These strategies are in
+  conjunction with the 9 strat combos. Nothing should be disregarded").
+  The combo is WHAT he saw; the play is HOW he chose the trade. A trade
+  carries both, and each is classified separately.
+  1. **Broadening Formation Scalp** — broadening formation on a higher
+     timeframe, scalped on the 1m/5m from one edge to the other side.
+  2. **FTFC Direction Play** — a Strat setup in the direction the
+     timeframes already agree on. First target is completion of the
+     setup, second is a gap or major pivot; once a pivot or its liquidity
+     is taken out, looking to reverse.
+  3. **2s Turning Into 3s** — a directional bar expanding into an outside
+     bar.
+  All three target reward at least 2x risk. The authoritative copy lives
+  in `aiClient.js`'s `PLAYS` array and must stay in sync with the app's
+  own picker (`data-v` on `.play-opt`).
 - **FTFC and Broadening Formation are context, not setups of their own.**
   Any of the 9 combos above can be taken with FTFC aligned and/or off a
   Broadening Formation — that's still that combo, just with context worth
