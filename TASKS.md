@@ -209,6 +209,41 @@ via the `TASKS.md` commit log.
     **Still to do on his phone:** tap "Check My Numbers" with the Schwab
     export and report what it says.
 
+29. **Order by when a trade CLOSED; mark trades Schwab did not send**
+    (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app PR #47) —
+    10 checks. Not yet confirmed on his phone.**
+
+    He reported the order still wrong after task 28, and was right again.
+    Task 28 sorted by when a trade was OPENED. His NIO position was
+    opened 24 June and closed 23 July, and he has closed nothing since —
+    so it is his most recent trade, yet it sat below every trade opened
+    in July. Now ordered by when the trade finished, falling back to the
+    entry for anything still open. For a day trade the two dates are the
+    same, which is precisely why this survived the first round of
+    testing; only a position held across days exposes it.
+
+    Also in his screenshot: a SPY trade dated 2026-08-06 sitting above
+    everything, after his Schwab export ends and after the date he
+    confirmed he last traded, carrying a $0.00 stop, an R:R plan of 0.0,
+    round numbers, and a setup labelled "FTFC Continuation" — one of the
+    three placeholder setups task 10 recorded as WRONG and replaced. It
+    reads as a sample entry from early in the project. Rather than assert
+    that from a picture, any trade not sent by Schwab now carries an
+    "Added by hand" mark so he can tell them apart himself.
+
+    A line above the list now states the order and the span it covers
+    ("299 trades, newest first · 2026-08-06 back to 2025-10-03"), so the
+    order is checkable rather than something to trust, and a date outside
+    his real trading is obvious without scrolling.
+
+    Confirmed while doing this: Edit, Delete and Replay all address a
+    trade by its own reference rather than its position in the list, so
+    sorting cannot point an action at the wrong trade.
+
+    **Still to do on his phone:** confirm NIO now leads, and check whether
+    the 2026-08-06 trade is marked as added by hand — if so it is sample
+    data and can be deleted.
+
 24. **One button to import, trades always present on open, and the fix
     for a Journal that displayed as a blank page** (2026-08-27).
     **Status: BUILT AND TESTED (strat-journal-app PRs #38, #39) — 22 + 12

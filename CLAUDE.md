@@ -246,6 +246,13 @@ Uses **The Strat**. Key concepts the code implements:
   watched for errors on the page. **Always check the page for thrown
   errors in browser tests**, and re-verify that a multi-part edit
   actually landed rather than assuming it did.
+- **"Most recent" means most recently FINISHED, not most recently
+  started.** Having given the Journal a sort, it sorted by entry — so a
+  NIO position opened 24 June and closed 23 July sat below every trade
+  opened in July, even though nothing had been closed since. He reported
+  the order as wrong a second time and was right a second time. For a day
+  trade the two are identical, which is exactly why it survives testing;
+  the multi-day hold is the case that exposes it.
 - **A list with no sort is not "in order", it is in write order.** The
   Journal drew trades in whatever order they sat in storage. Imports add
   at the front, so the January-to-April backfill — fetched last — landed
