@@ -546,6 +546,11 @@
     </div>
 
     <div class="card" style="margin-top:14px;">
+      <h3>Play Performance</h3>
+      <div id="playBreakdown"><div class="empty">Once your trades carry a play, this shows which of the three actually pays.</div></div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
       <h3>Does Alignment Pay?</h3>
       <div id="alignmentVerdict"></div>
     </div>
@@ -829,43 +834,68 @@
 
     <div class="card">
       <h3>Strat Setup</h3>
-      <div class="strat-opt" data-v="2-1-2 Continuation" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="2-1-2 Continuation" onclick="selectStrat(this)">
         <div class="t">2-1-2 Continuation</div>
         <div class="d">Inside bar (1) after consolidation, then two directional bars (2) breaking the same side — a directional decision continuing that way.</div>
       </div>
-      <div class="strat-opt" data-v="2-1-2 Reversal" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="2-1-2 Reversal" onclick="selectStrat(this)">
         <div class="t">2-1-2 Reversal</div>
         <div class="d">Inside bar (1) after consolidation, then a directional bar (2) breaks one side, followed by a directional bar (2) breaking the opposite side.</div>
       </div>
-      <div class="strat-opt" data-v="3-1-2 Reversal" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="3-1-2 Reversal" onclick="selectStrat(this)">
         <div class="t">3-1-2 Reversal</div>
         <div class="d">Played the same as a 2-1-2, but starting from an outside bar (3) instead of a directional bar.</div>
       </div>
-      <div class="strat-opt" data-v="2-2 Continuation" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="2-2 Continuation" onclick="selectStrat(this)">
         <div class="t">2-2 Continuation</div>
         <div class="d">Two directional bars (2) back to back in the same direction, no inside bar between them.</div>
       </div>
-      <div class="strat-opt" data-v="2-2 Reversal" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="2-2 Reversal" onclick="selectStrat(this)">
         <div class="t">2-2 Reversal</div>
         <div class="d">A directional bar (2) in one direction, immediately followed by a directional bar (2) in the opposite direction.</div>
       </div>
-      <div class="strat-opt" data-v="3-2-2 Reversal" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="3-2-2 Reversal" onclick="selectStrat(this)">
         <div class="t">3-2-2 Reversal</div>
         <div class="d">Played the same as a 2-2 Reversal, but preceded by an outside bar (3). Stop at 50% of the trigger candle.</div>
       </div>
-      <div class="strat-opt" data-v="1-2-2 Rev Strat" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="1-2-2 Rev Strat" onclick="selectStrat(this)">
         <div class="t">1-2-2 Rev Strat</div>
         <div class="d">Played the same as a 2-2 Reversal, but starting from an inside bar (1) — has an extra target. Stop at 50% of the trigger candle.</div>
       </div>
-      <div class="strat-opt" data-v="1 Bar Rev Strat" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="1 Bar Rev Strat" onclick="selectStrat(this)">
         <div class="t">1 Bar Rev Strat</div>
         <div class="d">One candle retraces to the 50% level of the previous candle's range, then reverses to take out the opposite side (the "50% Rule").</div>
       </div>
-      <div class="strat-opt" data-v="PMG" onclick="selectStrat(this)">
+      <div class="strat-opt combo-opt" data-v="PMG" onclick="selectStrat(this)">
         <div class="t">PMG (Pivot Machine Gun)</div>
         <div class="d">A reversal after 5 or more consecutive lower highs or higher lows.</div>
       </div>
       <input type="hidden" id="f_strat">
+    </div>
+
+    <!-- The three PLAYS: how the trade was chosen, as distinct from the
+         combo above, which is what was seen. A trade has both. His words:
+         "These strategies are in conjunction with the 9 strat combos.
+         Nothing should be disregarded." -->
+    <div class="card">
+      <h3>The Play</h3>
+      <div style="font-size:12px; color:var(--text-dim); line-height:1.5; margin-bottom:10px;">
+        How you chose this trade — separate from the combo above, which is
+        what you saw. All three aim for at least twice the risk in reward.
+      </div>
+      <div class="strat-opt play-opt" data-v="Broadening Formation Scalp" onclick="selectPlay(this)">
+        <div class="t">Broadening Formation Scalp</div>
+        <div class="d">Broadening formation on a higher timeframe. Drop to 1 or 5 minute to scalp, entering one edge and targeting the other side of the formation.</div>
+      </div>
+      <div class="strat-opt play-opt" data-v="FTFC Direction Play" onclick="selectPlay(this)">
+        <div class="t">FTFC Direction Play</div>
+        <div class="d">Strat setup taken in the direction the timeframes already agree on. First target is completion of the setup, second is a gap or major pivot. Once a pivot or its liquidity is taken out, looking to reverse.</div>
+      </div>
+      <div class="strat-opt play-opt" data-v="2s Turning Into 3s" onclick="selectPlay(this)">
+        <div class="t">2s Turning Into 3s</div>
+        <div class="d">A directional bar (2) expanding into an outside bar (3) — one side taken out, then the other.</div>
+      </div>
+      <input type="hidden" id="f_play">
     </div>
 
     <div class="card">
@@ -1296,6 +1326,7 @@ async function computeStopFromRule(){
         ticker, entryTimestamp,
         dir: document.getElementById('f_dir').value,
         strat: selectedStrat || null,
+        play: selectedPlay || null,
         timeframe: document.getElementById('f_stopTimeframe').value || null,
       })
     });
@@ -1567,8 +1598,23 @@ function updateFtfcResult(){
 }
 buildTfGrid();
 
+let selectedPlay = null;
+function selectPlay(el){
+  // Tapping the chosen one again clears it — a play he is unsure of
+  // should be leavable blank rather than forced.
+  const already = el.classList.contains('sel');
+  document.querySelectorAll('.play-opt').forEach(o=>o.classList.remove('sel'));
+  selectedPlay = already ? null : el.dataset.v;
+  if(!already) el.classList.add('sel');
+  document.getElementById('f_play').value = selectedPlay || '';
+}
+
 function selectStrat(el){
-  document.querySelectorAll('.strat-opt:not(.broadening-opt)').forEach(o=>o.classList.remove('sel'));
+  // Only the nine combos. This class is also used for styling on three
+  // unrelated on/off toggles -- the stop rule and the two opening-screen
+  // settings -- so a broader sweep visually switched those off every time
+  // a setup was chosen.
+  document.querySelectorAll('.combo-opt').forEach(o=>o.classList.remove('sel'));
   el.classList.add('sel');
   selectedStrat = el.dataset.v;
   document.getElementById('f_strat').value = selectedStrat;
@@ -2429,9 +2475,17 @@ function editTrade(id){
   document.getElementById('f_rr').value = trade.rrPlanned ?? '';
   document.getElementById('f_notes').value = trade.notes || '';
 
+  // The play is restored too, and from its OWN list — the combo options
+  // share a class with it, so a single sweep would leave the play blank
+  // every time he opened a trade to edit it.
+  selectedPlay = trade.play || null;
+  document.getElementById('f_play').value = selectedPlay || '';
+  document.querySelectorAll('.play-opt').forEach(o=>{
+    o.classList.toggle('sel', o.dataset.v === selectedPlay);
+  });
   selectedStrat = trade.strat || null;
   document.getElementById('f_strat').value = selectedStrat || '';
-  document.querySelectorAll('.strat-opt:not(.broadening-opt)').forEach(o=>{
+  document.querySelectorAll('.combo-opt').forEach(o=>{
     o.classList.toggle('sel', o.dataset.v === selectedStrat);
   });
 
@@ -2507,7 +2561,7 @@ function saveTrade(){
 
   const trade = {
     id: editingTradeId || Date.now(),
-    ticker, dir, strat: selectedStrat,
+    ticker, dir, strat: selectedStrat, play: selectedPlay || null,
     offBroadeningFormation: document.getElementById('f_broadening').value === 'true',
     entryDate: document.getElementById('f_entryDate').value,
     entryTime: document.getElementById('f_entryTime').value,
@@ -2538,8 +2592,12 @@ function saveTrade(){
   saveTrades(trades);
 
   ['f_ticker','f_occ','f_optEntry','f_optExit','f_undEntry','f_undExit','f_stop','f_rr','f_notes','f_entryDate','f_entryTime','f_exitDate','f_exitTime'].forEach(id=>document.getElementById(id).value='');
-  document.querySelectorAll('.strat-opt').forEach(o=>o.classList.remove('sel'));
+  // Both pickers, and only those two -- not the on/off toggles elsewhere
+  // that borrow the same styling class.
+  document.querySelectorAll('.combo-opt, .play-opt').forEach(o=>o.classList.remove('sel'));
   selectedStrat = null;
+  selectedPlay = null;
+  document.getElementById('f_play').value = '';
   document.getElementById('f_broadening').value = 'false';
   document.getElementById('broadeningToggleLabel').textContent = 'Off Broadening Formation: No';
   currentTf = {};
@@ -2778,6 +2836,44 @@ function renderDashboard(){
         ${worthSplitting ? sub('✅ timeframes agreed', s.aligned) + sub('✕ timeframes did not', s.against) : ''}
       </div>`;
     }).join('');
+  }
+
+  // The same breakdown again, but by PLAY rather than combo. He takes
+  // three plays and nine combos, and they answer different questions:
+  // which pattern do I read well, versus which way of choosing a trade
+  // actually pays.
+  const byPlay = {};
+  trades.forEach(t=>{
+    const key = t.play || 'No play recorded';
+    byPlay[key] = byPlay[key] || { all: blank(), aligned: blank(), against: blank() };
+    add(byPlay[key].all, t);
+    add(isAligned(t) ? byPlay[key].aligned : byPlay[key].against, t);
+  });
+  const pb = document.getElementById('playBreakdown');
+  if(pb){
+    const pkeys = Object.keys(byPlay);
+    const onlyUnrecorded = pkeys.length === 1 && pkeys[0] === 'No play recorded';
+    if(!pkeys.length || onlyUnrecorded){
+      pb.innerHTML = '<div class="empty">Once your trades carry a play, this shows which of the three actually pays.</div>';
+    } else {
+      const money = v => `<span class="num ${v>=0?'pos':'neg'}">${fmtMoney(v)}</span>`;
+      const sub = (label, b) => !b.count ? '' :
+        `<div style="display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--text-dim); margin-top:3px;">
+          <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
+          <span>${money(b.pnl)}</span>
+        </div>`;
+      pb.innerHTML = pkeys.sort((a,b)=>byPlay[b].all.pnl-byPlay[a].all.pnl).map(k=>{
+        const s2 = byPlay[k];
+        const worthSplitting = s2.aligned.count > 0 && s2.against.count > 0;
+        return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+          <div style="display:flex; justify-content:space-between; gap:10px;">
+            <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s2.all.count} trades · ${Math.round(s2.all.wins/s2.all.count*100)}% win</div></div>
+            <div class="num ${s2.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s2.all.pnl)}</div>
+          </div>
+          ${worthSplitting ? sub('✅ timeframes agreed', s2.aligned) + sub('✕ timeframes did not', s2.against) : ''}
+        </div>`;
+      }).join('');
+    }
   }
 
   // The one number that answers "is waiting for alignment worth it".
@@ -3030,6 +3126,10 @@ function renderJournal(){
     // recognise can be told apart from one he does at a glance. Sample
     // entries from early in the project are still in there, dated after
     // his real trading and so sitting at the top of the list.
+    // The play sits beside the combo, not instead of it — a trade has both.
+    const playBadge = t.play
+      ? `<span class="badge" style="background:var(--panel); color:var(--gold-lite); border:1px solid var(--gold-deep);">▶ ${escapeHtml(t.play)}</span>`
+      : '';
     const sourceBadge = (t.source && t.source !== 'schwab-auto')
       ? `<span class="badge" style="background:var(--panel); color:var(--text-dim); border:1px solid var(--line);">✍ Added by hand</span>`
       : '';
@@ -3044,6 +3144,7 @@ function renderJournal(){
       </div>
       <div class="tc-badges">
         ${setupBadge}
+        ${playBadge}
         ${ftfcBadge}
         ${broadeningBadge}
         ${sourceBadge}
@@ -4191,6 +4292,7 @@ async function autoImportPendingTrades(url, pending){
     const trade = {
       id: t.id || Date.now(),
       ticker: t.ticker, dir: t.dir, strat: t.strat || null, // auto-classified server-side when confident enough — see "Needs Setup" badge otherwise
+      play: t.play || null, playConfidence: t.playConfidence || null,
       entryDate: t.entryDate, entryTime: t.entryTime,
       exitDate: t.exitDate, exitTime: t.exitTime,
       occ: t.occ || '',
