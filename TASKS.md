@@ -119,8 +119,45 @@ via the `TASKS.md` commit log.
     windows Schwab refused and how far back it truly served, instead of
     leaving it to guesswork.
 
-    **Still to do on his phone:** tap "Get My Trades" once the server has
-    restarted itself, and report what the new message says.
+    **Answer came back 2026-08-29, and it was not about his trades at
+    all:** "Refresh token is invalid, expired or revoked". His Schwab
+    sign-in had run out. Schwab's sign-in lasts seven days and cannot be
+    extended, and when it lapses every sync, every history import and the
+    live stream all stop at that one point. So the missing January-April
+    history was never actually attempted -- the import was dying before it
+    ever reached Schwab. Whether that history can be fetched is still
+    open. See task 27.
+
+27. **A way to sign back in to Schwab, in words he can act on**
+    (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app PR #45,
+    strat-journal-backend PR #30) — 27 checks. Not yet confirmed on his
+    phone.**
+
+    Two failures, both mine.
+
+    The error reached his screen as raw text: `{"error":"unsupported_
+    token_type","error_description":"400 Bad Request: ...}`. The entire
+    answer was buried in it and none of it was readable by someone
+    without a technical background, which is the only kind of person who
+    uses this app. It now says: his Schwab sign-in has run out, Schwab
+    forces this every 7 days, nothing is wrong with his trades, and which
+    button to tap. Unrelated failures keep their own reason rather than
+    being mislabelled as a sign-in problem.
+
+    And there was no way to act on it. Signing back in was only possible
+    by typing a web address by hand -- the app had no button for it
+    anywhere, despite Schwab forcing it weekly. There is now a "Reconnect
+    to Schwab" button, shown only when the connection has actually
+    lapsed.
+
+    The connection indicator was also answering the wrong question. It
+    meant "the app can reach my server", which stayed true and green
+    while the server's own Schwab connection had been dead long enough
+    for a month of trades to go unfetched. It now asks both.
+
+    **Still to do on his phone:** tap "Reconnect to Schwab", sign in, then
+    "Get My Trades", and report what the message says. That run is what
+    finally answers whether January to April can be fetched.
 
 24. **One button to import, trades always present on open, and the fix
     for a Journal that displayed as a blank page** (2026-08-27).

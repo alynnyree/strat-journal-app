@@ -246,6 +246,22 @@ Uses **The Strat**. Key concepts the code implements:
   watched for errors on the page. **Always check the page for thrown
   errors in browser tests**, and re-verify that a multi-part edit
   actually landed rather than assuming it did.
+- **Schwab's sign-in lasts SEVEN DAYS and cannot be extended.** The login
+  flow has to be repeated by hand every week. When it lapses,
+  `getValidAccessToken()` throws and every sync, history import and the
+  live stream all fail at that one point — and because `runBackfill` is
+  fired and forgotten by its route, the throw went to a `.catch` that
+  logged and returned. The owner spent weeks being told "Schwab had
+  nothing new" when nothing had been able to reach Schwab at all. The app
+  now has a "Reconnect to Schwab" button; `/auth/status` reports whether
+  the SERVER can reach Schwab, which is a different question from whether
+  the app can reach the server.
+- **Never show him a server's raw error text.** A lapsed sign-in reached
+  the screen as `{"error":"unsupported_token_type","error_description":
+  "400 Bad Request: ..."}`. The whole answer was in there and none of it
+  was readable by the only kind of person who uses this app. Translate
+  every failure into what happened, whether it is his fault, and what to
+  tap.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
