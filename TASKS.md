@@ -283,6 +283,29 @@ via the `TASKS.md` commit log.
     Alpaca is. Worth checking against a real record before promising
     second-level accuracy.
 
+36. **Alpaca keys typed into the app, not the hosting dashboard**
+    (2026-08-29). **Status: BUILT AND TESTED (strat-journal-app PR #53,
+    strat-journal-backend PR #35) — 24 checks. Waiting on him to create a
+    free Alpaca account and paste the two keys in.**
+
+    He went looking for how to switch Alpaca on and landed on
+    docs.alpaca.markets — the developer documentation, which is the wrong
+    page. The right one is the sign-up form at alpaca.markets. But the
+    step AFTER that was worse: adding two settings to the Render
+    dashboard by hand, which is not a reasonable thing to ask of him.
+
+    The keys now go in the app under Connection settings, beside the
+    Backend URL and App Key he already filled in once. Secret typed
+    hidden, cleared from the screen after saving, never written to the
+    phone — the server holds it. Status shows only the last four
+    characters of the key ID. The server's own settings still win where
+    present, so nothing existing changes.
+
+    **A real bug found while testing:** the storage client was built at
+    module load, which made every module that pulls in alpacaClient
+    depend on storage being constructible — it took down the unrelated
+    stop-rule route suite outright. Built on first use now.
+
 35. **Stop him having to tap "Get My Trades" repeatedly** (2026-08-29).
     **Status: BUILT AND TESTED (strat-journal-app PR #52,
     strat-journal-backend PR #34) — 16 + 3 checks. Not yet confirmed on
