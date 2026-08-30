@@ -614,8 +614,9 @@
         <button class="secondary" id="btnConnect" onclick="connectBackend()">Save &amp; Connect</button>
         <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" id="btnReset" onclick="resetAndReimport()">Reset &amp; Re-import Trades</button>
         <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">
-          Only needed after a change to how trades are matched — it rebuilds
-          everything from Schwab.
+          Rebuilds every trade from Schwab and brings the ones you already
+          have up to date — fees, real stock prices, timeframe alignment.
+          Your own notes, setups, stops and screenshots are untouched.
         </div>
         <!-- Alpaca's keys, typed here rather than added to the server by
            hand. Same idea as the App Key above: a thing you fill in once
@@ -3918,6 +3919,7 @@ async function getMyTrades(){
     // actually says happened.
     btn.textContent = 'Collecting…';
     let found = 0;
+    pollTally = { imported: 0, refreshed: 0, seen: new Set() };
     const started = Date.now();
     // Long enough for a year of history, but he is never trapped here:
     // trades are queued as they are found, and anything still arriving
@@ -3953,7 +3955,16 @@ async function getMyTrades(){
     await pollBackend(true);
     found = loadTrades().length - before;
     renderJournal(); renderDashboard();
-    showStatus(...backfillResultMessage(status, found, loadTrades().length));
+    // A rebuild brings nothing new and updates everything. Reporting only
+    // arrivals would call that "nothing new" — which is exactly how the
+    // last rebuild looked like it had failed.
+    if(pollTally.refreshed > 0 && found === 0){
+      showStatus('ok', `${pollTally.refreshed} trade${pollTally.refreshed===1?'':'s'} brought up to date with fees, stock prices and timeframe alignment. Nothing new to add — you already had them all.`);
+    } else if(pollTally.refreshed > 0){
+      showStatus('ok', `${found} new trade${found===1?'':'s'} added, and ${pollTally.refreshed} brought up to date with fees, stock prices and timeframe alignment.`);
+    } else {
+      showStatus(...backfillResultMessage(status, found, loadTrades().length));
+    }
     const total = loadTrades().length;
     setConnState(true, `Connected · ${total} trade${total===1?'':'s'} in your journal`);
   } finally {
@@ -4218,6 +4229,11 @@ function setConnState(connected, text){
   if(badge) badge.innerHTML = `<span class="conn-dot ${connected ? 'on' : 'off'}"></span>${connected ? 'Connected' : 'Not connected'}`;
 }
 
+// A running count of what the polls have done, so the button can report
+// a REBUILD — which adds nothing and updates everything, and so read as
+// "no new trades" while quietly doing the entire job.
+let pollTally = { imported: 0, refreshed: 0, seen: new Set() };
+
 async function pollBackend(silent=false){
   const url = backendUrl();
   if(!url){ if(!silent) showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
@@ -4228,16 +4244,25 @@ async function pollBackend(silent=false){
     const data = await r.json();
     const pending = data.pending||[];
     if(pending.length){
-      const imported = await autoImportPendingTrades(url, pending);
+      const { imported, refreshed } = await autoImportPendingTrades(url, pending);
+      pollTally.imported += imported; pollTally.refreshed += refreshed;
       // Only speak up when something actually landed. "0 trade(s)
       // auto-imported" reads as a failure, and worse, it used to
       // overwrite the summary the Get My Trades button had just written.
-      if(imported > 0){
+      //
+      // A rebuild adds nothing and updates everything, so counting only
+      // new arrivals would report a successful rebuild as "no new trades"
+      // — which is exactly how the last one looked like it had failed.
+      if(imported > 0 && refreshed > 0){
+        showStatus('ok', `${imported} new trade${imported===1?'':'s'} added, and ${refreshed} brought up to date with fees and prices.`);
+      } else if(imported > 0){
         showStatus('ok', `${imported} trade(s) auto-imported to your Journal.`);
+      } else if(refreshed > 0){
+        showStatus('ok', `${refreshed} trade${refreshed===1?'':'s'} brought up to date with fees, stock prices and timeframe alignment.`);
       } else if(!silent){
         showStatus('ok', 'No new trades — you\'re up to date.');
       }
-      log('syncLog', `${imported} trade(s) auto-imported to Journal`);
+      log('syncLog', `${imported} added, ${refreshed} updated`);
     } else if(!silent) {
       showStatus('ok', 'No new trades — you\'re up to date.');
       log('syncLog', 'No new trades');
@@ -4278,13 +4303,42 @@ function tradeFingerprint(t){
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
-  const existingPrints = new Set(trades.map(tradeFingerprint));
+  // Keep the trade itself, not just its fingerprint — a repeat arrival is
+  // usually a REBUILD carrying facts the saved copy does not have, and
+  // throwing it away loses them.
+  const byPrint = new Map();
+  for(const t of trades){
+    const k = tradeFingerprint(t);
+    if(!byPrint.has(k)) byPrint.set(k, t);
+  }
   let imported = 0;
+  let refreshed = 0;
   for(const t of pending){
     if(existingIds.has(t.id)) continue; // already imported (e.g. a prior delete-from-pending failed silently)
     const print = tradeFingerprint(t);
-    if(existingPrints.has(print)) continue; // same trade, new reference number
-    existingPrints.add(print);
+    // has(), not the value — a trade claimed earlier in THIS batch is
+    // stored as null, and testing truthiness let it through and imported
+    // it a second time.
+    if(byPrint.has(print)){
+      const already = byPrint.get(print);
+      if(!already) continue;   // already taken by this same batch
+      // Same trade, arriving again. This is what "Reset & Re-import"
+      // produces, and the whole point of pressing it is that the rebuilt
+      // copy knows things the saved one does not — the fees Schwab
+      // charged, the real stock price at the fill, the timeframe
+      // alignment worked out from minute data instead of daily bars.
+      // Skipping it silently, as this used to, meant the rebuild
+      // completed and changed nothing.
+      // Counted once per trade, however many times the queue serves it —
+      // a delete that has not landed yet must not inflate the figure.
+      if(refreshTradeFacts(already, t) && !pollTally.seen.has(already.id)){
+        pollTally.seen.add(already.id);
+        refreshed++;
+      }
+      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* non-fatal */ }
+      continue;
+    }
+    byPrint.set(print, null); // claimed by this batch
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
@@ -4324,12 +4378,73 @@ async function autoImportPendingTrades(url, pending){
     try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* non-fatal — will just re-import next poll */ }
   }
   saveTrades(trades);
-  return imported;
+  return { imported, refreshed };
+}
+
+// Brings a saved trade up to date from a freshly rebuilt copy of itself.
+//
+// Only ever fills in what the SERVER works out. Everything the trader put
+// there himself — his notes, his screenshots, his stop, his planned R:R,
+// a setup or play he tagged by hand — is left exactly alone. A rebuild
+// must never cost him his own work; that is the whole reason this
+// merges rather than replaces.
+//
+// Returns true if anything actually changed, so the app can say how many
+// were brought up to date rather than guessing.
+function refreshTradeFacts(saved, fresh){
+  let changed = false;
+  const set = (key, value) => {
+    if(value === undefined || value === null) return;
+    if(saved[key] === value) return;
+    saved[key] = value; changed = true;
+  };
+
+  // Fees, and the after-fee figure that depends on them.
+  set('fees', fresh.fees); set('entryFees', fresh.entryFees); set('exitFees', fresh.exitFees);
+  if(fresh.fees != null && saved.pnlDollar != null){
+    const net = Math.round((saved.pnlDollar - fresh.fees) * 100) / 100;
+    set('pnlNet', net);
+  }
+
+  // The underlying price, and how it was obtained. A rebuild that has an
+  // exact print replaces a candle close; one that does not, does not.
+  if(fresh.undEntry != null){ set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact); }
+  if(fresh.undExit  != null){ set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact); }
+
+  // Timeframe alignment. Only taken when the rebuild actually measured
+  // something — an empty answer must not wipe a good one.
+  if(fresh.ftfcRun){
+    set('ftfcRun', fresh.ftfcRun);
+    set('ftfcConfirmed', !!fresh.ftfcConfirmed);
+    set('ftfcDirection', fresh.ftfcDirection);
+    // Compared before assigning. Assigning unconditionally reported a
+    // change on every rebuild, so a journal already up to date claimed to
+    // have been updated — which is the same as saying nothing at all.
+    const sameMap = JSON.stringify(saved.ftfc || {}) === JSON.stringify(fresh.ftfc || {});
+    if(fresh.ftfc && Object.keys(fresh.ftfc).length && !sameMap){ saved.ftfc = fresh.ftfc; changed = true; }
+    const sameRun = JSON.stringify(saved.ftfcTimeframesInRun || []) === JSON.stringify(fresh.ftfcTimeframesInRun || []);
+    if((fresh.ftfcTimeframesInRun||[]).length && !sameRun){ saved.ftfcTimeframesInRun = fresh.ftfcTimeframesInRun; changed = true; }
+  }
+
+  if(fresh.replayData && !saved.replayData){ saved.replayData = fresh.replayData; changed = true; }
+
+  // A setup or play only where he has not chosen one himself.
+  if(!saved.strat && fresh.strat){ saved.strat = fresh.strat; saved.stratConfidence = fresh.stratConfidence || null; changed = true; }
+  if(!saved.play && fresh.play){ saved.play = fresh.play; saved.playConfidence = fresh.playConfidence || null; changed = true; }
+
+  // A worked-out stop, never one he typed in himself.
+  if(saved.stop == null && fresh.stop != null){
+    saved.stop = fresh.stop; saved.stopAuto = fresh.stopAuto; saved.stopReason = fresh.stopReason; changed = true;
+  }
+  return changed;
 }
 async function resetAndReimport(){
   const url = backendUrl();
   if(!url){ showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
-  if(!confirm('This clears any un-imported trades on the backend and re-imports everything fresh from Schwab using the current matching logic. Trades already in your Journal are NOT affected. Continue?')) return;
+  // The old wording promised the journal would NOT be affected. That is
+  // now the opposite of the point: a rebuild is how fees, real stock
+  // prices and proper timeframe alignment reach trades already saved.
+  if(!confirm('This rebuilds every trade from Schwab. Your saved trades stay where they are and are brought up to date with fees, real stock prices and timeframe alignment. Nothing you typed in yourself — notes, setups, stops, screenshots — is touched. It takes a few minutes and carries on by itself. Continue?')) return;
   setBusy('btnReset', true);
   showStatus('info', 'Clearing pending queue...');
   log('syncLog', 'Clearing pending queue...');
