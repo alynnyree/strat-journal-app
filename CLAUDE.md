@@ -362,6 +362,23 @@ Uses **The Strat**. Key concepts the code implements:
   a floor under it. Confirmed by test: without the guards a single
   `Promise.reject` exits with status 1; with them the process survives
   fifty in a row.
+- **"The timeframes agreed" and "they agreed with me" are not the same
+  question.** The card said only "FTFC", so a Short taken into a fully
+  BEARISH market — the setup he wants — looked identical to a Short taken
+  into a fully BULLISH one, which is its opposite. He reported not being
+  able to tell them apart. Worse, `isAligned` was `!!t.ftfcConfirmed`, so
+  the Dashboard scored a trade taken straight against full agreement on
+  the "timeframes agreed" side — the one number meant to tell him whether
+  waiting for alignment pays was averaging the two together. `ftfcDirection`
+  had been stored the whole time and nothing read it. Alignment is now
+  four states: with, against, none, and unknown.
+- **"Unknown" must not be folded into "no".** Trades enriched before the
+  direction was stored have agreement on file with no direction. Counting
+  those as "did not agree" states something untrue about them; counting
+  them as aligned is a guess. They are excluded from the comparison and
+  reported separately. Any new distinction drawn over old records needs
+  this fourth answer, or the old records quietly become evidence for
+  whichever side the code happens to default to.
 - **A cap on pages is not a cap on size.** `fetchBars` limited itself to
   200 pages of 10,000 candles — two million objects, measured at 274MB in
   one array, on a server whose whole allowance is a fraction of that.
