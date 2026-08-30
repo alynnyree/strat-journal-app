@@ -310,6 +310,16 @@ Uses **The Strat**. Key concepts the code implements:
   differently out of the same file. Equal inputs return 0; the sort is
   stable and input order survives.
 
+- **"Reset & Re-import" was maintenance the app made HIM perform.** Every
+  time the server learned to work something out it could not before —
+  fees, a real underlying price, alignment from minute data — the saved
+  trades were stale and only that button fixed them. He cannot know when
+  that happens, so it could only ever be a button he was told about
+  afterwards, and he asked twice why he kept having to press it. The
+  journal lives on the phone, so the server cannot refill it; the app now
+  notices the gap itself and rebuilds. Anything that runs on its own needs
+  bounds on every side — a rate limit, an attempt cap, a "not while one is
+  already running" check, and a minimum worth doing.
 - **A job nothing watches is a job he has to press a button for.** The
   5-minute cron only looked for NEW trades. A backfill Schwab blocked, or
   one killed mid-run by a Render restart (left marked "running" forever),
