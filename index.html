@@ -2818,14 +2818,14 @@ function renderDashboard(){
     ladder.appendChild(seg);
   });
 
-  // A setup taken WITH the timeframes agreeing and the same setup taken
-  // against them are not the same trade. Pooling them averages a winner
+  // A setup taken WITH the timeframes agreeing IN HIS DIRECTION, and the
+  // same setup taken any other way, are not the same trade. Pooling them averages a winner
   // and a loser into a meaningless middle, and the verdict that comes out
   // — "this setup doesn't work" — can be the exact opposite of the truth.
   //
   // The setup NAME is unchanged: he has been clear that alignment is
   // context, not a separate setup. Only the reporting is split.
-  const isAligned = t => !!t.ftfcConfirmed;
+  const isAligned = t => alignmentOf(t) === 'with';
   const blank = () => ({count:0, pnl:0, wins:0});
   const add = (bucket, t) => {
     bucket.count++; bucket.pnl += realPnl(t);
@@ -2837,7 +2837,11 @@ function renderDashboard(){
     const key = t.strat || 'Unclassified (needs setup)';
     bySetup[key] = bySetup[key] || { all: blank(), aligned: blank(), against: blank() };
     add(bySetup[key].all, t);
-    add(isAligned(t) ? bySetup[key].aligned : bySetup[key].against, t);
+    // A trade whose direction was never recorded is in neither half —
+    // it cannot be judged, and guessing would make the comparison a lie.
+    const st = alignmentOf(t);
+    if(st === 'with') add(bySetup[key].aligned, t);
+    else if(st !== 'unknown') add(bySetup[key].against, t);
   });
 
   const sb = document.getElementById('setupBreakdown');
@@ -2860,7 +2864,7 @@ function renderDashboard(){
           <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s.all.count} trades · ${Math.round(s.all.wins/s.all.count*100)}% win</div></div>
           <div class="num ${s.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.all.pnl)}</div>
         </div>
-        ${worthSplitting ? sub('✅ timeframes agreed', s.aligned) + sub('✕ timeframes did not', s.against) : ''}
+        ${worthSplitting ? sub('✅ taken WITH the timeframes', s.aligned) + sub('✕ not with them', s.against) : ''}
       </div>`;
     }).join('');
   }
@@ -2874,7 +2878,9 @@ function renderDashboard(){
     const key = t.play || 'No play recorded';
     byPlay[key] = byPlay[key] || { all: blank(), aligned: blank(), against: blank() };
     add(byPlay[key].all, t);
-    add(isAligned(t) ? byPlay[key].aligned : byPlay[key].against, t);
+    const stp = alignmentOf(t);
+    if(stp === 'with') add(byPlay[key].aligned, t);
+    else if(stp !== 'unknown') add(byPlay[key].against, t);
   });
   const pb = document.getElementById('playBreakdown');
   if(pb){
@@ -2897,15 +2903,29 @@ function renderDashboard(){
             <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s2.all.count} trades · ${Math.round(s2.all.wins/s2.all.count*100)}% win</div></div>
             <div class="num ${s2.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s2.all.pnl)}</div>
           </div>
-          ${worthSplitting ? sub('✅ timeframes agreed', s2.aligned) + sub('✕ timeframes did not', s2.against) : ''}
+          ${worthSplitting ? sub('✅ taken WITH the timeframes', s2.aligned) + sub('✕ not with them', s2.against) : ''}
         </div>`;
       }).join('');
     }
   }
 
   // The one number that answers "is waiting for alignment worth it".
-  const alignedAll = blank(), againstAll = blank();
-  trades.forEach(t => add(isAligned(t) ? alignedAll : againstAll, t));
+  //
+  // Three states, not two. "The timeframes agreed" and "they agreed with
+  // the way I traded" are different questions, and only the second one is
+  // the edge he is asking about. Trading INTO full agreement the wrong
+  // way is its own thing, and worth seeing on its own.
+  const alignedAll = blank(), wrongWayAll = blank(), noneAll = blank(), unknownAll = blank();
+  trades.forEach(t => {
+    const st = alignmentOf(t);
+    add(st === 'with' ? alignedAll : (st === 'against' ? wrongWayAll : (st === 'none' ? noneAll : unknownAll)), t);
+  });
+  // What "with" is measured against: everything that can be judged and
+  // was not taken with the timeframes. Trades whose direction was never
+  // recorded are excluded from both sides rather than counted as a miss.
+  const againstAll = { count: wrongWayAll.count + noneAll.count,
+                       pnl: wrongWayAll.pnl + noneAll.pnl,
+                       wins: wrongWayAll.wins + noneAll.wins };
   const av = document.getElementById('alignmentVerdict');
   if(av){
     if(!alignedAll.count || !againstAll.count){
@@ -2920,17 +2940,21 @@ function renderDashboard(){
       const verdict = Math.abs(gap) < 1
         ? 'Too close to call so far — alignment is not making a clear difference to your results.'
         : (gap > 0
-            ? `Waiting for alignment is worth <b>${fmtMoney(gap)}</b> more per trade to you.`
-            : `Your aligned trades are doing <b>${fmtMoney(-gap)}</b> per trade <b>worse</b> — worth a hard look before you keep waiting for it.`);
+            ? `Trading <b>with</b> the timeframes is worth <b>${fmtMoney(gap)}</b> more per trade to you than everything else.`
+            : `Your trades taken <b>with</b> the timeframes are doing <b>${fmtMoney(-gap)}</b> per trade <b>worse</b> than the rest — worth a hard look before you keep waiting for it.`);
+      const rowOf = (label, b, colour) => !b.count ? '' : `
+        <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; margin-top:4px; color:${colour};">
+          <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
+          <span><b>${fmtMoney(b.pnl)}</b> · ${fmtMoney(b.pnl/b.count)}/trade</span>
+        </div>`;
       av.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px;">
-          <span>✅ Timeframes agreed — ${alignedAll.count} trade${alignedAll.count===1?'':'s'} · ${rateA}% win</span>
+        <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; color:var(--bull);">
+          <span>✅ Agreed <b>with</b> your direction — ${alignedAll.count} trade${alignedAll.count===1?'':'s'} · ${rateA}% win</span>
           <span><b>${fmtMoney(alignedAll.pnl)}</b> · ${fmtMoney(perAligned)}/trade</span>
         </div>
-        <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; margin-top:4px;">
-          <span>✕ Timeframes did not — ${againstAll.count} trade${againstAll.count===1?'':'s'} · ${rateB}% win</span>
-          <span><b>${fmtMoney(againstAll.pnl)}</b> · ${fmtMoney(perAgainst)}/trade</span>
-        </div>
+        ${rowOf('⚠ Agreed <b>against</b> your direction', wrongWayAll, 'var(--amber)')}
+        ${rowOf('✕ No agreement either way', noneAll, 'var(--text-dim)')}
+        ${rowOf('· Agreed, but which way was never recorded — not counted either side', unknownAll, 'var(--text-dim)')}
         <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12.5px; color:${gap>0?'var(--bull)':(Math.abs(gap)<1?'var(--text-dim)':'var(--bear)')};">${verdict}</div>
         <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Compared per trade, not as totals — you may have taken far more of one than the other.</div>`;
     }
@@ -2961,13 +2985,21 @@ function renderDashboard(){
   const fb = document.getElementById('ftfcBreakdown');
   if(!count){ fb.innerHTML = '<div class="empty">No data yet.</div>'; }
   else {
-    const withFtfc = trades.filter(t=>t.ftfcConfirmed);
-    const withoutFtfc = trades.filter(t=>!t.ftfcConfirmed);
+    // Same three states as above. "FTFC confirmed" on its own said
+    // nothing about which way it was confirmed, so a Short taken into a
+    // fully bullish market counted as a point in alignment's favour.
+    const withFtfc = trades.filter(t=>alignmentOf(t)==='with');
+    const wrongWay = trades.filter(t=>alignmentOf(t)==='against');
+    const noFtfc   = trades.filter(t=>alignmentOf(t)==='none');
+    const unknownWay = trades.filter(t=>alignmentOf(t)==='unknown');
     const winPct = arr => arr.length ? Math.round(arr.filter(t=>t.winLoss==='Win').length/arr.length*100) : 0;
-    fb.innerHTML = `
-      <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:13px;"><span>With FTFC confirmed (4+ TF aligned)</span><span class="num" style="font-weight:700;">${winPct(withFtfc)}% win · ${withFtfc.length} trades</span></div>
-      <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:13px;"><span>Without FTFC confirmed</span><span class="num" style="font-weight:700;">${winPct(withoutFtfc)}% win · ${withoutFtfc.length} trades</span></div>
-    `;
+    const row = (label, arr, colour) => !arr.length ? '' :
+      `<div style="display:flex; justify-content:space-between; padding:6px 0; font-size:13px; color:${colour};"><span>${label}</span><span class="num" style="font-weight:700;">${winPct(arr)}% win · ${arr.length} trade${arr.length===1?'':'s'}</span></div>`;
+    fb.innerHTML =
+      row('4+ timeframes agreed, your way', withFtfc, 'var(--bull)') +
+      row('4+ timeframes agreed, the other way', wrongWay, 'var(--amber)') +
+      row('No agreement either way', noFtfc, 'var(--text-dim)') +
+      row('Agreed, direction not recorded', unknownWay, 'var(--text-dim)');
   }
 
   const rt = document.getElementById('recentTrades');
@@ -2999,6 +3031,46 @@ function escapeHtml(str){
 
 function toggleTradeNotes(el){
   el.classList.toggle('clamped');
+}
+
+// What the timeframes agreeing actually MEANT for this trade: was the
+// agreement in the direction he took, or against it?
+//
+// This was missing everywhere. The card said "FTFC" and nothing else, so
+// he could not tell a Short taken into a fully BEARISH market -- the
+// setup he is looking for -- from a Short taken into a fully BULLISH one,
+// which is the opposite. He reported exactly that.
+//
+// It was not only the card. The Dashboard's "Does Alignment Pay?" counted
+// a trade as aligned whenever the timeframes agreed AT ALL, in either
+// direction. So a trade taken straight against full agreement was being
+// scored on the "timeframes agreed" side, and the one number meant to
+// tell him whether waiting for alignment pays was averaging the two
+// together.
+//
+// Long is helped by a bullish run, Short by a bearish one. Answers
+// 'with', 'against', or 'none' when there was no agreement to speak of
+// (fewer than four timeframes in a row, so no direction was recorded).
+// Four answers, because there are genuinely four situations:
+//   'with'    — 4+ timeframes agreed, in the direction he traded
+//   'against' — 4+ agreed, the other way
+//   'none'    — they did not agree
+//   'unknown' — they agreed, but WHICH WAY was never recorded
+// The last one matters. Trades enriched before the direction was stored
+// have agreement on file with no direction, and dropping them in with
+// "did not agree" would be stating something untrue about them. They are
+// left out of the comparison instead, and counted separately, until a
+// refresh fills the direction in.
+function alignmentOf(t){
+  if(!t || !t.ftfcConfirmed) return 'none';
+  if(!t.ftfcDirection || !t.dir) return 'unknown';
+  const bullish = t.ftfcDirection === 'bull';
+  const long = String(t.dir).toLowerCase() === 'long';
+  return bullish === long ? 'with' : 'against';
+}
+function ftfcDirectionWord(t){
+  if(!t || !t.ftfcDirection) return null;
+  return t.ftfcDirection === 'bull' ? 'BULLISH' : (t.ftfcDirection === 'bear' ? 'BEARISH' : null);
 }
 
 // Newest trade first, always. The list used to be shown in the order
@@ -3155,9 +3227,33 @@ function renderJournal(){
     const setupBadge = t.strat
       ? `<span class="badge setup">${t.strat}${t.stratUsedScreenshot ? ' 📷' : ''}</span>`
       : `<span class="badge" style="background:var(--panel); color:var(--amber); border:1px solid var(--amber);">⚠ Needs Setup</span>`;
-    const ftfcBadge = t.ftfcConfirmed
-      ? `<span class="badge win">✅ FTFC ${(t.ftfcTimeframesInRun||[]).join('→')}</span>`
-      : `<span class="badge open">FTFC ${t.ftfcRun||0}/4</span>`;
+    // Says which WAY the timeframes agreed, and what that meant for the
+    // trade he actually took. The direction is spelled out in words with
+    // an arrow rather than left to colour alone, so it reads the same to
+    // anyone and in any light. Colour then carries the judgement: green
+    // when he traded with the agreement, amber when against it.
+    const ftfcWord = ftfcDirectionWord(t);
+    const stance = alignmentOf(t);
+    let ftfcBadge;
+    if(t.ftfcConfirmed && ftfcWord){
+      const arrow = t.ftfcDirection === 'bull' ? '▲' : '▼';
+      const colour = stance === 'against' ? 'var(--amber)' : 'var(--bull)';
+      const mark   = stance === 'against' ? '⚠' : '✅';
+      const note = stance === 'none' ? ''
+        : (stance === 'with'
+            ? `<br>you went ${escapeHtml(t.dir)} — <b>with it</b>`
+            : `<br>you went ${escapeHtml(t.dir)} — <b>against it</b>`);
+      ftfcBadge = `<span class="badge" style="background:var(--panel); color:${colour}; border:1px solid ${colour};">`
+        + `${mark} FTFC ${arrow} ${ftfcWord}${note}`
+        + `<br><span style="opacity:.75;">${(t.ftfcTimeframesInRun||[]).join('→')}</span></span>`;
+    } else if(t.ftfcConfirmed){
+      // Agreement was measured but the direction was not recorded — older
+      // trades from before this was stored. Say that, rather than imply
+      // a direction that was never worked out.
+      ftfcBadge = `<span class="badge win">✅ FTFC ${(t.ftfcTimeframesInRun||[]).join('→')}<br><span style="opacity:.75;">direction not recorded on this trade</span></span>`;
+    } else {
+      ftfcBadge = `<span class="badge open">FTFC ${t.ftfcRun||0}/4 — timeframes did not agree</span>`;
+    }
     const broadeningBadge = t.offBroadeningFormation
       ? `<span class="badge" style="background:var(--panel); color:#8ec9ff; border:1px solid #3a6ea5;">📐 Broadening</span>`
       : '';

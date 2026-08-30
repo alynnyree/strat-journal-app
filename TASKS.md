@@ -9,6 +9,36 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+45. **Bullish or bearish alignment, on the card and in the numbers**
+    (2026-08-30). **Status: BUILT AND TESTED (30 new browser checks, plus
+    every app suite re-run). Not confirmed on a real phone.**
+
+    He asked for the trade card to say whether the timeframe alignment was
+    bullish or bearish, because he could not tell.
+
+    **What the card now says.** The direction is spelled out — `✅ FTFC ▼
+    BEARISH` or `⚠ FTFC ▲ BULLISH` — in words with an arrow, never colour
+    alone. Underneath, what that meant for the trade he actually took:
+    "you went Short — with it" or "— against it", the box green for with
+    and amber for against. A trade where the timeframes did not agree now
+    says so in words instead of showing a bare "2/4".
+
+    **The bigger thing his question uncovered.** The Dashboard counted a
+    trade as aligned whenever the timeframes agreed AT ALL, in either
+    direction. So a Short taken straight into full bullish agreement was
+    being scored on the "timeframes agreed" side — and "Does Alignment
+    Pay?", the one number meant to tell him whether waiting for alignment
+    is worth it, was averaging trades taken with the market and against it
+    into a single figure. The direction had been recorded on every trade
+    since the FTFC work was built; nothing ever read it.
+
+    Alignment is now four answers everywhere — with, against, no
+    agreement, and agreed-but-direction-never-recorded. That last one is
+    for trades enriched before the direction was stored: they are counted
+    on their own and kept out of the comparison, because calling them
+    "did not agree" would state something untrue and calling them aligned
+    would be a guess. They sort themselves out on the next refresh.
+
 44. **The server ran out of memory, and it was one request doing it**
     (2026-08-30). **Status: BUILT AND TESTED (7 new measured server
     checks, 5 new app checks, every suite in both repos re-run). Not
