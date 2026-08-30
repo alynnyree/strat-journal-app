@@ -3519,8 +3519,25 @@ async function showServerState(){
     ? `${mins} minute${mins===1?'':'s'}`
     : `${Math.round(mins/60)} hour${Math.round(mins/60)===1?'':'s'}`;
   const fails = Array.isArray(d.recentFailures) ? d.recentFailures : [];
+
+  // How much memory it is using, and the most it has used. Shown because
+  // running out of memory is what the hosting company restarts it for,
+  // and because that kind of restart leaves NO record of its own -- the
+  // server is stopped from outside, so it never gets the chance to write
+  // anything down. A short time since starting is the only fingerprint.
+  const memText = (d.memoryMb != null)
+    ? ` Using ${d.memoryMb} MB of memory${d.peakMemoryMb && d.peakMemoryMb > d.memoryMb ? ` (highest since it started: ${d.peakMemoryMb} MB)` : ''}.`
+    : '';
+  const justRestarted = mins < 15;
+
+  if(!fails.length && justRestarted){
+    el.innerHTML = line('var(--amber)',
+      `<b>Your server is up</b>, but it only started ${mins < 1 ? 'less than a minute' : `${mins} minute${mins===1?'':'s'}`} ago — so something restarted it very recently.` +
+      `${memText} That is worth knowing but not worth acting on unless it keeps happening: pull this page up again in half an hour, and if it still says only a few minutes, tell me.`);
+    return;
+  }
   if(!fails.length){
-    el.innerHTML = line('var(--bull)', `<b>Your server is up.</b> Running for ${upText} with nothing gone wrong in that time.`);
+    el.innerHTML = line('var(--bull)', `<b>Your server is up.</b> Running for ${upText} with nothing gone wrong in that time.${memText}`);
     return;
   }
   const last = fails[0] || {};

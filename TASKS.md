@@ -9,6 +9,42 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+44. **The server ran out of memory, and it was one request doing it**
+    (2026-08-30). **Status: BUILT AND TESTED (7 new measured server
+    checks, 5 new app checks, every suite in both repos re-run). Not
+    verified against the live server — this environment cannot reach it.**
+
+    Render alerted that the server exceeded its memory limit and was
+    restarted automatically. He asked whether this affected the Alpaca
+    work. It did, in two different ways, and one of them was the whole
+    reason his prices said "approx.".
+
+    **Measured, not guessed.** Fetching candles from Alpaca limited
+    itself to 200 pages but not to a SIZE, so one request could build a
+    list of two million candles. Measured on the real data shape: **274MB
+    in a single array**, on a server whose entire allowance is a fraction
+    of that. Capped at 150,000 candles — over a year of every trading
+    minute — and measured again after: 72MB.
+
+    **How it touched Alpaca.** Every restart wiped the copy of his Alpaca
+    keys held in memory, and until task 43 that silently switched Alpaca
+    off. So these memory restarts were not merely near the "approx."
+    problem, they were causing it. That link is now broken: the keys are
+    re-read from storage.
+
+    **What still connects them.** A restart part-way through a rebuild
+    used to throw the entire run away, because it saved only at the end.
+    The rebuild is what replaces an estimated price with a real one, so a
+    restart could stop the fix ever landing. It now saves every 25
+    trades, so a restart costs one batch.
+
+    **And it is visible now.** A server killed from outside for using too
+    much memory never runs any of its own code, so the crash log from
+    task 40 cannot catch it — there is nothing to catch. `/health` now
+    reports memory in use and the highest reached, sampled on a timer as
+    well as when asked, and the Checks page treats a very short time
+    since starting as the fingerprint of a restart nobody recorded.
+
 43. **Alpaca was never actually being used for stock prices** (2026-08-30).
     **Status: BUILT AND TESTED (13 new server checks, 12 new app checks,
     plus every suite in both repos re-run). Not verified against the live
