@@ -306,6 +306,38 @@ via the `TASKS.md` commit log.
     depend on storage being constructible — it took down the unrelated
     stop-rule route suite outright. Built on first use now.
 
+37. **Alpaca as the history source for backtesting, Bar Replay and the
+    timeframe check** (2026-08-29). **Status: BUILT AND TESTED
+    (strat-journal-backend PR #38) — 21 checks. Not yet run against the
+    live Alpaca service.** Three features were limited by one fact:
+    Schwab keeps about 35 days of minute data.
+
+    Backtesting could only look at the last month — not long enough to
+    say anything about a strategy. Bar Replay came back empty for any
+    trade older than five weeks, which after a year-long import is most
+    of them. And timeframe alignment on an older trade was decided on the
+    daily and above ALONE, because the intraday timeframes came back
+    empty — a materially weaker answer than a recent trade gets, with
+    nothing on screen saying so, and it is the very field the new
+    alignment breakdown groups by.
+
+    All three now use Alpaca first and fall back to Schwab, so without
+    keys nothing changes. Daily and longer stay with Schwab, which
+    already serves years of those.
+
+38. **Fees did not reach the existing trades — my instruction was wrong**
+    (2026-08-29). Only 6 of 304 trades have fees, hours after the fee
+    work shipped. Cause: `runBackfill` skips any fill already in
+    `lastProcessedIds`, so re-running it can NEVER redo an existing
+    trade. Only "Reset & Re-import" clears that list. I told him to tap
+    "Get My Trades", which correctly finds nothing new. Nothing is broken
+    — he needs Reset & Re-import, which is now safe to press because the
+    duplicate fix means a rebuild cannot double anything.
+
+    Confirmed correct in the same screenshot: deleting the fake 6 August
+    trade moved his before-fees total from −$451 to −$511, exactly the
+    $60 that trade claimed.
+
 35. **Stop him having to tap "Get My Trades" repeatedly** (2026-08-29).
     **Status: BUILT AND TESTED (strat-journal-app PR #52,
     strat-journal-backend PR #34) — 16 + 3 checks. Not yet confirmed on
