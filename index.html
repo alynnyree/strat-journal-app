@@ -1092,6 +1092,7 @@
         this page. Green means done and counted. Amber means part-way.
         Grey means not built yet.
       </div>
+      <div id="serverState" style="margin-top:12px;"></div>
       <div id="checklistBody" style="margin-top:12px;"><div class="empty">Working it out…</div></div>
     </div>
   </div>
@@ -3492,7 +3493,49 @@ function checkRow(state, title, figure, detail){
   </div>`;
 }
 
+// Whether his server is actually up, in the app, where he can look at it.
+// He found out it had fallen over from an email from the hosting company
+// two hours after the fact -- an email that told him a number and nothing
+// he could do. The server now keeps its own record of any failure, and
+// this reads it back.
+async function showServerState(){
+  const el = document.getElementById('serverState');
+  if(!el) return;
+  const url = backendUrl();
+  const line = (colour, text) => `<div style="padding:10px 12px; border-radius:8px; background:var(--panel); border:1px solid ${colour}; color:${colour}; font-size:12.5px; line-height:1.5;">${text}</div>`;
+  if(!url){ el.innerHTML = line('var(--text-dim)', 'No server connected, so this is only counting what is saved on this phone.'); return; }
+  el.innerHTML = line('var(--border)', 'Checking your server…');
+  let d;
+  try{
+    const r = await fetch(url.replace(/\/$/,'')+'/health');
+    if(!r.ok) throw new Error('status '+r.status);
+    d = await r.json();
+  }catch(e){
+    el.innerHTML = line('var(--bear)', '<b>Your server is not answering right now.</b> Nothing new can come in from Schwab until it is back, and setups cannot be read. Everything already saved on this phone is safe and unaffected. If it has been idle a while it can take up to a minute to wake up — pull this page up again in a minute before assuming the worst.');
+    return;
+  }
+  const mins = Math.round((d.uptimeSeconds || 0) / 60);
+  const upText = mins < 60
+    ? `${mins} minute${mins===1?'':'s'}`
+    : `${Math.round(mins/60)} hour${Math.round(mins/60)===1?'':'s'}`;
+  const fails = Array.isArray(d.recentFailures) ? d.recentFailures : [];
+  if(!fails.length){
+    el.innerHTML = line('var(--bull)', `<b>Your server is up.</b> Running for ${upText} with nothing gone wrong in that time.`);
+    return;
+  }
+  const last = fails[0] || {};
+  const when = last.at ? new Date(last.at) : null;
+  const ago = when ? Math.round((Date.now() - when.getTime())/60000) : null;
+  const agoText = ago == null ? 'at an unknown time'
+    : (ago < 60 ? `${ago} minute${ago===1?'':'s'} ago` : `${Math.round(ago/60)} hour${Math.round(ago/60)===1?'':'s'} ago`);
+  el.innerHTML = line('var(--amber)',
+    `<b>Your server is up</b>, running for ${upText}. It hit a problem ${agoText}` +
+    `${fails.length>1?` (and ${fails.length-1} other${fails.length-1===1?'':'s'} recorded before that)` : ''}. ` +
+    `It no longer stops when that happens — it writes down what went wrong and keeps going, so your trades keep arriving. Nothing for you to do.`);
+}
+
 function renderChecklist(){
+  showServerState();
   const box = document.getElementById('checklistBody');
   if(!box) return;
   const all = loadTrades();
