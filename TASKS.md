@@ -9,6 +9,66 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+39. **Reading the setup happens on its own; a Checks page; and July
+    2026 was right all along** (2026-08-30).
+    **Status: BUILT AND TESTED (41 + 29 new browser checks, 12 new
+    server checks, plus thirteen existing suites re-run). Not yet
+    confirmed on the phone or against a live AI.**
+
+    **First, a correction.** Looking at his screenshot I said July 2026
+    showing only 3 trades looked wrong and that roughly 24 were expected.
+    That number was invented — nothing had measured it. His own broker
+    export settles it: in July 2026 his account has exactly **two option
+    fills**, both closing the NIO puts he bought on 24 June (3 contracts
+    at $0.53 and 1 at $0.54). Everything else in July, and every single
+    line in August, is money moving in and out — wires and transfers, not
+    trades. The buy was 4 contracts at $0.49, so the month comes to
+    **+$17.00 before fees** and **+$11.69 after** — and the journal shows
+    $17.00 on the before-fees view, exactly right. July is not missing
+    anything. He stopped trading on 23 July.
+
+    **Reading the setup no longer needs him.** It was a button on the
+    Home tab saying "Classify 304 Trades with AI" — maintenance the app
+    was making him perform, when he cannot know that trades have arrived
+    unread and has said plainly he does not want to keep tapping things.
+    It now happens by itself whenever the app is open: twenty trades at a
+    time, one question every two and a half seconds, saving after each so
+    closing the app loses nothing, and picking up where it left off.
+
+    Bounded on every side, the same way the automatic rebuild is: twenty
+    per batch, two looks per trade and then it stops asking, never two
+    runs at once, and it stops the moment the AI says it is out of
+    allowance rather than burning the rest of the list against a wall.
+
+    **A real bug found on the way.** Reading only ever looked for a
+    missing *setup*. The three plays were added on 29 August, so every
+    trade that already carried a setup was treated as finished and could
+    never have a play put on it — however many times reading ran. A trade
+    now carries two answers, asked and written separately.
+
+    **The AI saying "not now" is now its own answer.** Google's free
+    allowance has a ceiling per minute and per day. Hitting it used to
+    look identical to a broken trade, so a backlog would grind through
+    three hundred refusals and mark every trade as already looked at. The
+    server now reports it separately, the app pauses for an hour, and the
+    Home tab says so in words — with nothing for him to tap.
+
+    **A "Checks" page on the bottom bar.** He asked for his list
+    somewhere he could pull up instead of scrolling back through a chat.
+    Every line on it is *counted from the trades on his phone at the
+    moment he opens it* — not a claim written down weeks ago. Prices,
+    stock prices (and how many are exact rather than reconstructed),
+    times, dates, pictures, video, setups and plays, timeframe alignment,
+    backtesting, fees. The three that are not finished say so plainly:
+    pictures still need a tap per trade and have never run through a live
+    trade, video needs an iPhone app that has not been started, and
+    backtesting has never been run over real market history.
+
+    **What could not be checked from here:** the live AI (the tests use a
+    stand-in), anything about how it looks on his actual phone, and the
+    server — his backend cannot be reached from this environment, so
+    nothing here has been run against his real 304 trades.
+
 25. **Stop the journal recording the same trade twice, and fetch a full
     year of history** (2026-08-29).
     **Status: BUILT AND TESTED (strat-journal-app PR #42,

@@ -320,6 +320,26 @@ Uses **The Strat**. Key concepts the code implements:
   notices the gap itself and rebuilds. Anything that runs on its own needs
   bounds on every side — a rate limit, an attempt cap, a "not while one is
   already running" check, and a minimum worth doing.
+- **A second answer added later is invisible to a check written for the
+  first.** Reading a trade's setup asked "is the setup missing?" When the
+  three plays were added as a second, separate answer, every trade that
+  already had a setup was still "not missing" — so the play could never
+  be filled in on any of them, however many times reading ran, and no
+  error was ever raised. When a record gains a second field that the same
+  job fills, every "is this done?" test written for the first one is now
+  wrong.
+- **"Out of allowance" is not "broken".** A free AI tier refuses once its
+  per-minute or per-day ceiling is hit, and that refusal looked exactly
+  like a trade that could not be read. A backlog would grind through three
+  hundred identical refusals and mark every trade as already looked at,
+  permanently. A rate refusal must be its own answer, must pause the run,
+  and must not spend the item's retry.
+- **Never invent the number you are comparing against.** Told July showed
+  3 trades, I said roughly 24 were expected and called it an anomaly.
+  Nothing had measured 24. His own broker export has exactly two option
+  fills in July — the NIO closes — and none at all in August; he stopped
+  trading on 23 July. Three was right, the alarm was mine, and the file
+  that settles it was already on disk. Measure first, then compare.
 - **A job nothing watches is a job he has to press a button for.** The
   5-minute cron only looked for NEW trades. A backfill Schwab blocked, or
   one killed mid-run by a Render restart (left marked "running" forever),
