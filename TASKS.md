@@ -9,6 +9,55 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+40. **The server was dying outright, and he found out by email**
+    (2026-08-30). **Status: BUILT AND TESTED (19 new server checks, 12
+    new app checks, plus every existing suite in both repos re-run).
+    Not yet confirmed on his live server.**
+
+    He forwarded a notification from the hosting company: *"Server
+    failure detected on strat-journal-backend: Exited with status 1."*
+
+    **What that means.** Node ends the entire program the moment any
+    background job fails without something wrapping it — and there was
+    nothing anywhere in this backend to stop that. Confirmed by test, not
+    inferred: a single stray failure exits with status 1.
+
+    So one failure in one background job took down *everything at once* —
+    the five-minute check for new trades, the live connection to Schwab,
+    the history import, and every request the phone makes. And the only
+    sign was an email hours later that he can do nothing with.
+
+    **The specific unwrapped paths found** (any one of them fatal):
+    - `connectStreamer()` was started and not waited on, from both
+      `startStreamer()` and the reconnect timer. Opening the WebSocket
+      itself sits outside that function's own try, so a bad address from
+      Schwab escaped and ended the process.
+    - Two `ws.send(...)` calls inside socket handlers. Sending on a
+      socket that closed a moment earlier throws, and a throw inside a
+      handler like that is caught by nothing.
+    - `persistExistingFeedback()` at startup, started and not waited on.
+    - `await runSyncCheck()` in the five-minute job with nothing around
+      it. It guards itself today, but nothing held the promise, so
+      anything that ever escaped it would end the server rather than skip
+      one tick — and its own catch read `err.message`, which throws again
+      if the failure carries something that is not an error.
+
+    **Fixed on three levels:** every one of those paths wrapped; a floor
+    under the whole process (`crashGuard.js`) so an unhandled failure is
+    logged loudly and the server carries on; and each failure written to
+    storage and reported by `/health`, because a crash nobody can read is
+    the same as no crash report.
+
+    **And he can now see it himself.** The Checks page says whether his
+    server is answering, how long it has been running, and whether it hit
+    anything recently — in plain words, with no raw failure text.
+
+    **What could not be checked:** his live server. This environment is
+    blocked from reaching it, so the actual crash log was never readable
+    and the specific cause is unproven. What is proven is that all four
+    paths above could have caused exactly this, and that none of them can
+    end the server any more.
+
 39. **Reading the setup happens on its own; a Checks page; and July
     2026 was right all along** (2026-08-30).
     **Status: BUILT AND TESTED (41 + 29 new browser checks, 12 new

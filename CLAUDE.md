@@ -347,6 +347,33 @@ Uses **The Strat**. Key concepts the code implements:
   reported having to tap repeatedly. Twice. Any long job that can be
   interrupted needs something that resumes it on a schedule, with a
   backoff and an attempt limit.
+- **One unwrapped failure anywhere ended the ENTIRE server.** Render
+  emailed him "Exited with status 1" — Node ends the whole process on an
+  unhandled promise rejection or a throw inside an event handler, and
+  there was no `process.on('unhandledRejection')` or `uncaughtException`
+  anywhere in the backend. So a WebSocket that refused to open, or a
+  `ws.send` on a socket that had just closed, took down the five-minute
+  sync, the live stream, the history import and every route the phone
+  talks to, all at once — and he found out hours later from an email he
+  could do nothing with. Anything started and not waited on
+  (`connectStreamer()`, `setTimeout(connectStreamer)`,
+  `persistExistingFeedback()`, the cron callback) needs its own catch, a
+  throw inside an event handler needs its own try, and the process needs
+  a floor under it. Confirmed by test: without the guards a single
+  `Promise.reject` exits with status 1; with them the process survives
+  fifty in a row.
+- **A crash nobody can read is the same as no crash report.** Render's
+  logs age out and he cannot read them anyway. Each failure is now
+  written to storage and reported by `/health` (`uptimeSeconds`,
+  `startedAt`, `recentFailures`), and the app's Checks page says in plain
+  words whether the server is up, how long it has been up, and whether it
+  hit anything recently — so "why did my trades stop" is answered from
+  evidence rather than guessed at.
+- **A test that reads the source and matches text fails on a comment.**
+  `resume-test.js` asserted `/cron\.schedule\([\s\S]{0,300}resumeBackfillIfNeeded/`.
+  Adding a comment above the call broke it while the behaviour was
+  untouched. The cron callback is now a named `runScheduledTick` the test
+  actually runs. Prefer calling the thing over pattern-matching the file.
 - **Never bake an instruction into an error message.** `plainErrorText`
   returned "…wait fifteen minutes and tap Get My Trades again" as part of
   the cause, so when the server gained the ability to retry by itself the
