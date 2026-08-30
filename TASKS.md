@@ -9,6 +9,36 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+42. **Something that stops the crash coming back, rather than a promise
+    to remember** (2026-08-30). **Status: BUILT AND TESTED (37 routes
+    wrapped, an automatic check, a live all-routes smoke test, every
+    backend suite re-run).**
+
+    He asked the right question: how do we stop this happening again?
+
+    A promise to be careful is not an answer, so this is the answer.
+    `guardCheck.js` reads every file on the server and fails if any of
+    the shapes that caused the crash come back: an unwrapped request
+    handler, a job handed to something that will never notice it failed,
+    the missing safety floor, or a file using the wrapper without
+    importing it. A GitHub Action runs it on every single change, before
+    it can reach the live server.
+
+    **Writing it immediately found 27 more unwrapped routes** than the
+    hand-audit in task 41 had — 37 in total. The hand-audit had looked
+    for a missing try/catch, which is not the same requirement, and so
+    passed over routes that were still capable of ending the server. That
+    is exactly why this is a check and not a habit.
+
+    **And the check caught a real break while being written:** a route
+    wrapped in a file that had not imported the wrapper. The server would
+    not have started at all. Worth noting what happened there — the crash
+    floor from task 40 DID keep the program alive, but it never got as
+    far as answering anything. "Still running" is not "working", so every
+    change now also gets a smoke test that boots the real server with
+    nothing configured and hits all 15 routes: all 15 answer, none hang,
+    and it is still running afterwards.
+
 41. **The route his phone polls every 30 seconds could kill the server**
     (2026-08-30). **Status: BUILT AND TESTED (10 new server checks plus
     every existing backend suite re-run). Not confirmed on his live

@@ -362,6 +362,19 @@ Uses **The Strat**. Key concepts the code implements:
   a floor under it. Confirmed by test: without the guards a single
   `Promise.reject` exits with status 1; with them the process survives
   fifty in a row.
+- **A rule nothing enforces is a rule that will be broken again.** After
+  the crash, thirty-seven async routes needed wrapping — and the first
+  hand-audit found only ten of them, because it looked for a missing
+  try/catch instead of the real requirement. `guardCheck.js` now reads
+  every file and fails on the three shapes that caused the crash, and a
+  GitHub Action runs it on every push. It caught a real regression while
+  being written (a route wrapped in `wrap()` in a file that never imported
+  `wrap` — the server would not start at all).
+- **A crash guard is a floor, not a substitute for the code being right.**
+  That missing import was caught and survived by `installCrashGuards`, and
+  the process stayed alive — but it never reached `app.listen`, so nothing
+  answered. "Still running" is not "working". Every change to the server
+  gets a smoke test that boots it for real and hits every route.
 - **Express 4 does not understand a route handler that fails.** An
   `async (req, res) => {}` that throws produces a promise nobody is
   holding, which ended the whole process — checked directly, not assumed.
