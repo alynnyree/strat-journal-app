@@ -4176,6 +4176,80 @@ function backfillResultMessage(status, found, total){
   return ['ok', `Nothing new to add — still ${total} trades.`];
 }
 
+// Rebuilds the journal by itself when the server can supply something
+// the saved trades do not have.
+//
+// He asked why he keeps having to press "Reset & Re-import". The honest
+// answer was that he shouldn't: it is maintenance the app was making him
+// perform every time the server learned to work something out that it
+// could not before — fees, a real stock price, timeframe alignment from
+// minute data. He has no way of knowing when that happens, so it can
+// only ever have been a button he was told to press.
+//
+// The journal lives on this phone, not the server, so the server cannot
+// refill it on its own. This side has to notice and ask.
+const AUTO_REBUILD_KEY = 'strat_auto_rebuild';
+const REBUILD_COOLDOWN_MS = 12 * 60 * 60 * 1000;  // never more than twice a day
+const MAX_AUTO_REBUILDS = 3;                       // then stop, rather than loop for ever
+const REBUILD_SHARE = 0.25;                        // a quarter of trades short is worth a rebuild
+
+function rebuildHistory(){
+  try{ return JSON.parse(localStorage.getItem(AUTO_REBUILD_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+
+// What a trade should have once the server has finished with it. Only
+// closed trades count -- an open one has no exit to price or charge.
+function tradeIsStale(t){
+  if(t.optExit == null) return false;
+  if(t.source !== 'schwab-auto') return false;   // his own typed entries are not the server's to fill
+  return t.fees == null || t.undEntrySource == null;
+}
+
+async function maybeAutoRebuild(url){
+  if(!url) return false;
+  const hist = rebuildHistory();
+  if((hist.attempts || 0) >= MAX_AUTO_REBUILDS) return false;
+  if(hist.lastAt && Date.now() - hist.lastAt < REBUILD_COOLDOWN_MS) return false;
+
+  const trades = loadTrades();
+  const closed = trades.filter(t => t.optExit != null && t.source === 'schwab-auto');
+  if(closed.length < 5) return false;             // too few to be worth it
+  const stale = closed.filter(tradeIsStale).length;
+  if(stale / closed.length < REBUILD_SHARE) return false;
+
+  // Never start one over the top of a rebuild already running.
+  const status = await fetchBackfillStatus(url);
+  if(status && status.status === 'running') return false;
+
+  localStorage.setItem(AUTO_REBUILD_KEY, JSON.stringify({
+    lastAt: Date.now(), attempts: (hist.attempts || 0) + 1,
+  }));
+
+  setConnState(true, `Connected · bringing ${stale} trade${stale===1?'':'s'} up to date…`);
+  showStatus('info', `${stale} of your trades are missing details the server can now work out — fees, real stock prices, timeframe alignment. Fetching them now. Nothing for you to do, and nothing you typed in yourself is touched.`);
+  try{
+    await fetch(url+'/api/trades/reset', { method:'POST' });
+    await fetch(url+'/api/trades/backfill', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365}),
+    });
+    return true;
+  }catch(e){
+    // Not worth interrupting him over -- it tries again tomorrow.
+    return false;
+  }
+}
+
+// Once a rebuild has actually filled the gaps, the attempt count is
+// cleared so a future improvement gets a fresh set of tries.
+function noteRebuildOutcome(){
+  const trades = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  if(!trades.length) return;
+  if(trades.filter(tradeIsStale).length / trades.length < REBUILD_SHARE){
+    localStorage.removeItem(AUTO_REBUILD_KEY);
+  }
+}
+
 // Runs quietly whenever the app opens. This is the real answer to "I
 // don't want to upload my trades all the time" — in normal use there is
 // nothing to press, because it has already happened by the time the
@@ -4193,6 +4267,20 @@ async function autoCollectOnOpen(){
     // green light meant "the app can reach my server" — which was true
     // and green while the server's own Schwab sign-in had been dead long
     // enough for a month of trades to go unfetched. Ask the second one.
+    // If the saved trades are missing things the server can now supply,
+    // fetch them without being asked. This is the button he should not
+    // have to keep finding.
+    noteRebuildOutcome();
+    if(await maybeAutoRebuild(url)){
+      // Give the rebuild a moment to start producing, then collect what
+      // it has. The rest arrives on the ordinary half-minute poll.
+      setTimeout(async ()=>{
+        await pollBackend(true);
+        noteRebuildOutcome();
+        renderJournal(); renderDashboard();
+      }, 20000);
+    }
+
     const auth = await fetchSchwabAuthState(url);
     if(auth && auth.needsReconnect){
       showReconnect(true);
