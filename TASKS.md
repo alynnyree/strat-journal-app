@@ -9,6 +9,48 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+43. **Alpaca was never actually being used for stock prices** (2026-08-30).
+    **Status: BUILT AND TESTED (13 new server checks, 12 new app checks,
+    plus every suite in both repos re-run). Not verified against the live
+    Alpaca service — this environment cannot reach it.**
+
+    He asked whether the Alpaca work had failed, because his trades still
+    said "approx." He was right. It had.
+
+    **The cause.** The decision "should we use Alpaca?" was made by
+    reading a copy of the keys held in the server's memory. His keys are
+    typed into the app and kept in storage — and memory is wiped every
+    time the server restarts, which the hosting company does on its own,
+    and which certainly happened when the server crashed. So the answer
+    was "no Alpaca keys" while the keys sat in storage the whole time,
+    and every price quietly fell back to a reconstructed Schwab candle.
+
+    Nothing was logged and nothing failed. Every trade still got a price.
+    The only visible sign was one small word on the card that he had to
+    spot himself.
+
+    **It was worse than the price.** Six places asked the same question
+    the same wrong way, so Alpaca was also silently switched off for Bar
+    Replay (back to ~35 days instead of years), the FTFC timeframe check,
+    and three paths in backtesting.
+
+    **Fixed** with a single way of asking that loads the saved keys
+    first, used at all six. Trades now also record whether Alpaca was
+    genuinely available when they were priced — without that, a price
+    Alpaca could not improve looks identical to one it was never asked
+    about.
+
+    **And the app now notices.** Its "is this trade up to date?" test
+    asked only "is anything missing?" — and these trades had a price, so
+    they counted as finished and the automatic rebuild would never have
+    touched them again. It now also asks "has this price ever been looked
+    up with Alpaca available?", but only while Alpaca really is
+    connected, so it cannot chase an exactness it can never reach.
+
+    **Prevention:** the automatic check now fails on any file asking the
+    question the wrong way, and a test boots a cold server with the keys
+    only in storage and proves the price comes back exact.
+
 42. **Something that stops the crash coming back, rather than a promise
     to remember** (2026-08-30). **Status: BUILT AND TESTED (37 routes
     wrapped, an automatic check, a live all-routes smoke test, every

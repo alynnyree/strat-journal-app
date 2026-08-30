@@ -4516,10 +4516,41 @@ function rebuildHistory(){
 
 // What a trade should have once the server has finished with it. Only
 // closed trades count -- an open one has no exit to price or charge.
+// Whether the server can currently reach Alpaca. Asked once when the app
+// opens; assumed off until answered, so nothing is judged "out of date"
+// on the strength of a guess.
+let alpacaConnected = false;
+
 function tradeIsStale(t){
   if(t.optExit == null) return false;
   if(t.source !== 'schwab-auto') return false;   // his own typed entries are not the server's to fill
-  return t.fees == null || t.undEntrySource == null;
+  if(t.fees == null || t.undEntrySource == null) return true;
+  // A stock price that has never been looked up with Alpaca available.
+  //
+  // This is the check that was missing. It asked only "is anything
+  // absent?" -- and these trades had a price, so they counted as
+  // finished, and the rebuild would never touch them again. But the
+  // price was a reconstruction from a Schwab candle, and Alpaca can
+  // replace it with the actual trade that printed at that second. So
+  // every one of them sat marked "approx." for ever with nothing coming
+  // to fix it. Asked only while Alpaca really is connected, or the app
+  // would chase an exactness it cannot get.
+  if(alpacaConnected && t.undPricedWithAlpaca !== true) return true;
+  return false;
+}
+
+// Asks the server whether Alpaca is connected. Kept separate from the
+// display on the Journal tab, because the answer is needed whether or not
+// that part of the screen is open.
+async function refreshAlpacaConnected(url){
+  if(!url) return false;
+  try{
+    const r = await fetch(url+'/api/alpaca/status');
+    if(!r.ok) return alpacaConnected;
+    const st = await r.json();
+    alpacaConnected = !!(st && st.connected);
+  }catch(e){ /* leave it as it was; a wobble is not an answer */ }
+  return alpacaConnected;
 }
 
 // Says plainly where the rebuild has got to, and how much of the journal
@@ -4623,6 +4654,9 @@ async function autoCollectOnOpen(){
   if(!url){ setConnState(false, 'Not connected'); toggleConnSettings(true); return; }
   setConnState(true, 'Connected — checking for new trades…');
   try{
+    // Asked BEFORE anything judges whether a trade is up to date, since
+    // "has this price been looked up with Alpaca?" is part of that.
+    await refreshAlpacaConnected(url);
     await pollBackend(true);
     const n = loadTrades().length;
     // Two different questions, and only one of them was ever asked. The
@@ -4866,6 +4900,13 @@ function refreshTradeFacts(saved, fresh){
   // The underlying price, and how it was obtained. A rebuild that has an
   // exact print replaces a candle close; one that does not, does not.
   if(fresh.undEntry != null){ set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact); }
+  // Whether Alpaca was available when the server worked this price out.
+  // Without carrying this over, a rebuild that DID use Alpaca would look
+  // exactly like one that never tried, and the trade would be rebuilt for
+  // ever. Only ever moves from "not checked" to "checked".
+  if(fresh.undPricedWithAlpaca === true && saved.undPricedWithAlpaca !== true){
+    saved.undPricedWithAlpaca = true; changed = true;
+  }
   if(fresh.undExit  != null){ set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact); }
 
   // Timeframe alignment. Only taken when the rebuild actually measured
