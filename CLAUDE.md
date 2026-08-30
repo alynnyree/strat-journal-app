@@ -362,6 +362,22 @@ Uses **The Strat**. Key concepts the code implements:
   a floor under it. Confirmed by test: without the guards a single
   `Promise.reject` exits with status 1; with them the process survives
   fifty in a row.
+- **A cap on pages is not a cap on size.** `fetchBars` limited itself to
+  200 pages of 10,000 candles — two million objects, measured at 274MB in
+  one array, on a server whose whole allowance is a fraction of that.
+  Render restarted it for "exceeded its memory limit". Capped at 150,000
+  candles (72MB measured), and truncation is logged rather than quietly
+  returning less than was asked for. Any accumulating list needs a
+  ceiling on what it accumulates, not just on how many times it loops.
+- **A process killed from outside leaves no record.** The crash log added
+  after the "status 1" crash cannot catch a memory kill: nothing in the
+  program runs. So `/health` reports memory in use and PEAK memory,
+  sampled on a timer as well as on request, and the Checks page treats a
+  very short uptime as the fingerprint of a restart nobody recorded.
+- **A long job that saves only at the end loses everything to a restart.**
+  `runBackfill` enriched all 300 trades and saved once. Every restart —
+  and there were several — threw the whole run away. It saves every 25
+  now.
 - **A cache that empties on restart is not a place to keep an answer.**
   His Alpaca keys are typed into the app and kept in storage, but the
   gate deciding whether to use Alpaca called `isConfigured()`, which
