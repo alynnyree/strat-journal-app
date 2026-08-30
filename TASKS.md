@@ -9,6 +9,30 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+41. **The route his phone polls every 30 seconds could kill the server**
+    (2026-08-30). **Status: BUILT AND TESTED (10 new server checks plus
+    every existing backend suite re-run). Not confirmed on his live
+    server — this environment cannot reach it.**
+
+    Following on from task 40. Express, the piece that answers requests,
+    is on version 4, and version 4 does not understand a request handler
+    that fails: the failure becomes a promise nobody is holding, which
+    ends the whole program. Checked directly here rather than assumed.
+
+    **Ten routes had nothing around them** — including
+    `/api/trades/pending`, the one his phone asks for new trades every
+    thirty seconds. One hiccup reaching storage while the app was open on
+    his phone would have taken the entire server down. That makes this
+    the most likely explanation for the alert he received, though the
+    actual log is unreadable from here so it stays unproven.
+
+    Every one now goes through a wrapper, and a final handler turns a
+    failed request into a plain answer — "Something went wrong on the
+    server. Nothing you saved is affected." — instead of a hung phone or
+    a wall of raw error text. Checked: ten failing requests in a row now
+    leave the server running and answering, and it recovers by itself the
+    moment storage comes back.
+
 40. **The server was dying outright, and he found out by email**
     (2026-08-30). **Status: BUILT AND TESTED (19 new server checks, 12
     new app checks, plus every existing suite in both repos re-run).
