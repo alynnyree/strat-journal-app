@@ -102,8 +102,43 @@ Uses **The Strat**. Key concepts the code implements:
   1H, 30m, 15m, 5m, 3m, 1m). Confirmed when **any 4+ consecutive**
   timeframes agree — the run can start anywhere in the sequence, not just
   at the largest timeframe.
-- **Setups traded:** 2→3 Reversal, FTFC Continuation, Broadening Formation
-  Reversal.
+- **Setups traded — the owner's own 9-combo list** (corrected 2026-08-21,
+  task 10; this section previously listed "2→3 Reversal, FTFC Continuation,
+  Broadening Formation Reversal," which was **wrong** and stayed stale here
+  for two days after the app itself was fixed — do not reintroduce it):
+  2-1-2 Continuation, 2-1-2 Reversal, 3-1-2 Reversal, 2-2 Continuation,
+  2-2 Reversal, 3-2-2 Reversal, 1-2-2 Rev Strat, 1 Bar Rev Strat, and PMG
+  (Pivot Machine Gun). Each is usable Long or Short via the trade's own
+  direction field, so there is no separate bullish/bearish variant of each.
+  The authoritative copy of this list, with each pattern's full definition,
+  lives in `aiClient.js`'s `STRATEGIES` array and must stay in sync with
+  `index.html`'s Strat Setup cards (`data-v` values).
+- **THREE PLAYS, alongside the nine combos — not instead of them**
+  (confirmed 2026-08-29, in his own words: "These strategies are in
+  conjunction with the 9 strat combos. Nothing should be disregarded").
+  The combo is WHAT he saw; the play is HOW he chose the trade. A trade
+  carries both, and each is classified separately.
+  1. **Broadening Formation Scalp** — broadening formation on a higher
+     timeframe, scalped on the 1m/5m from one edge to the other side.
+  2. **FTFC Direction Play** — a Strat setup in the direction the
+     timeframes already agree on. First target is completion of the
+     setup, second is a gap or major pivot; once a pivot or its liquidity
+     is taken out, looking to reverse.
+  3. **2s Turning Into 3s** — a directional bar expanding into an outside
+     bar.
+  All three target reward at least 2x risk. The authoritative copy lives
+  in `aiClient.js`'s `PLAYS` array and must stay in sync with the app's
+  own picker (`data-v` on `.play-opt`).
+- **FTFC and Broadening Formation are context, not setups of their own.**
+  Any of the 9 combos above can be taken with FTFC aligned and/or off a
+  Broadening Formation — that's still that combo, just with context worth
+  recording. The app tracks these as separate fields (`ftfcConfirmed`,
+  computed mechanically from Schwab candle data; `offBroadeningFormation`,
+  a manual toggle, since the owner confirmed a Broadening Formation is a
+  multi-step judgment call the app does not auto-detect for real trades).
+  The one deliberate exception is the sandbox Test Classification tool,
+  which has no Schwab data to compute from and so reads all three visually
+  from the picture.
 - **Instruments:** SPY and IWM options, 0DTE–3DTE. Occasionally others.
 - **Always buys to open** (calls or puts), never sells to open. This is why
   P&L needs no sign flip: a rising option price is always profit,
@@ -172,6 +207,167 @@ Uses **The Strat**. Key concepts the code implements:
   purges dead legs and prefers same-day matches.
 - **iOS Safari measures container size before a fullscreen modal finishes
   laying out.** Chart sizing needs a short delayed re-measure.
+- **A fade-in-on-scroll effect hid the entire Journal.** Sections were
+  bound to the effect while their tab was still hidden, so they were set
+  to invisible and then waited on a visibility notification that never
+  arrived for them. Result: a Journal holding 233 trades, every one
+  stored and every one rendered, displaying as a blank page — and the
+  owner reasonably concluding his trades had never imported. **Rule: a
+  visual effect may never be the only thing standing between the user
+  and their content.** Anything already on screen is revealed
+  immediately with no animation; only things genuinely below the fold
+  are hidden; and there is a second, independent sweep on scroll so a
+  missed notification cannot strand a section. Applies to any future
+  animation, not just this one.
+- **De-duplication and REBUILDING pull in opposite directions.** A trade
+  is identified by contract, entry minute, exit minute, both prices and
+  size — and a rebuilt trade matches its saved self on every one of them,
+  because that is what a rebuild is. So "Reset & Re-import" had its
+  rebuilt copies thrown away as duplicates: an hour of work, nothing
+  changed, reported as "no new trades". A repeat arrival must UPDATE the
+  saved trade with what the server works out (fees, underlying price and
+  its provenance, FTFC, replay, and a setup/play/stop only where he has
+  none) and never touch his own — notes, screenshots, his own tag, his
+  stop, his planned R:R. An empty answer must never overwrite a good one.
+- **A record must be identified by what it IS, never by the reference
+  number it was handed.** Imported trades were de-duplicated on their
+  internal id. "Reset & Re-import" reissues the same trades with fresh
+  ids, so every re-import wrote them all down again — 161 contracts in
+  the journal that were never bought, across 52 contract-days, some
+  trades stored character-for-character five times. It survived months
+  unnoticed because duplicated wins and duplicated losses cancelled out
+  and left total P&L looking nearly right (−$1,116 journal vs −$1,101
+  real) while win rate, average win/loss and the per-setup breakdown were
+  all quietly wrong. Identity for a trade is: contract, entry minute,
+  exit minute, both fill prices, size. Applies to any future import path.
+- **Never report an outcome for work that has not finished, and never
+  dress a guess as a finding.** The import button waited seven seconds,
+  then said "Schwab had nothing new — it may be older than the history
+  Schwab will hand back." The server answers the moment the import
+  STARTS; a year of history takes minutes. So the all-clear was reported
+  over a job still running, and the retention line was invented — nothing
+  had measured it. Worse, the loop stopped as soon as a round brought
+  nothing, so a slow background job exited it after one round. If a job
+  is asynchronous, follow its actual state; if the state is unknown, say
+  it is unknown.
+- **A caught-and-logged failure inside a loop is an invisible failure.**
+  `getOptionFills` skips any 30-day window Schwab refuses, logging to a
+  server log nobody reads. Twelve refused windows and twelve empty ones
+  give an identical answer: no trades. Any loop that swallows per-item
+  errors must count them and hand the count back to the caller.
+- **A default date range is silent data loss.** Backfill defaulted to 90
+  days on BOTH sides — and the frontend passed its own hardcoded 90, so
+  raising only the server's default would have changed nothing. A journal
+  that should have started 2 January started in mid-May, and nothing
+  anywhere said "there is more history I did not ask for." When a range
+  is bounded, either cover the whole plausible history or say on screen
+  what was left out — and check both ends for a second hardcoded copy of
+  the same number.
+- **An edit that fails partway can write nothing while its follow-up
+  edits succeed.** A Python replace script hit an assertion on its third
+  substitution and so never wrote the file, but the next script added
+  calls to the function that first script was supposed to define. The
+  app threw on startup and sat on the opening screen forever —
+  completely unusable — and no test caught it because none of them
+  watched for errors on the page. **Always check the page for thrown
+  errors in browser tests**, and re-verify that a multi-part edit
+  actually landed rather than assuming it did.
+- **The underlying price is a RECONSTRUCTION, not a record.** Schwab's
+  trade record never says where SPY was at the fill. `getUnderlyingPriceAt`
+  takes the close of the last candle before the trade, cascading
+  1m → 5m → 30m → daily as older data runs out, so an old trade's
+  underlying can come from a 30-minute close or the previous day. Realized
+  R:R is computed from it and inherits the error. Never describe it as
+  exact.
+- **Fees are derived from the CASH, not from Schwab's fee lines.** A buy
+  pays the contracts' value plus fees, a sell brings in that value minus
+  fees, so `|netAmount| − price×100×qty` is the fee — arithmetic verified
+  on all 480 of his real fills. An unknown fee is stored as null, never 0,
+  and a null on either side makes the trade's fee and net P&L null too.
+- **The Schwab CSV export carries NO times.** Its columns are Date,
+  Action, Symbol, Description, Quantity, Price, Fees & Comm, Amount, and
+  Date is "07/23/2026". It can confirm dates, prices, sizes and P&L — it
+  can never confirm entry/exit times. Those are covered by direct checks
+  on `toEasternParts` instead (summer/winter, both DST changeovers,
+  midnight-as-24, and a late-evening trade that must not roll onto the
+  next UTC day).
+- **"Most recent" means most recently FINISHED, not most recently
+  started.** Having given the Journal a sort, it sorted by entry — so a
+  NIO position opened 24 June and closed 23 July sat below every trade
+  opened in July, even though nothing had been closed since. He reported
+  the order as wrong a second time and was right a second time. For a day
+  trade the two are identical, which is exactly why it survives testing;
+  the multi-day hold is the case that exposes it.
+- **A list with no sort is not "in order", it is in write order.** The
+  Journal drew trades in whatever order they sat in storage. Imports add
+  at the front, so the January-to-April backfill — fetched last — landed
+  ABOVE the May-to-July trades already there, and the owner reasonably
+  reported the log as inaccurate. Any list shown to him needs an explicit
+  order.
+- **A comparator must answer "these two are equal" with 0.** The Schwab
+  file reader sorted fills with `a.date === b.date ? (isBuy ? -1 : 1) : …`,
+  so two same-day buys each compared as "me first". Six trades split
+  differently out of the same file. Equal inputs return 0; the sort is
+  stable and input order survives.
+
+- **"Reset & Re-import" was maintenance the app made HIM perform.** Every
+  time the server learned to work something out it could not before —
+  fees, a real underlying price, alignment from minute data — the saved
+  trades were stale and only that button fixed them. He cannot know when
+  that happens, so it could only ever be a button he was told about
+  afterwards, and he asked twice why he kept having to press it. The
+  journal lives on the phone, so the server cannot refill it; the app now
+  notices the gap itself and rebuilds. Anything that runs on its own needs
+  bounds on every side — a rate limit, an attempt cap, a "not while one is
+  already running" check, and a minimum worth doing.
+- **A second answer added later is invisible to a check written for the
+  first.** Reading a trade's setup asked "is the setup missing?" When the
+  three plays were added as a second, separate answer, every trade that
+  already had a setup was still "not missing" — so the play could never
+  be filled in on any of them, however many times reading ran, and no
+  error was ever raised. When a record gains a second field that the same
+  job fills, every "is this done?" test written for the first one is now
+  wrong.
+- **"Out of allowance" is not "broken".** A free AI tier refuses once its
+  per-minute or per-day ceiling is hit, and that refusal looked exactly
+  like a trade that could not be read. A backlog would grind through three
+  hundred identical refusals and mark every trade as already looked at,
+  permanently. A rate refusal must be its own answer, must pause the run,
+  and must not spend the item's retry.
+- **Never invent the number you are comparing against.** Told July showed
+  3 trades, I said roughly 24 were expected and called it an anomaly.
+  Nothing had measured 24. His own broker export has exactly two option
+  fills in July — the NIO closes — and none at all in August; he stopped
+  trading on 23 July. Three was right, the alarm was mine, and the file
+  that settles it was already on disk. Measure first, then compare.
+- **A job nothing watches is a job he has to press a button for.** The
+  5-minute cron only looked for NEW trades. A backfill Schwab blocked, or
+  one killed mid-run by a Render restart (left marked "running" forever),
+  had nothing watching it — so the only way out was a manual tap, and he
+  reported having to tap repeatedly. Twice. Any long job that can be
+  interrupted needs something that resumes it on a schedule, with a
+  backoff and an attempt limit.
+- **Never bake an instruction into an error message.** `plainErrorText`
+  returned "…wait fifteen minutes and tap Get My Trades again" as part of
+  the cause, so when the server gained the ability to retry by itself the
+  message told him both "nothing for you to do" and "tap this". Errors
+  describe what happened; only the caller knows whether he must act.
+- **Schwab's sign-in lasts SEVEN DAYS and cannot be extended.** The login
+  flow has to be repeated by hand every week. When it lapses,
+  `getValidAccessToken()` throws and every sync, history import and the
+  live stream all fail at that one point — and because `runBackfill` is
+  fired and forgotten by its route, the throw went to a `.catch` that
+  logged and returned. The owner spent weeks being told "Schwab had
+  nothing new" when nothing had been able to reach Schwab at all. The app
+  now has a "Reconnect to Schwab" button; `/auth/status` reports whether
+  the SERVER can reach Schwab, which is a different question from whether
+  the app can reach the server.
+- **Never show him a server's raw error text.** A lapsed sign-in reached
+  the screen as `{"error":"unsupported_token_type","error_description":
+  "400 Bad Request: ..."}`. The whole answer was in there and none of it
+  was readable by the only kind of person who uses this app. Translate
+  every failure into what happened, whether it is his fault, and what to
+  tap.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

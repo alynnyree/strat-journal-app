@@ -1077,11 +1077,31 @@
 
 </main>
 
+  <!-- CHECKLIST -->
+  <!-- The list he wrote out of what he expects this app to do. It used to
+       live only in a chat he had to scroll back through, which is not
+       somewhere a person can check anything. Every line here is worked out
+       from his own saved trades when it opens, so it reports what is
+       actually true of his journal rather than repeating a claim made
+       weeks ago. -->
+  <div class="view" id="view-checklist">
+    <div class="card">
+      <h3>What This App Is Meant To Do</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5;">
+        Your own list, checked against your own trades every time you open
+        this page. Green means done and counted. Amber means part-way.
+        Grey means not built yet.
+      </div>
+      <div id="checklistBody" style="margin-top:12px;"><div class="empty">Working it out…</div></div>
+    </div>
+  </div>
+
 <div class="navbar">
   <div class="item active" data-view="dashboard" onclick="showView('dashboard')"><span class="ic">◆</span>Home</div>
   <div class="item" data-view="journal" onclick="showView('journal')"><span class="ic">▤</span>Journal</div>
   <div class="item" data-view="new" onclick="startFreshTrade()"><span class="ic">+</span>New</div>
   <div class="item" data-view="ai" onclick="showView('ai')"><span class="ic">✦</span>AI</div>
+  <div class="item" data-view="checklist" onclick="showView('checklist')"><span class="ic">☑</span>Checks</div>
 </div>
 
 <script src="lightweight-charts.standalone.production.js"></script>
@@ -1104,6 +1124,7 @@ function showView(name){
   document.querySelectorAll('.navbar .item').forEach(i=>i.classList.toggle('active', i.dataset.view===name));
   if(name==='dashboard') renderDashboard();
   if(name==='journal') renderJournal();
+  if(name==='checklist') renderChecklist();
   // A hidden tab has no size, so nothing in it could be measured. Now
   // that it is on screen, bind and reveal whatever is actually visible.
   revealScan();
@@ -2914,12 +2935,24 @@ function renderDashboard(){
     }
   }
 
+  // Says where the automatic reading of your setups has got to. This was a
+  // button he had to find and tap; it now happens on its own, so this row
+  // reports rather than asks. A button only comes back for the trades the
+  // AI has already looked at twice and could not call.
   const cr = document.getElementById('classifyRow');
-  const unclassifiedCount = trades.filter(t=>!t.strat).length;
+  const waiting = trades.filter(classifyWaiting).length;
+  const stuck = trades.filter(classifyStuck).length;
+  const pausedUntil = classifyPausedUntil();
   if(classifyInProgress){
-    cr.innerHTML = `<div class="empty"><span class="spin"></span> Classifying trades with AI — this can take a few minutes, feel free to keep using the app.</div>`;
-  } else if(unclassifiedCount > 0){
-    cr.innerHTML = `<button class="primary" id="classifyBtn" onclick="classifyUnclassifiedTrades()" style="margin-top:0; width:100%;">Classify ${unclassifiedCount} Trade${unclassifiedCount===1?'':'s'} with AI</button>`;
+    cr.innerHTML = `<div class="empty"><span class="spin"></span> Reading the setup and the play on your trades — ${classifyDone} of ${classifyTotal} looked at. Nothing for you to do.</div>`;
+  } else if(pausedUntil && waiting > 0){
+    const mins = Math.max(1, Math.round((pausedUntil - Date.now())/60000));
+    cr.innerHTML = `<div class="empty">The AI is at its daily limit. ${waiting} trade${waiting===1?'':'s'} still to read — it carries on by itself in about ${mins} minute${mins===1?'':'s'}.</div>`;
+  } else if(waiting > 0){
+    cr.innerHTML = `<div class="empty">${waiting} trade${waiting===1?'':'s'} still to be read. This happens on its own while the app is open.</div>`;
+  } else if(stuck > 0){
+    cr.innerHTML = `<div class="empty" style="margin-bottom:8px;">${stuck} trade${stuck===1?'':'s'} the AI looked at twice and could not call. You can name the setup yourself by tapping the trade, or have it try again.</div>`
+      + `<button class="secondary" id="classifyBtn" onclick="retryUnclearTrades()" style="margin-top:0; width:100%;">Try ${stuck} Unclear Trade${stuck===1?'':'s'} Again</button>`;
   } else {
     cr.innerHTML = '';
   }
@@ -3242,6 +3275,47 @@ async function runAnalysis(){
 // Returns 'tagged', 'unclear' (checked, not confident), 'authFailed', or
 // 'error' (network/server problem — caller should treat like 'unclear'
 // and let it get retried later).
+// A trade has TWO answers on it, not one: the combo (what he saw on the
+// chart) and the play (how he chose to take it). Reading was only ever
+// checking for the combo, so a trade tagged with a combo months ago could
+// never get a play put on it no matter how many times reading ran — the
+// three plays were added later, and every trade already carrying a combo
+// was quietly treated as finished. Both are now asked for, and each is
+// written on its own.
+function needsClassifying(t){
+  return !t.strat || !t.play;
+}
+
+// How many times the AI has already looked at this trade and come back
+// unsure. Kept on the trade itself, so it survives closing the app and a
+// rebuild cannot lose it. Without it every opening of the app would ask
+// again about the same trades the AI has already said it cannot call, and
+// on a free AI allowance that means the trades it has never seen never get
+// their turn.
+const CLASSIFY_MAX_TRIES = 2;
+function classifyTriesOf(t){ return Number(t.classifyTries) || 0; }
+function classifyWaiting(t){ return needsClassifying(t) && classifyTriesOf(t) < CLASSIFY_MAX_TRIES; }
+function classifyStuck(t){ return needsClassifying(t) && classifyTriesOf(t) >= CLASSIFY_MAX_TRIES; }
+function noteClassifyTry(id){
+  const live = loadTrades();
+  const idx = live.findIndex(t=>String(t.id)===String(id));
+  if(idx === -1) return;
+  live[idx].classifyTries = classifyTriesOf(live[idx]) + 1;
+  saveTrades(live);
+}
+
+// Asks the AI about one trade and, for each of the two answers that comes
+// back confident, puts it on that trade's current saved copy (re-read from
+// storage right before writing, in case something else changed it while
+// the question was out). Anything he chose himself is never overwritten.
+// If the trade carries an entry/exit picture the AI is given it as extra
+// evidence — nothing extra needs sending, the picture already travels on
+// the trade.
+//
+// Answers: 'tagged' (something was written), 'unclear' (looked at, nothing
+// confident enough), 'rateLimited' (the AI is out of allowance for now —
+// the run should pause and NOT count this as a try), 'authFailed' (the App
+// Key does not match), or 'error' (connection or server trouble).
 async function classifyOneTrade(trade){
   const url = backendUrl();
   if(!url) return 'error';
@@ -3250,55 +3324,250 @@ async function classifyOneTrade(trade){
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trade })
     });
     if(r.status === 403) return 'authFailed';
+    if(r.status === 429) return 'rateLimited';
     if(!r.ok) return 'error';
     const { result } = await r.json();
-    if(result && result.strategy){
+    if(result && (result.strategy || result.play)){
       const live = loadTrades();
       const idx = live.findIndex(t=>String(t.id)===String(trade.id));
-      if(idx !== -1 && !live[idx].strat){
-        live[idx].strat = result.strategy;
-        live[idx].stratConfidence = result.confidence;
-        live[idx].stratReasoning = result.reasoning;
-        live[idx].stratUsedScreenshot = !!result.usedScreenshot;
-        saveTrades(live);
-        return 'tagged';
+      if(idx !== -1){
+        let wrote = false;
+        if(result.strategy && !live[idx].strat){
+          live[idx].strat = result.strategy;
+          live[idx].stratConfidence = result.confidence;
+          live[idx].stratReasoning = result.reasoning;
+          live[idx].stratUsedScreenshot = !!result.usedScreenshot;
+          wrote = true;
+        }
+        // The play is written on its own merits. A trade that already has
+        // a combo but no play is exactly the case that used to be skipped.
+        if(result.play && !live[idx].play){
+          live[idx].play = result.play;
+          live[idx].playConfidence = result.playConfidence;
+          live[idx].playReasoning = result.playReasoning;
+          wrote = true;
+        }
+        if(wrote){ saveTrades(live); return 'tagged'; }
       }
     }
     return 'unclear';
   }catch(e){ return 'error'; }
 }
 
-async function classifyUnclassifiedTrades(){
-  if(classifyInProgress) return;
-  const url = backendUrl();
-  if(!url){ showStatus('err', 'Connect your backend first (Journal tab) before classifying trades.'); return; }
-  const targets = loadTrades().filter(t=>!t.strat);
-  if(!targets.length) return;
+// ---- Reading the setup on trades, without being asked to ----
+//
+// This used to be a button on the Dashboard saying "Classify 304 Trades
+// with AI", which is maintenance the app was making him perform: he cannot
+// know when new trades have arrived unread, and he said plainly he does not
+// want to keep tapping things. It now happens on its own whenever the app
+// is open, in small batches, and the button is only there for the trades
+// the AI has already given up on.
+//
+// Bounded on every side, the same way the automatic rebuild is: a batch
+// limit so one opening of the app is not a ten-minute grind, a pause when
+// the AI says it is out of allowance, a limit of two looks per trade, and
+// never two runs at once.
+const AUTO_CLASSIFY_KEY = 'strat_auto_classify';
+const CLASSIFY_BATCH = 20;                       // trades per batch
+const CLASSIFY_PACE_MS = 2500;                   // gap between questions
+const CLASSIFY_NEXT_BATCH_MS = 30000;            // gap between batches
+const CLASSIFY_PAUSE_MS = 60 * 60 * 1000;        // wait after "out of allowance"
 
+let classifyDone = 0, classifyTotal = 0;
+
+function classifyState(){
+  try{ return JSON.parse(localStorage.getItem(AUTO_CLASSIFY_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function classifyPausedUntil(){
+  const until = Number(classifyState().pausedUntil) || 0;
+  return until > Date.now() ? until : 0;
+}
+function pauseClassifying(){
+  localStorage.setItem(AUTO_CLASSIFY_KEY, JSON.stringify({ pausedUntil: Date.now() + CLASSIFY_PAUSE_MS }));
+}
+
+// Works through a list of trades one at a time, saving after each, so
+// closing the app part-way through loses nothing. Sent one trade per
+// question rather than all of them in one — a single request that takes
+// minutes to answer is exactly the thing that times out in Safari on a
+// phone (see CLAUDE.md's known traps).
+async function runClassification(targets, { announce }){
+  if(classifyInProgress) return { tagged:0, checked:0, stopped:null };
   classifyInProgress = true;
+  classifyDone = 0; classifyTotal = targets.length;
   renderDashboard();
-  showStatus('info', `Classifying ${targets.length} trade(s) with AI — this can take a few minutes...`);
-  log('syncLog', `Starting AI classification of ${targets.length} trade(s)`);
+  if(announce) showStatus('info', `Reading the setup on ${targets.length} trade${targets.length===1?'':'s'} — this takes a few minutes. You can keep using the app.`);
+  log('syncLog', `Reading setups on ${targets.length} trade(s)`);
 
-  let tagged = 0, checked = 0, authFailed = false;
+  let tagged = 0, checked = 0, stopped = null;
   for(const trade of targets){
     const outcome = await classifyOneTrade(trade);
-    if(outcome === 'authFailed'){ authFailed = true; break; }
+    if(outcome === 'authFailed'){ stopped = 'authFailed'; break; }
+    if(outcome === 'rateLimited'){ stopped = 'rateLimited'; pauseClassifying(); break; }
+    // A connection wobble is not the AI saying it cannot read the trade,
+    // so it must not spend one of that trade's two looks.
+    if(outcome === 'tagged' || outcome === 'unclear') noteClassifyTry(trade.id);
     if(outcome === 'tagged') tagged++;
-    checked++;
-    await new Promise(res=>setTimeout(res, 800));
+    checked++; classifyDone++;
+    if(checked % 5 === 0) renderDashboard();
+    await new Promise(res=>setTimeout(res, CLASSIFY_PACE_MS));
   }
 
   classifyInProgress = false;
-  if(authFailed){
-    showStatus('err', 'Classification stopped: the App Key doesn\'t match the backend (see task 1 — 403 error). Fix that first, then try again.');
-    log('syncLog', 'AI classification stopped: App Key mismatch (403)');
-  } else {
-    showStatus('ok', `Classification finished — ${tagged} of ${checked} trade(s) tagged. The rest weren't confident matches and still show "Needs Setup".`);
-    log('syncLog', `AI classification finished: ${tagged}/${checked} trades tagged`);
-  }
+  log('syncLog', `Setup reading finished: ${tagged}/${checked} trade(s) tagged${stopped ? ' (stopped: '+stopped+')' : ''}`);
   renderDashboard();
   renderJournal();
+  return { tagged, checked, stopped };
+}
+
+// Runs quietly while the app is open, and keeps going batch after batch
+// until there is nothing left it is allowed to ask about. Says nothing
+// unless something is genuinely wrong — the state line on the Dashboard
+// already shows what is happening.
+async function autoClassifyLoop(){
+  const url = backendUrl();
+  if(!url || classifyInProgress) return;
+  if(classifyPausedUntil()) return;
+  if(document.visibilityState !== 'visible') return;
+
+  const queue = tradesNewestFirst().filter(classifyWaiting);
+  if(!queue.length) return;
+
+  const { stopped } = await runClassification(queue.slice(0, CLASSIFY_BATCH), { announce:false });
+  if(stopped === 'authFailed'){
+    showStatus('err', 'Reading your setups stopped: the App Key on the Journal tab does not match the one on the server, so the server refused. Fix that and it carries on by itself.');
+    return;
+  }
+  if(stopped === 'rateLimited') return;  // picked up again in an hour
+  if(tradesNewestFirst().some(classifyWaiting)){
+    setTimeout(autoClassifyLoop, CLASSIFY_NEXT_BATCH_MS);
+  }
+}
+
+// The button that remains: only for trades the AI has already looked at
+// twice and could not call. Gives them a fresh set of looks.
+async function retryUnclearTrades(){
+  const url = backendUrl();
+  if(!url){ showStatus('err', 'Connect your backend first (Journal tab) before reading setups.'); return; }
+  const live = loadTrades();
+  let changed = false;
+  for(const t of live){ if(classifyStuck(t)){ t.classifyTries = 0; changed = true; } }
+  if(changed) saveTrades(live);
+  localStorage.removeItem(AUTO_CLASSIFY_KEY);   // a deliberate tap clears any pause
+  const targets = tradesNewestFirst().filter(classifyWaiting);
+  if(!targets.length){ showStatus('ok', 'Every trade already has both its setup and its play.'); return; }
+  const { tagged, checked, stopped } = await runClassification(targets.slice(0, CLASSIFY_BATCH), { announce:true });
+  if(stopped === 'authFailed'){
+    showStatus('err', 'Stopped: the App Key on the Journal tab does not match the one on the server, so the server refused.');
+  } else if(stopped === 'rateLimited'){
+    showStatus('info', `The AI hit its limit after ${checked} trade${checked===1?'':'s'} — ${tagged} newly tagged. It picks the rest up by itself in about an hour.`);
+  } else {
+    showStatus('ok', `${tagged} of ${checked} trade${checked===1?'':'s'} tagged. The rest still were not a confident match and keep showing "Needs Setup".`);
+    if(tradesNewestFirst().some(classifyWaiting)) setTimeout(autoClassifyLoop, CLASSIFY_NEXT_BATCH_MS);
+  }
+}
+
+
+// ---- The checklist he wrote, answered from his own trades ----------
+//
+// He listed what he expects this app to do, and asked for it somewhere he
+// could pull up rather than a chat he has to scroll. A list of claims
+// would be worth nothing — the whole reason he asked is that he has been
+// told things were working when they were not. So every line below is
+// COUNTED from the trades sitting in his journal at the moment he opens
+// this page. Where a thing cannot be counted (whether a picture looks
+// right on a phone, whether a number matches his broker) it says so
+// rather than claiming a pass.
+function checkRow(state, title, figure, detail){
+  const colour = state === 'done' ? 'var(--bull)' : (state === 'part' ? 'var(--amber)' : 'var(--text-dim)');
+  const mark   = state === 'done' ? '✅' : (state === 'part' ? '◐' : '○');
+  return `<div style="padding:10px 0; border-bottom:1px solid var(--border);">
+    <div style="display:flex; gap:8px; align-items:baseline;">
+      <span style="color:${colour};">${mark}</span>
+      <span style="flex:1; font-size:13.5px; font-weight:600;">${escapeHtml(title)}</span>
+      <span class="num" style="font-size:12px; color:${colour}; text-align:right;">${escapeHtml(figure)}</span>
+    </div>
+    <div style="margin-left:20px; margin-top:4px; font-size:12px; color:var(--text-dim); line-height:1.5;">${detail}</div>
+  </div>`;
+}
+
+function renderChecklist(){
+  const box = document.getElementById('checklistBody');
+  if(!box) return;
+  const all = loadTrades();
+  const n = all.length;
+  if(!n){ box.innerHTML = '<div class="empty">No trades saved yet, so there is nothing to check against.</div>'; return; }
+  const pct = k => Math.round(k / n * 100) + '%';
+  const closed = all.filter(t=>t.optExit != null);
+
+  const priced   = all.filter(t=>t.optEntry != null && t.optExit != null).length;
+  const und      = all.filter(t=>t.undEntry != null).length;
+  const undExact = all.filter(t=>t.undEntryExact === true).length;
+  const timed    = all.filter(t=>/^\d{2}:\d{2}$/.test(t.entryTime||'') && /^\d{2}:\d{2}$/.test(t.exitTime||'')).length;
+  const dated    = all.filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.entryDate||'')).length;
+  const shots    = all.filter(t=>t.shotEntry || t.shotExit).length;
+  const combos   = all.filter(t=>t.strat).length;
+  const plays    = all.filter(t=>t.play).length;
+  const toRead   = all.filter(classifyWaiting).length;
+  const unclear  = all.filter(classifyStuck).length;
+  const measured = all.filter(t=>t.ftfcRun != null).length;
+  const aligned  = all.filter(t=>t.ftfcConfirmed).length;
+  const feed     = all.filter(t=>t.fees != null).length;
+
+  box.innerHTML = [
+    checkRow(priced === n ? 'done' : 'part',
+      '1. What you paid and what you sold for',
+      `${priced} of ${n}`,
+      'Comes straight from Schwab’s own record of each fill, not worked out by this app. Checked against your broker export: all 480 fills matched to the cent.'),
+
+    checkRow(und === n ? (undExact === n ? 'done' : 'part') : 'part',
+      '2. Where SPY/IWM was at entry and exit',
+      `${und} of ${n} · ${undExact} exact`,
+      'Schwab’s trade record never says this, so it has to be looked up. With Alpaca connected it is the actual trade that printed at that second (marked <b>exact</b>). Without it, it is the close of the last candle before your fill, which on an older trade can be up to a day wide (marked <b>approx.</b>). Your realised risk-to-reward is worked out from this number, so an approximate one makes that figure approximate too.'),
+
+    checkRow(timed === n ? 'done' : 'part',
+      '3. The time you got in and out',
+      `${timed} of ${n}`,
+      'Converted from Schwab’s stamp into New York time. Confirmed against the two order-history pictures you sent: your 12:32 trade shows as 12:32 here. Both clock changes and a late-evening trade were checked directly, because your broker export carries no times and so cannot confirm them.'),
+
+    checkRow(dated === n ? 'done' : 'part',
+      '4. The date of each trade',
+      `${dated} of ${n}`,
+      'Confirmed line by line against your broker export.'),
+
+    checkRow(shots > 0 ? 'part' : 'todo',
+      '5. Pictures of the chart, taken for you',
+      `${shots} of ${n}`,
+      '<b>Not finished.</b> The path from your phone to the app exists, but it still needs one tap per trade and has never been run through a live trade. A picture taken part-way through a trade has not been started at all.'),
+
+    checkRow('todo',
+      '6. Video of the trade, recorded for you',
+      'not built',
+      '<b>Not started.</b> This cannot be done from Safari or a phone shortcut — it needs a small iPhone app of its own, which is fully planned but not written. It would also need re-installing about every seven days unless you pay Apple’s yearly developer fee.'),
+
+    checkRow(combos === n && plays === n ? 'done' : 'part',
+      '7. Working out which setup and which play it was',
+      `${combos}/${n} setup · ${plays}/${n} play`,
+      `Each trade gets two answers, judged separately: which of your nine combos you saw, and which of your three plays you took. Read from the real candle shapes around your entry, your timeframe alignment, and the picture when there is one. This now happens on its own while the app is open — there is no button to press. ${toRead ? '<b>' + toRead + ' still to read.</b> ' : ''}${unclear ? '<b>' + unclear + ' the AI looked at twice and could not call</b> — name those yourself by tapping the trade, or use the button on the Home tab to have it try again. ' : ''}It deliberately leaves a trade blank rather than guess, so some will always need you.`),
+
+    checkRow(measured === n ? (aligned > 0 ? 'done' : 'part') : 'part',
+      '8. Whether the timeframes agreed',
+      `${measured} of ${n} measured · ${aligned} agreed`,
+      'Measured across thirteen timeframes from real candle data, counted as agreeing when any four in a row point the same way. Not read off a picture and not typed in. The Home tab shows whether waiting for agreement actually earns you more per trade.'),
+
+    checkRow('part',
+      '9. Backtesting your setups',
+      'built, never run on real data',
+      '<b>Built but unproven.</b> It walks real candles bar by bar, finds every time one of your setups appeared, and plays each one forward against your own stop rule. Every figure it reports is counted, never estimated. It has not yet been run over a real stretch of market history, so nothing it says has been checked.'),
+
+    checkRow(feed === n ? 'done' : 'part',
+      'Also: fees, and profit after them',
+      `${feed} of ${n}`,
+      'Worked out from the cash that actually moved, because Schwab’s own fee lines are not always there. Checked against every one of your 480 fills and against your broker export total. Where a fee is genuinely unknown it is left blank rather than shown as zero, and the after-fee figure for that trade is left blank too.'),
+  ].join('') + `<div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
+    Counted from the ${n} trade${n===1?'':'s'} saved on this phone${closed.length!==n?` (${closed.length} of them closed)`:''} at ${new Date().toLocaleTimeString()}. Nothing on this page is remembered from last time — it is worked out fresh each time you open it.
+  </div>`;
 }
 
 // ---- Test Classification (sandbox, no real trade involved) ----
@@ -4333,6 +4602,11 @@ async function autoCollectOnOpen(){
       }, 20000);
     }
 
+    // Reading the setup and the play on trades that do not have both yet.
+    // Started a few seconds in so it is not competing with the first load
+    // of the Journal, and left to run itself from there.
+    setTimeout(autoClassifyLoop, 5000);
+
     const auth = await fetchSchwabAuthState(url);
     if(auth && auth.needsReconnect){
       showReconnect(true);
@@ -4766,10 +5040,14 @@ function startAutoPoll(){
   autoPollTimer = setInterval(()=>{
     if(backendUrl() && document.visibilityState==='visible'){
       pollBackend(true); matchPendingScreenshots(); showRebuildState(backendUrl());
+      // Picks reading back up after an hour's pause, or after new trades
+      // arrive, without him having to reopen the app. Returns immediately
+      // if a run is already going or there is nothing left to read.
+      autoClassifyLoop();
     }
   }, 30000);
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); }
+    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); autoClassifyLoop(); }
   });
 }
 startAutoPoll();
