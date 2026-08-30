@@ -362,6 +362,15 @@ Uses **The Strat**. Key concepts the code implements:
   a floor under it. Confirmed by test: without the guards a single
   `Promise.reject` exits with status 1; with them the process survives
   fifty in a row.
+- **Express 4 does not understand a route handler that fails.** An
+  `async (req, res) => {}` that throws produces a promise nobody is
+  holding, which ended the whole process — checked directly, not assumed.
+  Ten routes had nothing around them, including `/api/trades/pending`,
+  which his phone polls every thirty seconds: one hiccup reaching storage
+  while the app was open would have taken the server down. Every async
+  handler goes through `wrap()` from `asyncRoute.js`, and `errorHandler`
+  is mounted last so a failed request answers instead of hanging. Any new
+  async route needs the same.
 - **A crash nobody can read is the same as no crash report.** Render's
   logs age out and he cannot read them anyway. Each failure is now
   written to storage and reported by `/health` (`uptimeSeconds`,
