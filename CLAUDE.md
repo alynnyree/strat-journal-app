@@ -362,6 +362,21 @@ Uses **The Strat**. Key concepts the code implements:
   a floor under it. Confirmed by test: without the guards a single
   `Promise.reject` exits with status 1; with them the process survives
   fifty in a row.
+- **A cache that empties on restart is not a place to keep an answer.**
+  His Alpaca keys are typed into the app and kept in storage, but the
+  gate deciding whether to use Alpaca called `isConfigured()`, which
+  reads only the in-memory copy. That copy is empty after every restart,
+  so the gate answered "no" while the keys sat in storage — and six
+  paths silently fell back to Schwab: the underlying price (marked
+  "approx." for weeks), Bar Replay, FTFC minute data and three in
+  backtesting. `underlyingPriceAt` did load the keys, but the gate closed
+  before it was reached. Use `alpaca.isReady()`, never `isConfigured()`;
+  `guardCheck.js` now fails on the latter.
+- **"Silently falls back" is the same as "quietly wrong".** Nothing was
+  logged, nothing was flagged, every trade got a price, and the only
+  visible sign was one small word — "approx." — that he had to notice
+  himself. A fallback that changes the QUALITY of an answer must record
+  that it happened, which is what `undPricedWithAlpaca` is for.
 - **A rule nothing enforces is a rule that will be broken again.** After
   the crash, thirty-seven async routes needed wrapping — and the first
   hand-audit found only ten of them, because it looked for a missing
