@@ -598,6 +598,10 @@
       <button class="primary" id="btnReconnectSchwab" onclick="reconnectSchwab()"
               style="display:none; margin-top:10px; background:var(--gold-grad); color:#1A1206;">Reconnect to Schwab</button>
       <div class="status-banner" id="syncStatus"></div>
+      <!-- What the server is actually doing, in words. Without this the
+           only way to tell a stuck rebuild from a slow one was to wait
+           and guess — which is how two evenings went. -->
+      <div id="rebuildState" style="font-size:11.5px; color:var(--text-dim); margin-top:8px; line-height:1.55;"></div>
 
       <!-- Setup, tucked away. These are things you fill in once and never
            touch again, so they do not belong on the screen you look at
@@ -4206,6 +4210,43 @@ function tradeIsStale(t){
   return t.fees == null || t.undEntrySource == null;
 }
 
+// Says plainly where the rebuild has got to, and how much of the journal
+// is still waiting on it. Shown whether or not anything is wrong, so a
+// slow rebuild and a stuck one look different from each other.
+async function showRebuildState(url){
+  const el = document.getElementById('rebuildState');
+  if(!el) return;
+  if(!url){ el.textContent = ''; return; }
+
+  const trades = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const short = trades.filter(tradeIsStale).length;
+  const status = await fetchBackfillStatus(url);
+
+  const bits = [];
+  if(trades.length){
+    bits.push(short === 0
+      ? `<span style="color:var(--bull);">All ${trades.length} trades have their fees and prices.</span>`
+      : `${short} of ${trades.length} trades still waiting on fees and prices.`);
+  }
+
+  if(status){
+    const startedMs = status.startedAt ? Date.parse(status.startedAt) : 0;
+    const mins = startedMs ? Math.round((Date.now() - startedMs) / 60000) : null;
+    if(status.status === 'running'){
+      bits.push(mins != null && mins > 25
+        ? `A rebuild started ${mins} minutes ago and has stopped responding — it will be picked up again automatically.`
+        : `Rebuild running${status.tradesMatched != null ? `, ${status.tradesMatched} trades found` : ''}${mins != null ? `, started ${mins} minute${mins===1?'':'s'} ago` : ''}.`);
+    } else if(status.status === 'failed'){
+      bits.push(`The last rebuild stopped early${status.attempts ? ` after ${status.attempts} attempt${status.attempts===1?'':'s'}` : ''}. It retries on its own.`);
+    } else if(status.status === 'done' && status.finishedAt){
+      const ago = Math.round((Date.now() - Date.parse(status.finishedAt)) / 60000);
+      bits.push(`Last rebuild finished ${ago < 1 ? 'just now' : ago + ' minute' + (ago===1?'':'s') + ' ago'}${status.tradesMatched != null ? `, ${status.tradesMatched} trades` : ''}.`);
+    }
+  }
+
+  el.innerHTML = bits.join('<br>');
+}
+
 async function maybeAutoRebuild(url){
   if(!url) return false;
   const hist = rebuildHistory();
@@ -4218,9 +4259,18 @@ async function maybeAutoRebuild(url){
   const stale = closed.filter(tradeIsStale).length;
   if(stale / closed.length < REBUILD_SHARE) return false;
 
-  // Never start one over the top of a rebuild already running.
+  // Never start one over the top of a rebuild GENUINELY running. A job
+  // still marked "running" long after it began is not running — nothing
+  // survives a server restart mid-job — and treating that as busy blocked
+  // this from ever firing again. The server already uses twenty-five
+  // minutes for the same judgement; matching it keeps the two in step.
+  const STALE_RUN_MS = 25 * 60 * 1000;
   const status = await fetchBackfillStatus(url);
-  if(status && status.status === 'running') return false;
+  if(status && status.status === 'running'){
+    const startedMs = status.startedAt ? Date.parse(status.startedAt) : 0;
+    const reallyRunning = startedMs && (Date.now() - startedMs) < STALE_RUN_MS;
+    if(reallyRunning) return false;
+  }
 
   localStorage.setItem(AUTO_REBUILD_KEY, JSON.stringify({
     lastAt: Date.now(), attempts: (hist.attempts || 0) + 1,
@@ -4271,12 +4321,14 @@ async function autoCollectOnOpen(){
     // fetch them without being asked. This is the button he should not
     // have to keep finding.
     noteRebuildOutcome();
+    showRebuildState(url);
     if(await maybeAutoRebuild(url)){
       // Give the rebuild a moment to start producing, then collect what
       // it has. The rest arrives on the ordinary half-minute poll.
       setTimeout(async ()=>{
         await pollBackend(true);
         noteRebuildOutcome();
+        showRebuildState(url);
         renderJournal(); renderDashboard();
       }, 20000);
     }
@@ -4712,7 +4764,9 @@ let classifyInProgress = false;
 function startAutoPoll(){
   if(autoPollTimer) return;
   autoPollTimer = setInterval(()=>{
-    if(backendUrl() && document.visibilityState==='visible'){ pollBackend(true); matchPendingScreenshots(); }
+    if(backendUrl() && document.visibilityState==='visible'){
+      pollBackend(true); matchPendingScreenshots(); showRebuildState(backendUrl());
+    }
   }, 30000);
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); }
