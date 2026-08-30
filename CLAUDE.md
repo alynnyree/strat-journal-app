@@ -219,6 +219,16 @@ Uses **The Strat**. Key concepts the code implements:
   are hidden; and there is a second, independent sweep on scroll so a
   missed notification cannot strand a section. Applies to any future
   animation, not just this one.
+- **De-duplication and REBUILDING pull in opposite directions.** A trade
+  is identified by contract, entry minute, exit minute, both prices and
+  size — and a rebuilt trade matches its saved self on every one of them,
+  because that is what a rebuild is. So "Reset & Re-import" had its
+  rebuilt copies thrown away as duplicates: an hour of work, nothing
+  changed, reported as "no new trades". A repeat arrival must UPDATE the
+  saved trade with what the server works out (fees, underlying price and
+  its provenance, FTFC, replay, and a setup/play/stop only where he has
+  none) and never touch his own — notes, screenshots, his own tag, his
+  stop, his planned R:R. An empty answer must never overwrite a good one.
 - **A record must be identified by what it IS, never by the reference
   number it was handed.** Imported trades were de-duplicated on their
   internal id. "Reset & Re-import" reissues the same trades with fresh
