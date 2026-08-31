@@ -576,6 +576,32 @@ Uses **The Strat**. Key concepts the code implements:
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
 
+## What belongs on his screen
+
+He is a discretionary trader, not a developer, and on 2026-08-31 he said
+plainly: *"The app shouldn't contain writings that explain the technical
+aspect of this app. Everything should be simplified."* He was right, and
+the Checks page had become a diagnostics console built for my benefit —
+three coloured boxes, memory figures, server uptime, and raw error text
+from the server printed on his phone.
+
+The rule from here:
+
+- **One line tells him where he stands.** Up to date, catching up, or
+  stuck. Nothing else at the top of a page.
+- **Never these words on screen:** server, memory, MB, uptime, rebuild,
+  attempt, cooldown, API, endpoint, cache, or any raw error text.
+- **Never a number he did not ask for.** Memory in use, uptime and
+  attempt counts are mine, not his.
+- **"Nothing for you to do" is the default ending.** The app is supposed
+  to be automatic; if he has to act, that is a failure worth naming, and
+  it gets one button.
+- **Technical detail still has to exist** — I need it to fix things — but
+  it lives behind a "Details" tap he only opens when I ask, and it is
+  written to be sent to me, not read by him.
+
+Anything that fails this test is a bug, the same as a wrong number.
+
 ## Testing expectations
 
 There is no test suite. Before claiming a change works:

@@ -9,6 +9,31 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+52. **The Checks page was written for me, not for him** (2026-08-31).
+    **Status: BUILT AND TESTED (28 new browser checks plus every app suite
+    re-run). Not confirmed on his phone.**
+
+    He said it plainly: he does not know what the coloured boxes are for,
+    the app should be simple and automatic, and it should not contain
+    writing that explains its own technical workings. He was right on
+    every count — I had turned his Checks page into a diagnostics console
+    for my own benefit: three coloured boxes at once, memory figures,
+    server uptime, and the server's raw error text on his screen.
+
+    **Now:** one line at the top saying where he stands — up to date,
+    catching up, or stuck — and nothing else. The list beneath it is one
+    short sentence per item instead of a paragraph. The Journal tab's
+    status line no longer mentions rebuilds, attempts or responsiveness.
+
+    **The technical detail still exists**, because I need it to fix
+    things, but it sits behind a "Details" tap he only opens when asked,
+    and it is written to be sent to me rather than read by him.
+
+    A rule has gone into CLAUDE.md so this does not creep back: the words
+    server, memory, MB, uptime, rebuild, attempt, cooldown and any raw
+    error text may not appear on his screen, and anything that breaks
+    that is a bug like any other.
+
 51. **What his Checks page actually said, and what it led to**
     (2026-08-31). **Status: BUILT AND TESTED (7 new browser checks plus
     every app suite re-run). Not confirmed on his phone.**

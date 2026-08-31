@@ -1090,12 +1090,9 @@
     <div class="card">
       <h3>What This App Is Meant To Do</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5;">
-        Your own list, checked against your own trades every time you open
-        this page. Green means done and counted. Amber means part-way.
-        Grey means not built yet.
+        What this app does for you, and how far along each part is.
       </div>
-      <div id="serverState" style="margin-top:12px;"></div>
-      <div id="stuckState" style="margin-top:10px;"></div>
+      <div id="appStatus" style="margin-top:12px;"></div>
       <div id="checklistBody" style="margin-top:12px;"><div class="empty">Working it out…</div></div>
     </div>
   </div>
@@ -3647,6 +3644,17 @@ async function retryUnclearTrades(){
 // this page. Where a thing cannot be counted (whether a picture looks
 // right on a phone, whether a number matches his broker) it says so
 // rather than claiming a pass.
+// ---- The Checks page ------------------------------------------------
+//
+// Rewritten 2026-08-31. It had turned into a diagnostics console: three
+// coloured boxes, memory figures, uptime, and the server's raw error text
+// on his screen. He is a trader, not a developer, and he said so. None of
+// that belongs in front of him.
+//
+// One line at the top saying whether the app is fine, catching up, or
+// stuck. A short list of what the app does for him. Anything technical is
+// tucked behind a "Details" tap, there only so he can send it to me.
+
 function checkRow(state, title, figure, detail){
   const colour = state === 'done' ? 'var(--bull)' : (state === 'part' ? 'var(--amber)' : 'var(--text-dim)');
   const mark   = state === 'done' ? '✅' : (state === 'part' ? '◐' : '○');
@@ -3656,128 +3664,82 @@ function checkRow(state, title, figure, detail){
       <span style="flex:1; font-size:13.5px; font-weight:600;">${escapeHtml(title)}</span>
       <span class="num" style="font-size:12px; color:${colour}; text-align:right;">${escapeHtml(figure)}</span>
     </div>
-    <div style="margin-left:20px; margin-top:4px; font-size:12px; color:var(--text-dim); line-height:1.5;">${detail}</div>
+    <div style="margin-left:20px; margin-top:4px; font-size:12px; color:var(--text-dim); line-height:1.5;">${escapeHtml(detail)}</div>
   </div>`;
 }
 
-// Whether his server is actually up, in the app, where he can look at it.
-// He found out it had fallen over from an email from the hosting company
-// two hours after the fact -- an email that told him a number and nothing
-// he could do. The server now keeps its own record of any failure, and
-// this reads it back.
-async function showServerState(){
-  const el = document.getElementById('serverState');
-  if(!el) return;
-  const url = backendUrl();
-  const line = (colour, text) => `<div style="padding:10px 12px; border-radius:8px; background:var(--panel); border:1px solid ${colour}; color:${colour}; font-size:12.5px; line-height:1.5;">${text}</div>`;
-  if(!url){ el.innerHTML = line('var(--text-dim)', 'No server connected, so this is only counting what is saved on this phone.'); return; }
-  el.innerHTML = line('var(--border)', 'Checking your server…');
-  let d;
+// Everything technical the app knows, gathered in one place. Never shown
+// unless he taps for it -- its only purpose is to be sent to me.
+let techNotes = { server: null };
+async function gatherTech(url){
+  if(!url) return;
   try{
     const r = await fetch(url.replace(/\/$/,'')+'/health');
-    if(!r.ok) throw new Error('status '+r.status);
-    d = await r.json();
-  }catch(e){
-    el.innerHTML = line('var(--bear)', '<b>Your server is not answering right now.</b> Nothing new can come in from Schwab until it is back, and setups cannot be read. Everything already saved on this phone is safe and unaffected. If it has been idle a while it can take up to a minute to wake up — pull this page up again in a minute before assuming the worst.');
-    return;
-  }
-  const mins = Math.round((d.uptimeSeconds || 0) / 60);
-  const upText = mins < 60
-    ? `${mins} minute${mins===1?'':'s'}`
-    : `${Math.round(mins/60)} hour${Math.round(mins/60)===1?'':'s'}`;
-  const fails = Array.isArray(d.recentFailures) ? d.recentFailures : [];
-
-  // How much memory it is using, and the most it has used. Shown because
-  // running out of memory is what the hosting company restarts it for,
-  // and because that kind of restart leaves NO record of its own -- the
-  // server is stopped from outside, so it never gets the chance to write
-  // anything down. A short time since starting is the only fingerprint.
-  const memText = (d.memoryMb != null)
-    ? ` Using ${d.memoryMb} MB of memory${d.peakMemoryMb && d.peakMemoryMb > d.memoryMb ? ` (highest since it started: ${d.peakMemoryMb} MB)` : ''}.`
-    : '';
-  const justRestarted = mins < 15;
-
-  if(!fails.length && justRestarted){
-    el.innerHTML = line('var(--amber)',
-      `<b>Your server is up</b>, but it only started ${mins < 1 ? 'less than a minute' : `${mins} minute${mins===1?'':'s'}`} ago — so something restarted it very recently.` +
-      `${memText} That is worth knowing but not worth acting on unless it keeps happening: pull this page up again in half an hour, and if it still says only a few minutes, tell me.`);
-    return;
-  }
-  if(!fails.length){
-    el.innerHTML = line('var(--bull)', `<b>Your server is up.</b> Running for ${upText} with nothing gone wrong in that time.${memText}`);
-    return;
-  }
-  const last = fails[0] || {};
-  const when = last.at ? new Date(last.at) : null;
-  const ago = when ? Math.round((Date.now() - when.getTime())/60000) : null;
-  const agoText = ago == null ? 'at an unknown time'
-    : (ago < 60 ? `${ago} minute${ago===1?'':'s'} ago` : `${Math.round(ago/60)} hour${Math.round(ago/60)===1?'':'s'} ago`);
-  el.innerHTML = line('var(--amber)',
-    `<b>Your server is up</b>, running for ${upText}. It hit a problem ${agoText}` +
-    `${fails.length>1?` (and ${fails.length-1} other${fails.length-1===1?'':'s'} recorded before that)` : ''}. ` +
-    `It no longer stops when that happens — it writes down what went wrong and keeps going, so your trades keep arriving. Nothing for you to do.`);
+    techNotes.server = r.ok ? await r.json() : { unreachable: true, status: r.status };
+  }catch(e){ techNotes.server = { unreachable: true, why: e && e.message }; }
 }
 
-// Says what the app is waiting on, and what went wrong if anything did.
-//
-// This exists because he twice reported figures that would not change and
-// had no way of finding out why: a re-measure was being refused, and the
-// setup reading was failing on every trade while showing "0 of 20 looked
-// at". Both were silent. Nothing here is a guess -- it is the count on
-// his phone and the server's own words.
-function renderStuckState(){
-  const el = document.getElementById('stuckState');
+function toggleTechDetails(){
+  const el = document.getElementById('techDetails');
   if(!el) return;
-  const box = (colour, html) => `<div style="padding:10px 12px; border-radius:8px; background:var(--panel); border:1px solid ${colour}; color:${colour}; font-size:12.5px; line-height:1.5; margin-bottom:8px;">${html}</div>`;
-  const ago = ms => {
-    const m = Math.round((Date.now() - ms)/60000);
-    return m < 1 ? 'just now' : (m < 60 ? `${m} minute${m===1?'':'s'} ago` : `${Math.round(m/60)} hour${Math.round(m/60)===1?'':'s'} ago`);
-  };
-  const bits = [];
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
 
-  // --- measuring the timeframes again ---
+// The ONE line at the top. Three states, no jargon, no numbers he did not
+// ask for.
+async function renderAppStatus(){
+  const el = document.getElementById('appStatus');
+  if(!el) return;
+  const url = backendUrl();
+  const line = (colour, text, button) =>
+    `<div style="padding:12px 14px; border-radius:10px; background:var(--panel); border:1px solid ${colour}; color:${colour}; font-size:14px; line-height:1.5;">${text}</div>`
+    + (button || '');
+
+  if(!url){
+    el.innerHTML = line('var(--text-dim)', 'Not connected yet. Everything you have saved is safe on this phone.');
+    return;
+  }
+
+  await gatherTech(url);
   const auto = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
-  const needsMeasure = auto.filter(tradeIsStale).length;
-  if(needsMeasure){
-    const ask = readRebuildAsk();
-    const problem = readProblem('rebuild');
-    let text = `<b>${needsMeasure} of your ${auto.length} trades are waiting to be measured again.</b> `;
-    if(problem && (!ask || problem.at >= ask.at)){
-      text += `The last try, ${ago(problem.at)}, did not work: ${escapeHtml(problem.text)}`;
-    } else if(ask){
-      text += `The server was asked ${ago(ask.at)}. It does the work on its own and the app collects the result — if the count above is not falling after ten minutes, use the button below.`;
-    } else {
-      const declined = readDecline();
-      text += declined
-        ? `It has not been asked, because ${escapeHtml(declined.text)}. Use the button below to make it happen anyway.`
-        : `It has not been asked yet — that happens on its own when the app opens. If this does not change, use the button below.`;
-    }
-    bits.push(box('var(--amber)', text)
-      + `<button class="secondary" id="forceRemeasureBtn" onclick="forceRemeasure()" style="margin-top:0; width:100%;">Measure My Trades Again Now</button>`);
+  const catchingUp = auto.filter(tradeIsStale).length;
+  const unread = loadTrades().filter(classifyWaiting).length;
+  const problem = readProblem('classify') || readProblem('rebuild');
+  const recentProblem = problem && (Date.now() - problem.at < 6*60*60*1000);
+  const offline = techNotes.server && techNotes.server.unreachable;
+
+  if(offline){
+    el.innerHTML = line('var(--bear)',
+      '<b>Can\'t reach your trades right now.</b> Nothing new can come in until it\'s back. Everything already saved is safe. If it has been sitting unused it can take a minute to wake up — check again shortly.');
+    return;
   }
 
-  // --- reading the setup and the play ---
-  const waiting = loadTrades().filter(classifyWaiting).length;
-  const cProblem = readProblem('classify');
-  if(waiting && cProblem && Date.now() - cProblem.at < 6*60*60*1000){
-    bits.push(box('var(--bear)',
-      `<b>Reading the setup on your trades is failing.</b> ${waiting} still to read, and the last try ${ago(cProblem.at)} came back: `
-      + `“${escapeHtml(cProblem.text)}”<br><br>Nothing you can do from here — send me that line and I will fix it.`));
+  if(recentProblem){
+    el.innerHTML = line('var(--amber)',
+      '<b>Something is stuck.</b> Some of your trades can\'t finish updating. Nothing you saved is at risk, and there is nothing for you to fix — tap <b>Details</b> at the bottom and send me that screen.')
+      + (catchingUp ? `<button class="secondary" onclick="forceRemeasure()" style="margin-top:8px; width:100%;">Try Again Now</button>` : '');
+    return;
   }
 
-  el.innerHTML = bits.join('');
+  if(catchingUp || unread){
+    const bits = [];
+    if(catchingUp) bits.push(`${catchingUp} still to update`);
+    if(unread) bits.push(`${unread} still to read`);
+    el.innerHTML = line('var(--amber)',
+      `<b>Catching up.</b> ${bits.join(' · ')}. This happens on its own while the app is open — nothing for you to do.`);
+    return;
+  }
+
+  el.innerHTML = line('var(--bull)', '<b>Everything is up to date.</b> Your trades are in, priced, and read.');
 }
 
 function renderChecklist(){
-  showServerState();
-  renderStuckState();
+  renderAppStatus();
   const box = document.getElementById('checklistBody');
   if(!box) return;
   const all = loadTrades();
   const n = all.length;
-  if(!n){ box.innerHTML = '<div class="empty">No trades saved yet, so there is nothing to check against.</div>'; return; }
-  const pct = k => Math.round(k / n * 100) + '%';
-  const closed = all.filter(t=>t.optExit != null);
+  if(!n){ box.innerHTML = '<div class="empty">No trades saved yet, so there is nothing to check.</div>'; return; }
 
   const priced   = all.filter(t=>t.optEntry != null && t.optExit != null).length;
   const und      = all.filter(t=>t.undEntry != null).length;
@@ -3787,65 +3749,75 @@ function renderChecklist(){
   const shots    = all.filter(t=>t.shotEntry || t.shotExit).length;
   const combos   = all.filter(t=>t.strat).length;
   const plays    = all.filter(t=>t.play).length;
-  const toRead   = all.filter(classifyWaiting).length;
-  const unclear  = all.filter(classifyStuck).length;
   const measured = all.filter(t=>t.ftfcRun != null).length;
   const aligned  = all.filter(t=>t.ftfcConfirmed).length;
   const feed     = all.filter(t=>t.fees != null).length;
 
   box.innerHTML = [
     checkRow(priced === n ? 'done' : 'part',
-      '1. What you paid and what you sold for',
-      `${priced} of ${n}`,
-      'Comes straight from Schwab’s own record of each fill, not worked out by this app. Checked against your broker export: all 480 fills matched to the cent.'),
+      'What you paid and what you sold for', `${priced} of ${n}`,
+      'Straight from Schwab. Checked against your own broker file — every fill matched.'),
 
     checkRow(und === n ? (undExact === n ? 'done' : 'part') : 'part',
-      '2. Where SPY/IWM was at entry and exit',
-      `${und} of ${n} · ${undExact} exact`,
-      'Schwab’s trade record never says this, so it has to be looked up. With Alpaca connected it is the actual trade that printed at that second (marked <b>exact</b>). Without it, it is the close of the last candle before your fill, which on an older trade can be up to a day wide (marked <b>approx.</b>). Your realised risk-to-reward is worked out from this number, so an approximate one makes that figure approximate too.'),
+      'Where the stock was when you got in and out', `${und} of ${n} · ${undExact} exact`,
+      'Schwab does not record this, so it is looked up. "Exact" means the real price at that second. Otherwise it is close, not exact.'),
 
     checkRow(timed === n ? 'done' : 'part',
-      '3. The time you got in and out',
-      `${timed} of ${n}`,
-      'Converted from Schwab’s stamp into New York time. Confirmed against the two order-history pictures you sent: your 12:32 trade shows as 12:32 here. Both clock changes and a late-evening trade were checked directly, because your broker export carries no times and so cannot confirm them.'),
+      'Your entry and exit times', `${timed} of ${n}`,
+      'New York time. Matched against the order history you sent.'),
 
     checkRow(dated === n ? 'done' : 'part',
-      '4. The date of each trade',
-      `${dated} of ${n}`,
-      'Confirmed line by line against your broker export.'),
+      'Your trade dates', `${dated} of ${n}`,
+      'Checked line by line against your broker file.'),
 
     checkRow(shots > 0 ? 'part' : 'todo',
-      '5. Pictures of the chart, taken for you',
-      `${shots} of ${n}`,
-      '<b>Not finished.</b> The path from your phone to the app exists, but it still needs one tap per trade and has never been run through a live trade. A picture taken part-way through a trade has not been started at all.'),
+      'Chart pictures taken for you', `${shots} of ${n}`,
+      'Not finished. Still needs one tap per trade, and has never been used on a live trade.'),
 
     checkRow('todo',
-      '6. Video of the trade, recorded for you',
-      'not built',
-      '<b>Not started.</b> This cannot be done from Safari or a phone shortcut — it needs a small iPhone app of its own, which is fully planned but not written. It would also need re-installing about every seven days unless you pay Apple’s yearly developer fee.'),
+      'Video of your trade, recorded for you', 'not built',
+      'Not started. Needs its own iPhone app, which has not been written yet.'),
 
     checkRow(combos === n && plays === n ? 'done' : 'part',
-      '7. Working out which setup and which play it was',
-      `${combos}/${n} setup · ${plays}/${n} play`,
-      `Each trade gets two answers, judged separately: which of your nine combos you saw, and which of your three plays you took. Read from the real candle shapes around your entry, your timeframe alignment, and the picture when there is one. This now happens on its own while the app is open — there is no button to press. ${toRead ? '<b>' + toRead + ' still to read.</b> ' : ''}${unclear ? '<b>' + unclear + ' the AI looked at twice and could not call</b> — name those yourself by tapping the trade, or use the button on the Home tab to have it try again. ' : ''}It deliberately leaves a trade blank rather than guess, so some will always need you.`),
+      'Which setup and which play it was', `${combos}/${n} setup · ${plays}/${n} play`,
+      'Read from the real candles around your entry. Happens on its own. It leaves a trade blank rather than guess, so some will always need you.'),
 
     checkRow(measured === n ? (aligned > 0 ? 'done' : 'part') : 'part',
-      '8. Whether the timeframes agreed',
-      `${measured} of ${n} measured · ${aligned} agreed`,
-      'Measured across thirteen timeframes from real candle data, counted as agreeing when any four in a row point the same way. Not read off a picture and not typed in. The Home tab shows whether waiting for agreement actually earns you more per trade.'),
+      'Whether the timeframes agreed', `${measured} of ${n} measured · ${aligned} agreed`,
+      'Thirteen timeframes, checked at the minute you entered, from real prices.'),
 
     checkRow('part',
-      '9. Backtesting your setups',
-      'built, never run on real data',
-      '<b>Built but unproven.</b> It walks real candles bar by bar, finds every time one of your setups appeared, and plays each one forward against your own stop rule. Every figure it reports is counted, never estimated. It has not yet been run over a real stretch of market history, so nothing it says has been checked.'),
+      'Backtesting your setups', 'built, not yet run',
+      'Built but never run over real market history, so nothing it says has been checked yet.'),
 
     checkRow(feed === n ? 'done' : 'part',
-      'Also: fees, and profit after them',
-      `${feed} of ${n}`,
-      'Worked out from the cash that actually moved, because Schwab’s own fee lines are not always there. Checked against every one of your 480 fills and against your broker export total. Where a fee is genuinely unknown it is left blank rather than shown as zero, and the after-fee figure for that trade is left blank too.'),
-  ].join('') + `<div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
-    Counted from the ${n} trade${n===1?'':'s'} saved on this phone${closed.length!==n?` (${closed.length} of them closed)`:''} at ${new Date().toLocaleTimeString()}. Nothing on this page is remembered from last time — it is worked out fresh each time you open it.
-  </div>`;
+      'Fees, and profit after them', `${feed} of ${n}`,
+      'Worked out from the cash that actually moved. Checked against your broker file. Left blank rather than guessed.'),
+  ].join('')
+  + `<div style="margin-top:14px; text-align:center;">
+       <span onclick="toggleTechDetails()" style="font-size:11px; color:var(--text-dim); text-decoration:underline; cursor:pointer;">Details (only if I ask for them)</span>
+     </div>
+     <div id="techDetails" style="display:none; margin-top:8px; padding:10px; border-radius:8px; background:var(--panel); border:1px solid var(--border); font-size:10.5px; color:var(--text-dim); line-height:1.45; white-space:pre-wrap; word-break:break-word;">${escapeHtml(techText())}</div>`;
+}
+
+// The technical text, for sending to me. Never on screen unless asked for.
+function techText(){
+  const all = loadTrades();
+  const auto = all.filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const srv = techNotes.server || {};
+  const cp = readProblem('classify'), rp = readProblem('rebuild'), dec = readDecline(), ask = readRebuildAsk();
+  const when = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
+  return [
+    `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
+    `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
+    `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,
+    srv.unreachable ? `server unreachable (${srv.why || srv.status})`
+      : `server up ${Math.round((srv.uptimeSeconds||0)/60)}m · mem ${srv.memoryMb||'?'}MB peak ${srv.peakMemoryMb||'?'}MB · failures ${(srv.recentFailures||[]).length}`,
+    `last rebuild ask: ${when(ask)}${ask && ask.forced ? ' (forced)' : ''}`,
+    dec ? `rebuild declined: ${dec.text} (${when(dec)})` : 'rebuild not declined',
+    rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
+    cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
+  ].join('\n');
 }
 
 // ---- Test Classification (sandbox, no real trade involved) ----
@@ -4805,38 +4777,20 @@ async function refreshAlpacaConnected(url){
 // Says plainly where the rebuild has got to, and how much of the journal
 // is still waiting on it. Shown whether or not anything is wrong, so a
 // slow rebuild and a stuck one look different from each other.
+// One short line on the Journal tab. "Rebuild", "attempts", "stopped
+// responding" and the rest were my words for my benefit -- he asked for
+// none of that on his screen. Either everything is up to date or it is
+// catching up, and either way there is nothing for him to do.
 async function showRebuildState(url){
   const el = document.getElementById('rebuildState');
   if(!el) return;
   if(!url){ el.textContent = ''; return; }
-
   const trades = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  if(!trades.length){ el.textContent = ''; return; }
   const short = trades.filter(tradeIsStale).length;
-  const status = await fetchBackfillStatus(url);
-
-  const bits = [];
-  if(trades.length){
-    bits.push(short === 0
-      ? `<span style="color:var(--bull);">All ${trades.length} trades have their fees and prices.</span>`
-      : `${short} of ${trades.length} trades still waiting on fees and prices.`);
-  }
-
-  if(status){
-    const startedMs = status.startedAt ? Date.parse(status.startedAt) : 0;
-    const mins = startedMs ? Math.round((Date.now() - startedMs) / 60000) : null;
-    if(status.status === 'running'){
-      bits.push(mins != null && mins > 25
-        ? `A rebuild started ${mins} minutes ago and has stopped responding — it will be picked up again automatically.`
-        : `Rebuild running${status.tradesMatched != null ? `, ${status.tradesMatched} trades found` : ''}${mins != null ? `, started ${mins} minute${mins===1?'':'s'} ago` : ''}.`);
-    } else if(status.status === 'failed'){
-      bits.push(`The last rebuild stopped early${status.attempts ? ` after ${status.attempts} attempt${status.attempts===1?'':'s'}` : ''}. It retries on its own.`);
-    } else if(status.status === 'done' && status.finishedAt){
-      const ago = Math.round((Date.now() - Date.parse(status.finishedAt)) / 60000);
-      bits.push(`Last rebuild finished ${ago < 1 ? 'just now' : ago + ' minute' + (ago===1?'':'s') + ' ago'}${status.tradesMatched != null ? `, ${status.tradesMatched} trades` : ''}.`);
-    }
-  }
-
-  el.innerHTML = bits.join('<br>');
+  el.innerHTML = short === 0
+    ? `<span style="color:var(--bull);">All ${trades.length} trades are up to date.</span>`
+    : `Filling in the details on ${short} trade${short===1?'':'s'} — nothing for you to do.`;
 }
 
 // Why a rebuild was NOT asked for. Every path out of maybeAutoRebuild
