@@ -377,6 +377,28 @@ Uses **The Strat**. Key concepts the code implements:
   a floor under it. Confirmed by test: without the guards a single
   `Promise.reject` exits with status 1; with them the process survives
   fifty in a row.
+- **A timeframe's direction was read from the END of the bar the entry
+  sat in.** "Bullish" was `candle.close > candle.open` on the candle
+  CONTAINING the entry — and a candle's timestamp is its START, so the
+  daily used the whole rest of the day and the monthly the rest of the
+  month. Proven: a day that opened at 100, traded at 101.8 when he
+  entered, and closed at 98 was reported BEARISH at entry. Every
+  alignment figure he had been shown was partly measured from price
+  action that happened after the trade, which flatters it. The rule is
+  now the price at entry against the OPEN of the bar forming at that
+  moment — what The Strat actually means — using nothing later than the
+  fill. Any "was the market X at that time" question must be answered
+  with data that existed at that time.
+- **Grouping candles by position in the list is not a timeframe.**
+  `aggregateCandles` built 3m/1H/2H/4H/3M/6M by taking N candles at a
+  time from the array, so a "4-hour bar" opened Thursday afternoon and
+  closed Friday morning, and each bar was stamped with its LAST
+  sub-candle so the wrong one was selected. Intraday bars are anchored to
+  that day's session open; quarters and half-years follow the calendar.
+- **Two different rules across thirteen timeframes is worse than either.**
+  Six timeframes used the previous completed bar, seven used the bar
+  containing the entry — so a "run of 4 consecutive" could be four
+  different questions. One rule, all thirteen.
 - **"The timeframes agreed" and "they agreed with me" are not the same
   question.** The card said only "FTFC", so a Short taken into a fully
   BEARISH market — the setup he wants — looked identical to a Short taken

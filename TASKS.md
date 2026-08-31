@@ -9,6 +9,44 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+47. **The alignment figures were measured with hindsight** (2026-08-30).
+    **Status: BUILT AND TESTED (24 new server checks, 4 new app checks,
+    every suite in both repos re-run). HIS NUMBERS WILL CHANGE.**
+
+    He asked how we can be sure the "Does Alignment Pay?" figures are
+    accurate. They were not. Two faults, both proven by running the real
+    code against made-up price data where the right answer is known.
+
+    **It used price action from after the trade.** A timeframe was called
+    bullish if its candle finished above where it started — using the
+    candle the entry fell inside. So "was the daily bullish when I
+    entered at 12:32?" was answered with the day's four-o'clock close,
+    and the monthly with the close weeks later. Shown plainly: a day that
+    opened at 100, was trading at 101.8 when he entered, and closed at 98
+    was reported BEARISH at entry. It was bullish at that moment. This
+    flatters alignment, because part of what it "predicted" had already
+    happened by the time it was measured.
+
+    **The built-up timeframes were not timeframes.** 3m, 1H, 2H, 4H, 3M
+    and 6M were made by taking candles N at a time from a list, so a
+    "4-hour bar" could open on Thursday afternoon and close on Friday
+    morning, straight across the night. Shown with real grouping output.
+
+    Together these meant six of the thirteen timeframes answered a
+    different question from the other seven, and a "run of four in a row"
+    could be four different questions.
+
+    **One rule now, for all thirteen:** the price at the moment he
+    entered, against the open of the bar forming at that moment — which
+    is what The Strat means — and never anything later than the fill.
+    Intraday bars start when the session starts; quarters and half-years
+    follow the calendar. The price used is the actual trade that printed
+    at his fill second when Alpaca can supply it, otherwise the last
+    minute that had finished.
+
+    **He must be told his numbers will change.** The 174 / 53 / 77 split
+    came from the faulty reading.
+
 46. **"Recent Trades" was not showing his recent trades** (2026-08-30).
     **Status: BUILT AND TESTED (10 new browser checks plus every app
     suite re-run). Not confirmed on a real phone.**
