@@ -423,6 +423,19 @@ Uses **The Strat**. Key concepts the code implements:
   looking straight at a failure and could only tell me the number had not
   moved. A failure is still progress through the list, and the reason
   belongs on screen in the server's own words.
+- **A phone will not hold a connection open while a server thinks.**
+  `/ai/classify` called Gemini and answered only when it came back — ten
+  or twenty seconds, past a minute once its three retries and the
+  bigger-budget retry are counted. Every one of his requests failed with
+  Safari's "Load failed" and none of his 304 trades was ever read. It was
+  never the size of the request; it was the WAIT. Anything that takes
+  more than a few seconds must answer immediately and be collected later.
+  Measured after: answered in under 800ms while the AI took 3000ms.
+- **Three wrong guesses before measuring the right thing.** The oversized
+  payload, an old server build, and a memory restart were all plausible
+  and all wrong. What settled it was the Details block reporting the
+  server as healthy, current and answering — which left only the one
+  thing not yet ruled out. Rule out with evidence, not with plausibility.
 - **Sending the whole record to use a fifteenth of it.** The AI
   classification posted the ENTIRE trade, and since Alpaca started
   working every trade carries up to 1,200 replay candles — while the
