@@ -9,6 +9,42 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+48. **The re-measure ran the server out of memory, and this is what was
+    doing it** (2026-08-31). **Status: BUILT AND TESTED (6 new measured
+    server checks, every suite in both repos re-run). Not verified on the
+    live server.**
+
+    He forwarded another "exceeded its memory limit" alert, sent the
+    moment the re-measure from task 47 started. Measured by running the
+    real rebuild over 304 trades and watching the process:
+
+    | | peak memory | time |
+    |---|---|---|
+    | before | 595 MB | 633 seconds |
+    | after | 110 MB | 4 seconds |
+
+    It was over the limit inside the FIRST batch of twenty-five trades.
+
+    **What was doing it.** Not anything being kept — anything being
+    churned. Reading the timeframes built a brand-new date formatter for
+    every single candle, roughly 23,000 per trade, and each of the eight
+    intraday timeframes scanned the whole candle list again to find the
+    entry day. Across one batch that threw away 476 MB while only ever
+    holding 27 MB — and a program never gives that memory back to the
+    machine, so the hosting company sees the peak and restarts it.
+
+    Two more reductions found while in there: the reading was fetching
+    four sets of minute data covering ten days each, when one set over
+    two days answers all eight intraday timeframes; and a replay had no
+    ceiling, so the position held from 24 June to 23 July was pulling
+    28,000 one-minute candles. A replay now steps up to a bigger candle
+    for a longer hold and stays under 1,200 bars, and the whole journal
+    as stored dropped from 11 MB to 3 MB.
+
+    **The lesson worth keeping:** three rounds of reasoning about what
+    looked heavy found nothing. Instrumenting each step and printing the
+    memory found it in one run.
+
 47. **The alignment figures were measured with hindsight** (2026-08-30).
     **Status: BUILT AND TESTED (24 new server checks, 4 new app checks,
     every suite in both repos re-run). HIS NUMBERS WILL CHANGE.**

@@ -416,6 +416,26 @@ Uses **The Strat**. Key concepts the code implements:
   reported separately. Any new distinction drawn over old records needs
   this fourth answer, or the old records quietly become evidence for
   whichever side the code happens to default to.
+- **Memory a process CHURNS is memory the hosting company kills it for.**
+  Reading the thirteen timeframes built a fresh `Intl.DateTimeFormat` on
+  every call — once per candle per timeframe, about 23,000 per trade —
+  and each of the eight intraday timeframes re-scanned the whole candle
+  series. Measured across one batch of 25 trades: **+476MB of memory
+  while only 27MB was ever held**. A process never hands churned memory
+  back, so the peak is what gets it restarted. Building the formatter
+  once and finding the session once took that step from +476MB to +16MB;
+  the whole rebuild went from 595MB/633s to 110MB/4s. Never build an Intl
+  formatter, a RegExp, or anything else expensive inside a per-item loop.
+- **Fetching more than the answer needs is a memory bug.** The timeframe
+  reading fetched four minute-series of ten days each when one series
+  over two days answers all eight intraday timeframes — every intraday
+  bar is anchored to the session open, so a 30-minute bar's open is just
+  the open of the first 1-minute candle inside it. Twenty times less data
+  for an identical answer.
+- **Measure the process, not the code.** Three rounds of reasoning about
+  what "looked heavy" got nowhere; instrumenting each enrichment step and
+  printing RSS found it in one run. When memory is the complaint, run the
+  real thing and watch it.
 - **A cap on pages is not a cap on size.** `fetchBars` limited itself to
   200 pages of 10,000 candles — two million objects, measured at 274MB in
   one array, on a server whose whole allowance is a fraction of that.
