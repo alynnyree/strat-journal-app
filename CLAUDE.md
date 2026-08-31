@@ -416,6 +416,20 @@ Uses **The Strat**. Key concepts the code implements:
   reported separately. Any new distinction drawn over old records needs
   this fourth answer, or the old records quietly become evidence for
   whichever side the code happens to default to.
+- **A counter that only moves on success reads as "nothing is happening".**
+  The setup reading advanced its progress figure only on a tagged or
+  unclear answer, so twenty failed requests in a row displayed as "0 of
+  20 looked at" — for ever, with no hint that anything was wrong. He was
+  looking straight at a failure and could only tell me the number had not
+  moved. A failure is still progress through the list, and the reason
+  belongs on screen in the server's own words.
+- **He must never have to DISCOVER silence.** Twice he reported figures
+  that would not change, and both times the cause was something refusing
+  quietly — a rebuild turned down by a spent limit, then every AI request
+  failing. The Checks page now names what is outstanding, when it was
+  last attempted, what the server said when it failed, and offers a
+  forced re-measure. Anything that runs on its own must be able to say
+  why it did not.
 - **A limit meant for a GUESS must not block a certainty.** The
   timeframe reading was corrected and every trade needed measuring again
   — but `maybeAutoRebuild`'s three-attempt cap and twelve-hour cooldown
