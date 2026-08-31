@@ -1,5 +1,20 @@
 # Task List
 
+> ## ⚠️ HE ASKED TO BE REMINDED — RAISE THIS
+>
+> **One journal across all his devices.** Trades live in the browser, so
+> each device keeps its OWN copy: on 2026-08-31 his phone held 304 trades
+> and his MacBook held 15. Nothing is lost, but the journal does not
+> travel, and he said plainly this matters to him.
+>
+> **He asked to be reminded, so bring it up — do not wait to be asked.**
+> Raise it at the start of a session whenever the current thing is
+> finished, or sooner if he opens the app on a second device.
+>
+> This is task 55 below. Do not start building it without saying what it
+> involves first — moving the journal to the server changes where his
+> trades actually live, which is the most important thing in this app.
+
 Status key: **Open** (not started) · **Blocked** (waiting on the owner) ·
 **Needs proposal first** (do not start building — propose an approach and
 get sign-off) · **Fixed, unconfirmed on phone** · **Done**
@@ -8,6 +23,35 @@ Reordered 2026-08-17 to put the fix that unblocks other work first, and the
 fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
+
+55. **One journal across every device** (asked for 2026-08-31).
+    **Status: NOT STARTED — he asked to be reminded about this, and said
+    it is important to him. Needs a proposal before any building.**
+
+    Trades are kept in the browser, so every device has its own separate
+    journal. On the day he raised it his phone held 304 trades and his
+    MacBook held 15. Nothing had been lost — they simply do not travel.
+
+    He found this out by opening the app on his laptop and seeing a
+    journal that looked almost empty. That is exactly the kind of thing
+    that makes him think his trades have gone, and he has had that scare
+    before (see task 24 — a journal holding 233 trades that displayed as
+    a blank page).
+
+    **What it would involve** — to be put to him in plain terms BEFORE
+    any of it is built, because it changes where his trades actually
+    live:
+    - his journal kept on the server rather than only in the browser
+    - every device reading and writing the same copy
+    - deciding what happens when two devices disagree (he edits a note on
+      his phone while the laptop still has the old one)
+    - his own work — notes, screenshots, his own setup and stop — must
+      survive every one of those paths, the same rule as a rebuild
+    - what happens with no signal: the app must still work offline and
+      catch up afterwards, or it is worse than what he has now
+
+    **Do not start this quietly.** It is the most consequential change
+    left on this list.
 
 54. **The setup reading never worked because the phone was made to wait**
     (2026-08-31). **Status: BUILT AND TESTED (12 new server checks, app
