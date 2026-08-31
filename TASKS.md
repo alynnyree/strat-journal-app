@@ -9,6 +9,41 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+53. **My own diagnostic was lying, and I nearly believed it**
+    (2026-08-31). **Status: BUILT AND TESTED (12 new browser checks plus
+    every suite in both repos re-run).**
+
+    He opened the Details block. It read "server up 0m · mem ?MB peak
+    ?MB". I took that as evidence his server was running old code and was
+    a sentence away from telling him so.
+
+    **It was a bug in my own display.** The details were being built while
+    the health check was still in flight, so those figures were never
+    anything but blanks — whatever his server had actually said. A
+    diagnostic that lies is worse than no diagnostic, and I nearly used it
+    to tell him something untrue about his own setup.
+
+    Fixed: the details now wait for the check, and say "not checked yet"
+    rather than printing zeros.
+
+    **And the real question it raised is now answerable.** There was no
+    way to tell whether the server had actually picked up the corrected
+    timeframe rule — so the phone could ask for a re-measure for ever
+    that could never satisfy it. The server now reports which rule it
+    measures with, the app compares, and when they disagree he is told
+    "waiting on an update" in his own words while the pointless
+    re-measure is declined with a recorded reason.
+
+    A server that does not report the field at all is treated as
+    UNKNOWN, not behind — treating silence as "behind" would have blocked
+    the re-measure permanently with no way out.
+
+    **What is still unresolved:** the setup reading still failed at 2:08
+    PM with the same connection error, after the smaller-request fix went
+    out. So that fix was not the cause, or not the whole cause. The
+    details will now show what the server really is, which is the next
+    thing needed.
+
 52. **The Checks page was written for me, not for him** (2026-08-31).
     **Status: BUILT AND TESTED (28 new browser checks plus every app suite
     re-run). Not confirmed on his phone.**
