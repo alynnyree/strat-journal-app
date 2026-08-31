@@ -2759,7 +2759,18 @@ function realPnl(t){
 }
 
 function renderDashboard(){
-  const trades = loadTrades();
+  // Newest first, by when each trade CLOSED — the same order the Journal
+  // uses. This was `loadTrades()` with no sort at all, which is not an
+  // order, it is the order things happen to sit in storage. Imports add at
+  // the front, so the January-to-April history — fetched last — sat at the
+  // top, and "Recent Trades" showed four-month-old trades while his most
+  // recent, the NIO position closed on 23 July, was nowhere near the top.
+  //
+  // The exact same fault was found and fixed in the Journal on 29 August
+  // and this list was left on raw storage order. CLAUDE.md already says
+  // "a list with no sort is not in order, it is in write order" — it
+  // needed to be applied to EVERY list, not the one that was reported.
+  const trades = tradesNewestFirst();
   const count = trades.length;
   // Fees turn a small win into a small loss, so a win must be decided on
   // the money that actually arrived, not on the price move alone.
@@ -3013,7 +3024,7 @@ function renderDashboard(){
         <div class="n">${String(i+1).padStart(2,'0')}</div>
         <div class="body">
           <div class="t">${t.ticker} <span class="badge ${t.dir.toLowerCase()}" style="vertical-align:middle;">${t.dir}</span></div>
-          <div class="s">${t.strat || 'Needs setup'}${t.entryDate?` · ${t.entryDate}`:''}</div>
+          <div class="s">${t.strat || 'Needs setup'}${closedOn(t)}</div>
         </div>
         <div class="v ${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</div>
       </div>`).join('');
@@ -3096,6 +3107,17 @@ function tradeMoment(t){
       ?? stamp(t.entryDate, t.entryTime)
       ?? 0;
 }
+// The date this list is ordered by, so the date shown and the position in
+// the list can never disagree. It used to show the ENTRY date while being
+// ordered by the close, which on a trade held across days looks wrong at
+// a glance — his NIO position opened 24 June and closed 23 July.
+function closedOn(t){
+  const d = t.exitDate || t.entryDate;
+  if(!d) return '';
+  const held = t.exitDate && t.entryDate && t.exitDate !== t.entryDate;
+  return ` · ${held ? 'closed ' : ''}${d}`;
+}
+
 function tradesNewestFirst(){
   return loadTrades().slice().sort((a,b)=>tradeMoment(b)-tradeMoment(a));
 }
@@ -3313,7 +3335,10 @@ function openReplayById(id){
 
 // ---- AI Analyst ----
 async function runAnalysis(){
-  const trades = loadTrades();
+  // In order, newest first. Handing the AI trades in storage order means
+  // any observation it makes about what he has been doing "lately" is
+  // drawn from whatever happened to be written down last.
+  const trades = tradesNewestFirst();
   const out = document.getElementById('aiOutput');
   if(trades.length < 5){
     out.innerHTML = `<div class="ai-msg"><div class="tag">Need more data</div>Log at least 5 trades (ideally 30-50+) before analysis is meaningful. You have ${trades.length}.</div>`;
@@ -5335,7 +5360,11 @@ function handleCsv(input){
 
 // ---- Export / wipe ----
 function exportData(){
-  const trades = loadTrades();
+  // Same order as everything else he looks at: newest first, by when the
+  // trade closed. An export in storage order opens with four-month-old
+  // trades at the top, which is the same fault the Journal and the Home
+  // tab both had.
+  const trades = tradesNewestFirst();
   const blob = new Blob([JSON.stringify(trades,null,2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -5343,7 +5372,7 @@ function exportData(){
   a.click();
 }
 function exportCsvSheet(){
-  const trades = loadTrades();
+  const trades = tradesNewestFirst();
   const headers = ['EntryDate','EntryTime','ExitDate','ExitTime','Ticker','Strat','FTFC','Broadening','OCC','OptEntry','OptExit','UnderEntry','UnderExit','Stop','RRPlanned','RealizedRR','PnlDollar','PnlPercent','WinLoss','Direction','Notes'];
   const rows = trades.map(t=>[t.entryDate,t.entryTime,t.exitDate,t.exitTime,t.ticker,t.strat||'Unclassified',t.ftfcConfirmed?'Yes':'No',t.offBroadeningFormation?'Yes':'No',t.occ,t.optEntry,t.optExit,t.undEntry,t.undExit,t.stop,t.rrPlanned,t.realizedRR==null?'':t.realizedRR.toFixed(2),t.pnlDollar==null?'':t.pnlDollar.toFixed(2),t.pnlPercent==null?'':t.pnlPercent.toFixed(1),t.winLoss,t.dir,(t.notes||'').replace(/,/g,';')]);
   const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
