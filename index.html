@@ -3449,12 +3449,31 @@ function readProblem(which){
   catch(e){ return null; }
 }
 
+// The trade, cut down to what the server actually reads.
+//
+// The whole trade object was being posted, replay candles and all. Since
+// Alpaca started working, every trade carries up to 1,200 of them -- and
+// the classifier uses the LAST FIFTEEN. Measured: 99KB sent where 2KB was
+// needed, and a batch of twenty posting nearly 2MB up from his phone.
+// That is the sort of request a phone connection drops, which is what
+// "Could not reach the server: Load failed" is.
+//
+// The screenshots stay: those genuinely are used as evidence.
+function tradeForClassifying(t){
+  const trimmed = { ...t };
+  const candles = (t.replayData && t.replayData.candles) || [];
+  trimmed.replayData = candles.length ? { candles: candles.slice(-15) } : null;
+  delete trimmed.chartDrawings;   // his own drawings, never read by the classifier
+  return trimmed;
+}
+
 async function classifyOneTrade(trade){
   const url = backendUrl();
   if(!url){ noteProblem('classify', 'No server address is set in the app.'); return 'error'; }
   try{
     const r = await fetch(url+'/ai/classify?key='+encodeURIComponent(appKey()), {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trade })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ trade: tradeForClassifying(trade) })
     });
     if(r.status === 403) return 'authFailed';
     if(r.status === 429) return 'rateLimited';
@@ -3728,7 +3747,10 @@ function renderStuckState(){
     } else if(ask){
       text += `The server was asked ${ago(ask.at)}. It does the work on its own and the app collects the result — if the count above is not falling after ten minutes, use the button below.`;
     } else {
-      text += `It has not been asked yet — that happens on its own when the app opens. If this does not change, use the button below.`;
+      const declined = readDecline();
+      text += declined
+        ? `It has not been asked, because ${escapeHtml(declined.text)}. Use the button below to make it happen anyway.`
+        : `It has not been asked yet — that happens on its own when the app opens. If this does not change, use the button below.`;
     }
     bits.push(box('var(--amber)', text)
       + `<button class="secondary" id="forceRemeasureBtn" onclick="forceRemeasure()" style="margin-top:0; width:100%;">Measure My Trades Again Now</button>`);
@@ -4817,8 +4839,39 @@ async function showRebuildState(url){
   el.innerHTML = bits.join('<br>');
 }
 
+// Why a rebuild was NOT asked for. Every path out of maybeAutoRebuild
+// that declines says so, because "it has not been asked yet" on its own
+// is the same dead end as a counter that will not move.
+let lastRebuildDecline = null;
+function noteDecline(text){
+  lastRebuildDecline = { text, at: Date.now() };
+  try{ localStorage.setItem('strat_rebuild_decline', JSON.stringify(lastRebuildDecline)); }catch(e){}
+}
+function readDecline(){
+  if(lastRebuildDecline) return lastRebuildDecline;
+  try{ return JSON.parse(localStorage.getItem('strat_rebuild_decline') || 'null'); }catch(e){ return null; }
+}
+
+// Its own attempt, with its own catch.
+//
+// It used to sit downstream of collecting new trades inside one shared
+// try. If that collection threw -- and his phone WAS failing to reach the
+// server -- everything after it was skipped, so the rebuild was never
+// even considered, and the Checks page could only say "it has not been
+// asked yet". Whether it happens must not depend on whether something
+// unrelated worked.
+async function tryRebuild(url){
+  try{ return await maybeAutoRebuild(url); }
+  catch(e){
+    noteDecline('something went wrong while checking: ' + (e && e.message ? e.message : 'unknown'));
+    return false;
+  }
+}
+
 async function maybeAutoRebuild(url){
-  if(!url) return false;
+  if(!url){ noteDecline('no server address is set in the app'); return false; }
+  try{ localStorage.removeItem('strat_rebuild_decline'); }catch(e){}
+  lastRebuildDecline = null;
   const hist = rebuildHistory();
 
   // A change in HOW a trade is measured is a NEW reason to rebuild, not
@@ -4838,15 +4891,19 @@ async function maybeAutoRebuild(url){
   // apply again.
   const newReason = Number(hist.forVersion || 0) !== FTFC_RULE_VERSION;
   if(!newReason){
-    if((hist.attempts || 0) >= MAX_AUTO_REBUILDS) return false;
-    if(hist.lastAt && Date.now() - hist.lastAt < REBUILD_COOLDOWN_MS) return false;
+    if((hist.attempts || 0) >= MAX_AUTO_REBUILDS){ noteDecline('it has already tried three times for this'); return false; }
+    if(hist.lastAt && Date.now() - hist.lastAt < REBUILD_COOLDOWN_MS){
+      const hrs = Math.round((REBUILD_COOLDOWN_MS - (Date.now() - hist.lastAt))/3600e3);
+      noteDecline(`it rebuilt recently and waits half a day between goes — about ${hrs} hour${hrs===1?'':'s'} left`);
+      return false;
+    }
   }
 
   const trades = loadTrades();
   const closed = trades.filter(t => t.optExit != null && t.source === 'schwab-auto');
-  if(closed.length < 5) return false;             // too few to be worth it
+  if(closed.length < 5){ noteDecline('fewer than five trades came from Schwab, so there is nothing worth rebuilding'); return false; }
   const stale = closed.filter(tradeIsStale).length;
-  if(stale / closed.length < REBUILD_SHARE) return false;
+  if(stale / closed.length < REBUILD_SHARE){ noteDecline('the trades are already up to date'); return false; }
 
   // Never start one over the top of a rebuild GENUINELY running. A job
   // still marked "running" long after it began is not running — nothing
@@ -4858,7 +4915,7 @@ async function maybeAutoRebuild(url){
   if(status && status.status === 'running'){
     const startedMs = status.startedAt ? Date.parse(status.startedAt) : 0;
     const reallyRunning = startedMs && (Date.now() - startedMs) < STALE_RUN_MS;
-    if(reallyRunning) return false;
+    if(reallyRunning){ noteDecline(`the server is already rebuilding — it started ${Math.round((Date.now()-startedMs)/60000)} minutes ago`); return false; }
   }
 
   localStorage.setItem(AUTO_REBUILD_KEY, JSON.stringify({
@@ -4952,7 +5009,7 @@ async function autoCollectOnOpen(){
     // have to keep finding.
     noteRebuildOutcome();
     showRebuildState(url);
-    if(await maybeAutoRebuild(url)){
+    if(await tryRebuild(url)){
       // Give the rebuild a moment to start producing, then collect what
       // it has. The rest arrives on the ordinary half-minute poll.
       setTimeout(async ()=>{

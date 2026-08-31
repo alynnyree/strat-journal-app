@@ -9,6 +9,40 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+51. **What his Checks page actually said, and what it led to**
+    (2026-08-31). **Status: BUILT AND TESTED (7 new browser checks plus
+    every app suite re-run). Not confirmed on his phone.**
+
+    The diagnosis page did its job on the first try. It reported:
+    - server up 10 hours, 325 MB in use, 443 MB peak — the memory work
+      held
+    - 304 of 304 trades waiting to be measured, and **"it has not been
+      asked yet"**
+    - the setup reading failing with **"Could not reach the server: Load
+      failed"**
+
+    **Two real faults came straight out of that.**
+
+    **The requests were far too big.** Classification posted the WHOLE
+    trade. Since Alpaca began working, every trade carries up to 1,200
+    replay candles — and the classifier reads the last fifteen. Measured
+    at 99 KB sent where 2 KB was needed; a batch of twenty pushed nearly
+    2 MB up from his phone. "Load failed" is what Safari says when a
+    request like that does not survive a mobile connection. Now trimmed
+    to what the server actually reads, screenshots kept.
+
+    **The rebuild was never even considered.** It ran after collecting
+    new trades, inside the same try. His phone was failing to reach the
+    server — so the collection threw, everything after it was skipped,
+    and the rebuild was never reached. It has its own attempt and its own
+    catch now.
+
+    **And every refusal now names itself.** "It has not been asked yet"
+    told him the symptom and hid the cause. Each way out of the rebuild
+    check records its reason — already rebuilding, already tried three
+    times, waiting out the cooldown, nothing to do — and the page prints
+    it.
+
 50. **The app now says why nothing is happening** (2026-08-31).
     **Status: BUILT AND TESTED (12 new browser checks plus every app suite
     re-run). The underlying AI failure is NOT yet diagnosed — this is what
