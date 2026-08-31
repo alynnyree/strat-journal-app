@@ -2851,7 +2851,9 @@ function renderDashboard(){
     // A trade whose direction was never recorded is in neither half —
     // it cannot be judged, and guessing would make the comparison a lie.
     const st = alignmentOf(t);
-    if(st === 'with') add(bySetup[key].aligned, t);
+    // An unfinished trade has no result to put on either side.
+    if(t.pnlDollar == null && t.pnlNet == null) { /* counted in `all` only */ }
+    else if(st === 'with') add(bySetup[key].aligned, t);
     else if(st !== 'unknown') add(bySetup[key].against, t);
   });
 
@@ -2890,7 +2892,8 @@ function renderDashboard(){
     byPlay[key] = byPlay[key] || { all: blank(), aligned: blank(), against: blank() };
     add(byPlay[key].all, t);
     const stp = alignmentOf(t);
-    if(stp === 'with') add(byPlay[key].aligned, t);
+    if(t.pnlDollar == null && t.pnlNet == null) { /* counted in `all` only */ }
+    else if(stp === 'with') add(byPlay[key].aligned, t);
     else if(stp !== 'unknown') add(byPlay[key].against, t);
   });
   const pb = document.getElementById('playBreakdown');
@@ -2926,8 +2929,16 @@ function renderDashboard(){
   // the way I traded" are different questions, and only the second one is
   // the edge he is asking about. Trading INTO full agreement the wrong
   // way is its own thing, and worth seeing on its own.
+  // Only trades with a RESULT can be compared. A position still open has
+  // no money figure, so `realPnl` gives it a flat zero — counting it would
+  // add a trade to the count and nothing to the total, quietly dragging
+  // that side's per-trade average toward zero. It is left out and said so.
+  const settled = t => t.pnlDollar != null || t.pnlNet != null;
+  const judged = trades.filter(settled);
+  const notSettled = trades.length - judged.length;
+
   const alignedAll = blank(), wrongWayAll = blank(), noneAll = blank(), unknownAll = blank();
-  trades.forEach(t => {
+  judged.forEach(t => {
     const st = alignmentOf(t);
     add(st === 'with' ? alignedAll : (st === 'against' ? wrongWayAll : (st === 'none' ? noneAll : unknownAll)), t);
   });
@@ -2967,7 +2978,7 @@ function renderDashboard(){
         ${rowOf('✕ No agreement either way', noneAll, 'var(--text-dim)')}
         ${rowOf('· Agreed, but which way was never recorded — not counted either side', unknownAll, 'var(--text-dim)')}
         <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12.5px; color:${gap>0?'var(--bull)':(Math.abs(gap)<1?'var(--text-dim)':'var(--bear)')};">${verdict}</div>
-        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Compared per trade, not as totals — you may have taken far more of one than the other.</div>`;
+        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Compared per trade, not as totals — you may have taken far more of one than the other. Counted on ${judged.length} of your ${trades.length} trade${trades.length===1?'':'s'}${notSettled ? ` — ${notSettled} left out because ${notSettled===1?'it has':'they have'} no result yet` : ''}. Each timeframe is read at the minute you entered, from real price data.</div>`;
     }
   }
 
