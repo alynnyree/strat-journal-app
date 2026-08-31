@@ -4685,8 +4685,22 @@ function tradeIsStale(t){
   // to fix it. Asked only while Alpaca really is connected, or the app
   // would chase an exactness it cannot get.
   if(alpacaConnected && t.undPricedWithAlpaca !== true) return true;
+  // Timeframe alignment measured under the OLD rule.
+  //
+  // Until 30 August a timeframe's direction was read from the end of the
+  // bar the entry fell inside — so the daily used the whole rest of the
+  // day. Every trade carrying that reading has an answer on file, which
+  // means every "is anything missing?" test calls it finished and the
+  // rebuild would never touch it. Exactly what stopped the plays and the
+  // exact stock prices ever reaching old trades. The server now stamps
+  // each reading with the rule that produced it, so a trade measured the
+  // old way asks to be measured again — once.
+  if(t.ftfcRun != null && Number(t.ftfcVersion || 1) < FTFC_RULE_VERSION) return true;
   return false;
 }
+
+// Must match FTFC_RULE_VERSION in the server's cron.js.
+const FTFC_RULE_VERSION = 2;
 
 // Asks the server whether Alpaca is connected. Kept separate from the
 // display on the Journal tab, because the answer is needed whether or not
@@ -5060,8 +5074,13 @@ function refreshTradeFacts(saved, fresh){
 
   // Timeframe alignment. Only taken when the rebuild actually measured
   // something — an empty answer must not wipe a good one.
-  if(fresh.ftfcRun){
+  if(fresh.ftfcRun != null){
     set('ftfcRun', fresh.ftfcRun);
+    // The rule that produced the reading. Without carrying this over, a
+    // rebuild that DID re-measure would look exactly like one that had
+    // not, and the trade would ask to be rebuilt for ever.
+    set('ftfcVersion', fresh.ftfcVersion);
+    set('ftfcPriceAtEntry', fresh.ftfcPriceAtEntry);
     set('ftfcConfirmed', !!fresh.ftfcConfirmed);
     set('ftfcDirection', fresh.ftfcDirection);
     // Compared before assigning. Assigning unconditionally reported a
