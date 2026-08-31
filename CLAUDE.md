@@ -416,6 +416,23 @@ Uses **The Strat**. Key concepts the code implements:
   reported separately. Any new distinction drawn over old records needs
   this fourth answer, or the old records quietly become evidence for
   whichever side the code happens to default to.
+- **A limit meant for a GUESS must not block a certainty.** The
+  timeframe reading was corrected and every trade needed measuring again
+  — but `maybeAutoRebuild`'s three-attempt cap and twelve-hour cooldown
+  had already been spent on earlier rebuilds for entirely different
+  reasons, so the one rebuild that mattered was refused in silence and he
+  saw the same figures and said so. Those limits exist to stop a
+  heuristic ("these trades look short of something") looping for ever.
+  A definite, one-off re-measure asked for by a corrected rule is a NEW
+  reason: the history now records which rule version it belongs to, and a
+  new version gets one fresh attempt immediately. Any future rule change
+  needs the same, or it will not reach the trades already on file.
+- **Two cards showing the same split will disagree.** "FTFC Timeframe Hit
+  Rate" and "Does Alignment Pay?" both broke the trades into the same
+  three groups — but one counted a win by the price move and the other by
+  the money that actually arrived, so a trade whose fees turned a small
+  win into a small loss was a win on one card and a loss on the other.
+  Merged into the one that counts the money.
 - **Memory a process CHURNS is memory the hosting company kills it for.**
   Reading the thirteen timeframes built a fresh `Intl.DateTimeFormat` on
   every call — once per candle per timeframe, about 23,000 per trade —

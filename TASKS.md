@@ -9,6 +9,33 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+49. **Why his numbers did not change, and one card instead of two**
+    (2026-08-31). **Status: BUILT AND TESTED (3 new browser checks on the
+    cause, plus every app suite re-run). Not confirmed on his phone.**
+
+    He said the numbers were still the same. They were, and this is why.
+
+    **The re-measure was refused in silence.** The timeframe reading was
+    corrected and every trade needed measuring again — but the app allows
+    only three automatic rebuilds and only one every twelve hours, and
+    BOTH had already been spent earlier the same day on unrelated
+    rebuilds. So the one that actually mattered was turned down, quietly,
+    and he saw exactly what he saw before.
+
+    Those two limits exist to stop a guess — "these trades look short of
+    something" — running in circles. A corrected rule is not a guess; it
+    is a definite, one-off reason. The record of past rebuilds now says
+    which version of the rule it belongs to, and a new version gets one
+    fresh attempt straight away. After that the ordinary limits apply
+    again, so it still cannot loop.
+
+    **Two cards became one.** "FTFC Timeframe Hit Rate" broke the trades
+    into the same three groups as "Does Alignment Pay?", showing two of
+    the same four columns — and it counted a win by the price move while
+    the other counts the money that actually arrived, so a trade whose
+    fees turned a small win into a small loss showed as a win on one card
+    and a loss on the other. Now one card, counting the money.
+
 48. **The re-measure ran the server out of memory, and this is what was
     doing it** (2026-08-31). **Status: BUILT AND TESTED (6 new measured
     server checks, every suite in both repos re-run). Not verified on the
