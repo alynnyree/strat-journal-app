@@ -9,6 +9,37 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+46. **"Recent Trades" was not showing his recent trades** (2026-08-30).
+    **Status: BUILT AND TESTED (10 new browser checks plus every app
+    suite re-run). Not confirmed on a real phone.**
+
+    He reported that the Recent Trades panel on the Home tab was not
+    showing his most recent trades — his NIO trades were missing from it.
+    He was right.
+
+    **The cause.** That panel had no ordering at all. It drew whatever
+    order the trades happened to sit in storage, and imports add at the
+    front — so the January-to-April history, fetched last, sat at the top
+    under a heading saying "Recent". His NIO position, closed 23 July and
+    genuinely his most recent, was pushed below trades from four months
+    earlier.
+
+    **This is the second time.** The identical fault was found in the
+    Journal on 29 August and fixed there, and CLAUDE.md has said since
+    then that a list with no sort is not in order. It was never applied
+    beyond the list that had been reported. Checking every place the
+    trades are read took one minute and found **four** still wrong: this
+    panel, the JSON export, the spreadsheet export, and the trades handed
+    to the AI Analyst — so any observation it made about "lately" was
+    drawn from write order. All four now use the same ordering the
+    Journal does.
+
+    **One more thing that made it look wrong.** The panel showed each
+    trade's ENTRY date while being ordered by the close. His NIO trade
+    opened 24 June and closed 23 July, so even once sorted correctly it
+    would have sat at the top showing a June date and looked misplaced
+    again. It now shows "closed 2026-07-23" whenever the two differ.
+
 45. **Bullish or bearish alignment, on the card and in the numbers**
     (2026-08-30). **Status: BUILT AND TESTED (30 new browser checks, plus
     every app suite re-run). Not confirmed on a real phone.**

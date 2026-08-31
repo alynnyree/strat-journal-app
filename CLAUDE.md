@@ -298,12 +298,27 @@ Uses **The Strat**. Key concepts the code implements:
   the order as wrong a second time and was right a second time. For a day
   trade the two are identical, which is exactly why it survives testing;
   the multi-day hold is the case that exposes it.
-- **A list with no sort is not "in order", it is in write order.** The
-  Journal drew trades in whatever order they sat in storage. Imports add
+- **A list with no sort is not "in order", it is in write order — and
+  fixing the one he reported is not fixing it.** The Journal drew trades
+  in whatever order they sat in storage. Imports add
   at the front, so the January-to-April backfill — fetched last — landed
   ABOVE the May-to-July trades already there, and the owner reasonably
   reported the log as inaccurate. Any list shown to him needs an explicit
   order.
+- **The same fault was still in three other lists a day later.** The
+  Journal's ordering was fixed on 29 August; "Recent Trades" on the Home
+  tab, the JSON export, the spreadsheet export and the trades handed to
+  the AI Analyst were all still `loadTrades()` with no sort. So the Home
+  tab showed four-month-old trades under the heading "Recent Trades"
+  while his most recent sat further down, and he reported it. When a
+  rule like this is learned, sweep EVERY reader of the data for it in
+  the same change — `grep loadTrades()` took one minute and found all
+  four.
+- **A list must show the field it is SORTED by.** Recent Trades showed
+  the entry date while being ordered by the close, so his NIO position
+  (opened 24 June, closed 23 July) sat at the top displaying a June date
+  and looked misplaced. It now shows "closed 2026-07-23" when the two
+  differ, and just the date when they do not.
 - **A comparator must answer "these two are equal" with 0.** The Schwab
   file reader sorted fills with `a.date === b.date ? (isBuy ? -1 : 1) : …`,
   so two same-day buys each compared as "me first". Six trades split
