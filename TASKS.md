@@ -9,6 +9,38 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+50. **The app now says why nothing is happening** (2026-08-31).
+    **Status: BUILT AND TESTED (12 new browser checks plus every app suite
+    re-run). The underlying AI failure is NOT yet diagnosed — this is what
+    makes it visible.**
+
+    He sent the Dashboard again: the two cards were correctly merged, but
+    the alignment figures were still 174 / 53 / 77, and the setup reading
+    read "0 of 20 looked at".
+
+    **What that "0 of 20" actually meant.** The progress figure only moved
+    on a successful read. So twenty requests failing one after another
+    displayed as "0 of 20" indefinitely, with nothing anywhere saying a
+    single one had failed. He was looking directly at a broken thing and
+    the only symptom available to him was a number that would not move.
+    Every trade in his journal still showing "Unclassified" is the same
+    fact from the other side — this is not a regression, they have never
+    been classified, and now we can find out why.
+
+    Three changes, none of them a guess about the cause:
+    - a failed read counts as progress through the list, so a failing run
+      no longer looks like a stalled one
+    - the server's OWN words are captured and shown, instead of a silent
+      `return 'error'`
+    - the Checks page gained a section that names what is outstanding,
+      when it was last attempted, what came back, and a button to force
+      the re-measure when the automatic path has not managed it
+
+    **What is still unknown:** why every AI read is failing on his server.
+    This environment cannot reach it and cannot call Gemini, so it cannot
+    be diagnosed from here — which is exactly why the reason now has to
+    reach his screen.
+
 49. **Why his numbers did not change, and one card instead of two**
     (2026-08-31). **Status: BUILT AND TESTED (3 new browser checks on the
     cause, plus every app suite re-run). Not confirmed on his phone.**

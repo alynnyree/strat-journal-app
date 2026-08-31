@@ -1095,6 +1095,7 @@
         Grey means not built yet.
       </div>
       <div id="serverState" style="margin-top:12px;"></div>
+      <div id="stuckState" style="margin-top:10px;"></div>
       <div id="checklistBody" style="margin-top:12px;"><div class="empty">Working it out…</div></div>
     </div>
   </div>
@@ -3431,16 +3432,40 @@ function noteClassifyTry(id){
 // confident enough), 'rateLimited' (the AI is out of allowance for now —
 // the run should pause and NOT count this as a try), 'authFailed' (the App
 // Key does not match), or 'error' (connection or server trouble).
+// The last thing that went wrong, and when. Kept so the Checks page can
+// say WHY nothing is happening instead of leaving him to notice that a
+// counter has not moved. He should never have to discover silence.
+let lastClassifyProblem = null;   // {text, at}
+let lastRebuildProblem = null;    // {text, at}
+function noteProblem(which, text){
+  const entry = { text: String(text).slice(0, 200), at: Date.now() };
+  if(which === 'classify') lastClassifyProblem = entry; else lastRebuildProblem = entry;
+  try{ localStorage.setItem('strat_last_problem_' + which, JSON.stringify(entry)); }catch(e){}
+}
+function readProblem(which){
+  const held = which === 'classify' ? lastClassifyProblem : lastRebuildProblem;
+  if(held) return held;
+  try{ return JSON.parse(localStorage.getItem('strat_last_problem_' + which) || 'null'); }
+  catch(e){ return null; }
+}
+
 async function classifyOneTrade(trade){
   const url = backendUrl();
-  if(!url) return 'error';
+  if(!url){ noteProblem('classify', 'No server address is set in the app.'); return 'error'; }
   try{
     const r = await fetch(url+'/ai/classify?key='+encodeURIComponent(appKey()), {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trade })
     });
     if(r.status === 403) return 'authFailed';
     if(r.status === 429) return 'rateLimited';
-    if(!r.ok) return 'error';
+    if(!r.ok){
+      // The server's own words, not a bare number. This is the difference
+      // between "0 of 20 looked at" for ever and knowing what to fix.
+      let detail = '';
+      try{ const body = await r.json(); detail = body && body.error ? body.error : ''; }catch(e){}
+      noteProblem('classify', detail || `The server answered with an error (${r.status}) and no explanation.`);
+      return 'error';
+    }
     const { result } = await r.json();
     if(result && (result.strategy || result.play)){
       const live = loadTrades();
@@ -3466,7 +3491,10 @@ async function classifyOneTrade(trade){
       }
     }
     return 'unclear';
-  }catch(e){ return 'error'; }
+  }catch(e){
+    noteProblem('classify', 'Could not reach the server: ' + (e && e.message ? e.message : 'connection failed'));
+    return 'error';
+  }
 }
 
 // ---- Reading the setup on trades, without being asked to ----
@@ -3515,7 +3543,7 @@ async function runClassification(targets, { announce }){
   if(announce) showStatus('info', `Reading the setup on ${targets.length} trade${targets.length===1?'':'s'} — this takes a few minutes. You can keep using the app.`);
   log('syncLog', `Reading setups on ${targets.length} trade(s)`);
 
-  let tagged = 0, checked = 0, stopped = null;
+  let tagged = 0, checked = 0, errored = 0, stopped = null;
   for(const trade of targets){
     const outcome = await classifyOneTrade(trade);
     if(outcome === 'authFailed'){ stopped = 'authFailed'; break; }
@@ -3524,16 +3552,22 @@ async function runClassification(targets, { announce }){
     // so it must not spend one of that trade's two looks.
     if(outcome === 'tagged' || outcome === 'unclear') noteClassifyTry(trade.id);
     if(outcome === 'tagged') tagged++;
-    checked++; classifyDone++;
+    // A failure still counts as PROGRESS THROUGH THE LIST, or the banner
+    // reads "0 of 20 looked at" for ever while twenty requests fail one
+    // after another -- which is exactly what he was looking at.
+    if(outcome === 'error') errored++;
+    else checked++;
+    classifyDone++;
     if(checked % 5 === 0) renderDashboard();
     await new Promise(res=>setTimeout(res, CLASSIFY_PACE_MS));
   }
 
   classifyInProgress = false;
-  log('syncLog', `Setup reading finished: ${tagged}/${checked} trade(s) tagged${stopped ? ' (stopped: '+stopped+')' : ''}`);
+  log('syncLog', `Setup reading finished: ${tagged}/${checked} tagged, ${errored} failed${stopped ? ' (stopped: '+stopped+')' : ''}`);
+  if(errored && !checked) stopped = stopped || 'allFailed';
   renderDashboard();
   renderJournal();
-  return { tagged, checked, stopped };
+  return { tagged, checked, errored, stopped };
 }
 
 // Runs quietly while the app is open, and keeps going batch after batch
@@ -3665,8 +3699,56 @@ async function showServerState(){
     `It no longer stops when that happens — it writes down what went wrong and keeps going, so your trades keep arriving. Nothing for you to do.`);
 }
 
+// Says what the app is waiting on, and what went wrong if anything did.
+//
+// This exists because he twice reported figures that would not change and
+// had no way of finding out why: a re-measure was being refused, and the
+// setup reading was failing on every trade while showing "0 of 20 looked
+// at". Both were silent. Nothing here is a guess -- it is the count on
+// his phone and the server's own words.
+function renderStuckState(){
+  const el = document.getElementById('stuckState');
+  if(!el) return;
+  const box = (colour, html) => `<div style="padding:10px 12px; border-radius:8px; background:var(--panel); border:1px solid ${colour}; color:${colour}; font-size:12.5px; line-height:1.5; margin-bottom:8px;">${html}</div>`;
+  const ago = ms => {
+    const m = Math.round((Date.now() - ms)/60000);
+    return m < 1 ? 'just now' : (m < 60 ? `${m} minute${m===1?'':'s'} ago` : `${Math.round(m/60)} hour${Math.round(m/60)===1?'':'s'} ago`);
+  };
+  const bits = [];
+
+  // --- measuring the timeframes again ---
+  const auto = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const needsMeasure = auto.filter(tradeIsStale).length;
+  if(needsMeasure){
+    const ask = readRebuildAsk();
+    const problem = readProblem('rebuild');
+    let text = `<b>${needsMeasure} of your ${auto.length} trades are waiting to be measured again.</b> `;
+    if(problem && (!ask || problem.at >= ask.at)){
+      text += `The last try, ${ago(problem.at)}, did not work: ${escapeHtml(problem.text)}`;
+    } else if(ask){
+      text += `The server was asked ${ago(ask.at)}. It does the work on its own and the app collects the result — if the count above is not falling after ten minutes, use the button below.`;
+    } else {
+      text += `It has not been asked yet — that happens on its own when the app opens. If this does not change, use the button below.`;
+    }
+    bits.push(box('var(--amber)', text)
+      + `<button class="secondary" id="forceRemeasureBtn" onclick="forceRemeasure()" style="margin-top:0; width:100%;">Measure My Trades Again Now</button>`);
+  }
+
+  // --- reading the setup and the play ---
+  const waiting = loadTrades().filter(classifyWaiting).length;
+  const cProblem = readProblem('classify');
+  if(waiting && cProblem && Date.now() - cProblem.at < 6*60*60*1000){
+    bits.push(box('var(--bear)',
+      `<b>Reading the setup on your trades is failing.</b> ${waiting} still to read, and the last try ${ago(cProblem.at)} came back: `
+      + `“${escapeHtml(cProblem.text)}”<br><br>Nothing you can do from here — send me that line and I will fix it.`));
+  }
+
+  el.innerHTML = bits.join('');
+}
+
 function renderChecklist(){
   showServerState();
+  renderStuckState();
   const box = document.getElementById('checklistBody');
   if(!box) return;
   const all = loadTrades();
@@ -4785,6 +4867,8 @@ async function maybeAutoRebuild(url){
     forVersion: FTFC_RULE_VERSION,
   }));
 
+  lastRebuildAsk = { at: Date.now(), stale };
+  try{ localStorage.setItem('strat_last_rebuild_ask', JSON.stringify(lastRebuildAsk)); }catch(e){}
   setConnState(true, `Connected · bringing ${stale} trade${stale===1?'':'s'} up to date…`);
   showStatus('info', `${stale} of your trades are missing details the server can now work out — fees, real stock prices, timeframe alignment. Fetching them now. Nothing for you to do, and nothing you typed in yourself is touched.`);
   try{
@@ -4794,9 +4878,43 @@ async function maybeAutoRebuild(url){
     });
     return true;
   }catch(e){
-    // Not worth interrupting him over -- it tries again tomorrow.
+    // Not worth interrupting him over on the spot -- but it IS written
+    // down, so the Checks page can say why nothing happened rather than
+    // leaving him to work it out from figures that never move.
+    noteProblem('rebuild', 'Could not ask the server to re-measure: ' + (e && e.message ? e.message : 'connection failed'));
     return false;
   }
+}
+
+let lastRebuildAsk = null;
+function readRebuildAsk(){
+  if(lastRebuildAsk) return lastRebuildAsk;
+  try{ return JSON.parse(localStorage.getItem('strat_last_rebuild_ask') || 'null'); }catch(e){ return null; }
+}
+
+// Forces the re-measure, ignoring the attempt limit and the cooldown.
+// This should not be needed -- it happens on its own -- but when it does
+// not happen he must not be left with nothing but a number that will not
+// move.
+async function forceRemeasure(){
+  const url = backendUrl();
+  if(!url){ showStatus('err', 'Connect your backend first (Journal tab).'); return; }
+  localStorage.removeItem(AUTO_REBUILD_KEY);
+  showStatus('info', 'Asking the server to measure your trades again. This runs on the server — you can close the app.');
+  try{
+    await fetch(url+'/api/trades/reset', { method:'POST' });
+    await fetch(url+'/api/trades/backfill', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365}),
+    });
+    lastRebuildAsk = { at: Date.now(), stale: loadTrades().filter(tradeIsStale).length, forced: true };
+    try{ localStorage.setItem('strat_last_rebuild_ask', JSON.stringify(lastRebuildAsk)); }catch(e){}
+    showStatus('ok', 'Asked. Give it a few minutes, then pull this page up again.');
+  }catch(e){
+    noteProblem('rebuild', 'Could not ask the server to re-measure: ' + (e && e.message ? e.message : 'connection failed'));
+    showStatus('err', 'Could not reach your server to ask. Check the Checks page — it now says what went wrong.');
+  }
+  showRebuildState(url);
+  renderChecklist();
 }
 
 // Once a rebuild has actually filled the gaps, the attempt count is
