@@ -423,6 +423,25 @@ Uses **The Strat**. Key concepts the code implements:
   looking straight at a failure and could only tell me the number had not
   moved. A failure is still progress through the list, and the reason
   belongs on screen in the server's own words.
+- **Sending the whole record to use a fifteenth of it.** The AI
+  classification posted the ENTIRE trade, and since Alpaca started
+  working every trade carries up to 1,200 replay candles — while the
+  classifier reads the last fifteen. Measured: 99KB sent where 2KB was
+  needed, ~2MB per batch of twenty, up from a phone on mobile data. His
+  Checks page reported "Could not reach the server: Load failed", which
+  is what Safari says when a request like that does not survive. Send
+  what the far end reads, not what happens to be on the object.
+- **A step that must happen cannot sit downstream of one that can fail.**
+  `maybeAutoRebuild` ran after `pollBackend` inside one shared try, so
+  when his phone could not reach the server to collect trades, the
+  rebuild was never even considered — and the page could only say "it has
+  not been asked yet". It has its own try now. Anything that must happen
+  regardless needs its own attempt and its own catch.
+- **Every path that declines must say why it declined.** "It has not been
+  asked yet" is the same dead end as a counter that will not move: it
+  names the symptom and hides the cause. Each way out of
+  `maybeAutoRebuild` now records its reason, and the Checks page prints
+  it.
 - **He must never have to DISCOVER silence.** Twice he reported figures
   that would not change, and both times the cause was something refusing
   quietly — a rebuild turned down by a spent limit, then every AI request
