@@ -566,6 +566,17 @@ Uses **The Strat**. Key concepts the code implements:
   now has a "Reconnect to Schwab" button; `/auth/status` reports whether
   the SERVER can reach Schwab, which is a different question from whether
   the app can reach the server.
+- **A diagnostic that lies is worse than none.** The Details block was
+  built while the health check was still in flight, so it printed
+  "server up 0m · mem ?MB" every single time, whatever the server had
+  actually said. I read that as evidence his server was running old code
+  and nearly told him so. Anything that reports a measurement must wait
+  for the measurement, and must be able to say "not checked yet".
+- **"Did not say" is not "said no".** Treating a missing
+  `ftfcRuleVersion` as "the server is behind" would have blocked the
+  re-measure for ever with no way out — a worse failure than asking for
+  one that turns out not to help. Absent means unknown; only an explicit
+  lower number means behind.
 - **Never show him a server's raw error text.** A lapsed sign-in reached
   the screen as `{"error":"unsupported_token_type","error_description":
   "400 Bad Request: ..."}`. The whole answer was in there and none of it

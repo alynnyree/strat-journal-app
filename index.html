@@ -3670,13 +3670,28 @@ function checkRow(state, title, figure, detail){
 
 // Everything technical the app knows, gathered in one place. Never shown
 // unless he taps for it -- its only purpose is to be sent to me.
-let techNotes = { server: null };
+let techNotes = { server: null, checked: false };
 async function gatherTech(url){
   if(!url) return;
   try{
     const r = await fetch(url.replace(/\/$/,'')+'/health');
     techNotes.server = r.ok ? await r.json() : { unreachable: true, status: r.status };
   }catch(e){ techNotes.server = { unreachable: true, why: e && e.message }; }
+  techNotes.checked = true;
+}
+
+// True when the server is measuring with an older rule than this app
+// expects. Asking such a server to re-measure can never satisfy the app,
+// so it would keep asking for ever.
+function serverBehind(){
+  const srv = techNotes.server;
+  if(!techNotes.checked || !srv || srv.unreachable) return false;
+  // Only when the server SAYS a lower number. A server that does not
+  // mention it at all is unknown, not behind -- and treating unknown as
+  // behind would block the re-measure for ever with no way out, which is
+  // a worse failure than asking for one that turns out not to help.
+  if(srv.ftfcRuleVersion == null) return false;
+  return Number(srv.ftfcRuleVersion) < FTFC_RULE_VERSION;
 }
 
 function toggleTechDetails(){
@@ -3721,6 +3736,12 @@ async function renderAppStatus(){
     return;
   }
 
+  if(serverBehind()){
+    el.innerHTML = line('var(--amber)',
+      '<b>Waiting on an update.</b> The part that does the work is still finishing an update of its own, so your trades can\'t finish updating yet. It sorts itself out — check back in a few minutes.');
+    return;
+  }
+
   if(catchingUp || unread){
     const bits = [];
     if(catchingUp) bits.push(`${catchingUp} still to update`);
@@ -3733,8 +3754,13 @@ async function renderAppStatus(){
   el.innerHTML = line('var(--bull)', '<b>Everything is up to date.</b> Your trades are in, priced, and read.');
 }
 
-function renderChecklist(){
-  renderAppStatus();
+async function renderChecklist(){
+  // AWAITED. It was not, so the details block was built while the health
+  // check was still in flight -- and printed "server up 0m · mem ?MB"
+  // every single time, whatever the server had actually said. I read that
+  // as evidence about his server and nearly told him something untrue
+  // about it. A diagnostic that lies is worse than none.
+  await renderAppStatus();
   const box = document.getElementById('checklistBody');
   if(!box) return;
   const all = loadTrades();
@@ -3811,8 +3837,11 @@ function techText(){
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
     `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
     `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,
-    srv.unreachable ? `server unreachable (${srv.why || srv.status})`
-      : `server up ${Math.round((srv.uptimeSeconds||0)/60)}m · mem ${srv.memoryMb||'?'}MB peak ${srv.peakMemoryMb||'?'}MB · failures ${(srv.recentFailures||[]).length}`,
+    !techNotes.checked ? 'server: not checked yet'
+      : srv.unreachable ? `server unreachable (${srv.why || srv.status})`
+      : `server up ${Math.round((srv.uptimeSeconds||0)/60)}m · mem ${srv.memoryMb ?? '?'}MB peak ${srv.peakMemoryMb ?? '?'}MB · failures ${(srv.recentFailures||[]).length}`,
+    !techNotes.checked ? '' : `server ftfc rule v${srv.ftfcRuleVersion ?? 'unknown (older build)'}${
+      srv.ftfcRuleVersion === FTFC_RULE_VERSION ? ' (matches)' : ' — DOES NOT MATCH app v' + FTFC_RULE_VERSION}`,
     `last rebuild ask: ${when(ask)}${ask && ask.forced ? ' (forced)' : ''}`,
     dec ? `rebuild declined: ${dec.text} (${when(dec)})` : 'rebuild not declined',
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
@@ -4853,6 +4882,7 @@ async function maybeAutoRebuild(url){
     }
   }
 
+  if(serverBehind()){ noteDecline('the other half is still updating, so measuring again now would give the same answer'); return false; }
   const trades = loadTrades();
   const closed = trades.filter(t => t.optExit != null && t.source === 'schwab-auto');
   if(closed.length < 5){ noteDecline('fewer than five trades came from Schwab, so there is nothing worth rebuilding'); return false; }
@@ -4949,9 +4979,13 @@ async function autoCollectOnOpen(){
   if(!url){ setConnState(false, 'Not connected'); toggleConnSettings(true); return; }
   setConnState(true, 'Connected — checking for new trades…');
   try{
-    // Asked BEFORE anything judges whether a trade is up to date, since
-    // "has this price been looked up with Alpaca?" is part of that.
+    // Both asked BEFORE anything judges whether a trade is up to date.
+    // "Has this price been looked up with Alpaca?" is part of that, and so
+    // is "is the other half even running the corrected rule yet?" -- the
+    // health check used to happen only when he opened the Checks page, so
+    // the rebuild decision was made without knowing either.
     await refreshAlpacaConnected(url);
+    await gatherTech(url);
     await pollBackend(true);
     const n = loadTrades().length;
     // Two different questions, and only one of them was ever asked. The
