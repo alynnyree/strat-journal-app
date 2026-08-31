@@ -9,6 +9,37 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+54. **The setup reading never worked because the phone was made to wait**
+    (2026-08-31). **Status: BUILT AND TESTED (12 new server checks, app
+    suites re-run). Not confirmed on his phone.**
+
+    His Checks page, now reporting honestly, settled it: the server was
+    UP (76 minutes, 197 MB, no failures), on the CORRECT code version,
+    and the request had already been trimmed to 2 KB. Every explanation I
+    had been working from was ruled out.
+
+    **What was left was the wait.** The app asked the server to read a
+    trade, and the server called the AI and answered only when the AI came
+    back — ten or twenty seconds on a good day, past a minute once its
+    retries are counted. A phone will not hold a connection open that
+    long, especially with the screen off. So every request failed, and not
+    one of his 304 trades was ever read. It was never the size of what was
+    sent; it was how long he was made to wait for the answer.
+
+    **The phone no longer waits.** It hands the trade over and is answered
+    at once; the server thinks in its own time and the app picks the
+    answers up on the checking it already does. Measured: answered in
+    under 800 ms while the AI took 3 seconds.
+
+    **Also from the same screen — real progress.** The re-measure had
+    worked: trades waiting fell from 304 to 28, and the number where the
+    timeframes agreed moved from 227 to 259 under the corrected rule.
+
+    **Worth recording about how I worked:** I guessed three times — an
+    oversized request, an old server build, a memory restart — and all
+    three were wrong. What settled it was a diagnostic that reported
+    honestly, leaving only the thing I had not ruled out.
+
 53. **My own diagnostic was lying, and I nearly believed it**
     (2026-08-31). **Status: BUILT AND TESTED (12 new browser checks plus
     every suite in both repos re-run).**

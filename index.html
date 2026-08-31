@@ -2991,7 +2991,7 @@ function renderDashboard(){
   const stuck = trades.filter(classifyStuck).length;
   const pausedUntil = classifyPausedUntil();
   if(classifyInProgress){
-    cr.innerHTML = `<div class="empty"><span class="spin"></span> Reading the setup and the play on your trades — ${classifyDone} of ${classifyTotal} looked at. Nothing for you to do.</div>`;
+    cr.innerHTML = `<div class="empty"><span class="spin"></span> Reading the setup and the play on your trades. This happens on its own — nothing for you to do.</div>`;
   } else if(pausedUntil && waiting > 0){
     const mins = Math.max(1, Math.round((pausedUntil - Date.now())/60000));
     cr.innerHTML = `<div class="empty">The AI is at its daily limit. ${waiting} trade${waiting===1?'':'s'} still to read — it carries on by itself in about ${mins} minute${mins===1?'':'s'}.</div>`;
@@ -3407,7 +3407,15 @@ function needsClassifying(t){
 // their turn.
 const CLASSIFY_MAX_TRIES = 2;
 function classifyTriesOf(t){ return Number(t.classifyTries) || 0; }
-function classifyWaiting(t){ return needsClassifying(t) && classifyTriesOf(t) < CLASSIFY_MAX_TRIES; }
+// Trades already handed over and waiting on an answer. Without this the
+// next batch hands the same trades over again, because nothing about them
+// has changed yet -- the answer has not come back. Held in memory only:
+// losing it on a reload costs one repeated hand-over, and the server
+// ignores a trade already in its queue anyway.
+const awaitingAnswer = new Set();
+function classifyWaiting(t){
+  return needsClassifying(t) && classifyTriesOf(t) < CLASSIFY_MAX_TRIES && !awaitingAnswer.has(String(t.id));
+}
 function classifyStuck(t){ return needsClassifying(t) && classifyTriesOf(t) >= CLASSIFY_MAX_TRIES; }
 function noteClassifyTry(id){
   const live = loadTrades();
@@ -3464,6 +3472,16 @@ function tradeForClassifying(t){
   return trimmed;
 }
 
+// Hands one trade over to be read. Does NOT wait for the answer.
+//
+// This used to wait for the AI to think, which is ten or twenty seconds
+// on a good day and past a minute once the server's own retries are
+// counted. A phone will not hold a connection open that long -- every one
+// of his requests failed with "Load failed", and his setups were never
+// read. The server now takes the trade, answers at once, and does the
+// thinking on its own time; collectReadings() picks the answers up.
+//
+// Answers: 'queued', 'rateLimited', 'authFailed', or 'error'.
 async function classifyOneTrade(trade){
   const url = backendUrl();
   if(!url){ noteProblem('classify', 'No server address is set in the app.'); return 'error'; }
@@ -3475,42 +3493,62 @@ async function classifyOneTrade(trade){
     if(r.status === 403) return 'authFailed';
     if(r.status === 429) return 'rateLimited';
     if(!r.ok){
-      // The server's own words, not a bare number. This is the difference
-      // between "0 of 20 looked at" for ever and knowing what to fix.
       let detail = '';
       try{ const body = await r.json(); detail = body && body.error ? body.error : ''; }catch(e){}
       noteProblem('classify', detail || `The server answered with an error (${r.status}) and no explanation.`);
       return 'error';
     }
-    const { result } = await r.json();
-    if(result && (result.strategy || result.play)){
-      const live = loadTrades();
-      const idx = live.findIndex(t=>String(t.id)===String(trade.id));
-      if(idx !== -1){
-        let wrote = false;
-        if(result.strategy && !live[idx].strat){
-          live[idx].strat = result.strategy;
-          live[idx].stratConfidence = result.confidence;
-          live[idx].stratReasoning = result.reasoning;
-          live[idx].stratUsedScreenshot = !!result.usedScreenshot;
-          wrote = true;
-        }
-        // The play is written on its own merits. A trade that already has
-        // a combo but no play is exactly the case that used to be skipped.
-        if(result.play && !live[idx].play){
-          live[idx].play = result.play;
-          live[idx].playConfidence = result.playConfidence;
-          live[idx].playReasoning = result.playReasoning;
-          wrote = true;
-        }
-        if(wrote){ saveTrades(live); return 'tagged'; }
-      }
-    }
-    return 'unclear';
+    return 'queued';
   }catch(e){
     noteProblem('classify', 'Could not reach the server: ' + (e && e.message ? e.message : 'connection failed'));
     return 'error';
   }
+}
+
+// Collects the readings the server has finished and puts them on the
+// trades. Anything he chose himself is never overwritten.
+async function collectReadings(){
+  const url = backendUrl();
+  if(!url) return 0;
+  let payload;
+  try{
+    const r = await fetch(url+'/ai/classify/results?key='+encodeURIComponent(appKey()));
+    if(!r.ok) return 0;
+    payload = await r.json();
+  }catch(e){ return 0; }
+
+  const results = (payload && payload.results) || {};
+  const ids = Object.keys(results);
+  if(!ids.length) return 0;
+
+  const live = loadTrades();
+  let wrote = 0, changed = false;
+  for(const id of ids){
+    const result = results[id] || {};
+    awaitingAnswer.delete(String(id));
+    const idx = live.findIndex(t => String(t.id) === String(id));
+    if(idx === -1) continue;
+    // Counted as looked at whatever came back, so a trade the AI cannot
+    // call stops being asked about instead of going round for ever.
+    live[idx].classifyTries = classifyTriesOf(live[idx]) + 1;
+    changed = true;
+    if(result.strategy && !live[idx].strat){
+      live[idx].strat = result.strategy;
+      live[idx].stratConfidence = result.confidence;
+      live[idx].stratReasoning = result.reasoning;
+      live[idx].stratUsedScreenshot = !!result.usedScreenshot;
+      wrote++;
+    }
+    if(result.play && !live[idx].play){
+      live[idx].play = result.play;
+      live[idx].playConfidence = result.playConfidence;
+      live[idx].playReasoning = result.playReasoning;
+      wrote++;
+    }
+  }
+  if(changed){ saveTrades(live); renderDashboard(); renderJournal(); }
+  if(wrote) log('syncLog', `${wrote} setup/play answer(s) collected.`);
+  return ids.length;
 }
 
 // ---- Reading the setup on trades, without being asked to ----
@@ -3528,7 +3566,7 @@ async function classifyOneTrade(trade){
 // never two runs at once.
 const AUTO_CLASSIFY_KEY = 'strat_auto_classify';
 const CLASSIFY_BATCH = 20;                       // trades per batch
-const CLASSIFY_PACE_MS = 2500;                   // gap between questions
+const CLASSIFY_PACE_MS = 300;                    // gap between hand-overs (the AI's own pacing is on the server)
 const CLASSIFY_NEXT_BATCH_MS = 30000;            // gap between batches
 const CLASSIFY_PAUSE_MS = 60 * 60 * 1000;        // wait after "out of allowance"
 
@@ -3564,15 +3602,10 @@ async function runClassification(targets, { announce }){
     const outcome = await classifyOneTrade(trade);
     if(outcome === 'authFailed'){ stopped = 'authFailed'; break; }
     if(outcome === 'rateLimited'){ stopped = 'rateLimited'; pauseClassifying(); break; }
-    // A connection wobble is not the AI saying it cannot read the trade,
-    // so it must not spend one of that trade's two looks.
-    if(outcome === 'tagged' || outcome === 'unclear') noteClassifyTry(trade.id);
-    if(outcome === 'tagged') tagged++;
-    // A failure still counts as PROGRESS THROUGH THE LIST, or the banner
-    // reads "0 of 20 looked at" for ever while twenty requests fail one
-    // after another -- which is exactly what he was looking at.
+    // Handing a trade over is not reading it, so no look is counted here.
+    // That happens in collectReadings(), when an answer actually arrives.
     if(outcome === 'error') errored++;
-    else checked++;
+    else { tagged++; checked++; awaitingAnswer.add(String(trade.id)); }
     classifyDone++;
     if(checked % 5 === 0) renderDashboard();
     await new Promise(res=>setTimeout(res, CLASSIFY_PACE_MS));
@@ -3605,6 +3638,11 @@ async function autoClassifyLoop(){
     return;
   }
   if(stopped === 'rateLimited') return;  // picked up again in an hour
+  // The server starts working the moment it is handed a trade, so start
+  // collecting straight away rather than waiting for the next poll.
+  setTimeout(collectReadings, 3000);
+  setTimeout(collectReadings, 12000);
+  setTimeout(collectReadings, 40000);
   if(tradesNewestFirst().some(classifyWaiting)){
     setTimeout(autoClassifyLoop, CLASSIFY_NEXT_BATCH_MS);
   }
@@ -5012,6 +5050,7 @@ async function autoCollectOnOpen(){
     // Started a few seconds in so it is not competing with the first load
     // of the Journal, and left to run itself from there.
     setTimeout(autoClassifyLoop, 5000);
+    collectReadings();
 
     const auth = await fetchSchwabAuthState(url);
     if(auth && auth.needsReconnect){
@@ -5458,6 +5497,8 @@ function startAutoPoll(){
   autoPollTimer = setInterval(()=>{
     if(backendUrl() && document.visibilityState==='visible'){
       pollBackend(true); matchPendingScreenshots(); showRebuildState(backendUrl());
+      // Answers the server has finished working out since last time.
+      collectReadings();
       // Picks reading back up after an hour's pause, or after new trades
       // arrive, without him having to reopen the app. Returns immediately
       // if a run is already going or there is nothing left to read.
@@ -5465,7 +5506,7 @@ function startAutoPoll(){
     }
   }, 30000);
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); autoClassifyLoop(); }
+    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); collectReadings(); autoClassifyLoop(); }
   });
 }
 startAutoPoll();
