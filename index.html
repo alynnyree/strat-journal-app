@@ -3237,8 +3237,15 @@ function renderJournal(){
     const pnlNote = t.pnlNet != null
       ? `<div style="font-size:10px; color:var(--text-dim); text-align:right; margin-top:2px;">after fees · ${fmtMoney(t.pnlDollar)} before</div>`
       : '';
+    // His own notation leads, because it is what he actually reads: he
+    // told me on 2026-08-31 that he does not think "2-2 Reversal", he
+    // thinks "2U-2D (Bearish)", and that this applies to every combo. The
+    // combo name stays underneath as the thing his performance is grouped
+    // by -- renaming the nine would relabel every trade he already has.
     const setupBadge = t.strat
-      ? `<span class="badge setup">${t.strat}${t.stratUsedScreenshot ? ' 📷' : ''}</span>`
+      ? (t.stratNotation
+          ? `<span class="badge setup">${escapeHtml(t.stratNotation)}${t.stratNotationDirection ? ` · ${escapeHtml(t.stratNotationDirection)}` : ''}${t.stratUsedScreenshot ? ' 📷' : ''}<br><span style="opacity:.75; font-weight:400;">${escapeHtml(t.strat)}</span></span>`
+          : `<span class="badge setup">${escapeHtml(t.strat)}${t.stratUsedScreenshot ? ' 📷' : ''}</span>`)
       : `<span class="badge" style="background:var(--panel); color:var(--amber); border:1px solid var(--amber);">⚠ Needs Setup</span>`;
     // Says which WAY the timeframes agreed, and what that meant for the
     // trade he actually took. The direction is spelled out in words with
@@ -3267,9 +3274,13 @@ function renderJournal(){
     } else {
       ftfcBadge = `<span class="badge open">FTFC ${t.ftfcRun||0}/4 — timeframes did not agree</span>`;
     }
+    // His own toggle first. If he has not answered, the AI's own reading
+    // is shown and marked as such -- never dressed up as his answer.
     const broadeningBadge = t.offBroadeningFormation
       ? `<span class="badge" style="background:var(--panel); color:#8ec9ff; border:1px solid #3a6ea5;">📐 Broadening</span>`
-      : '';
+      : (t.broadeningDetected === true
+          ? `<span class="badge" style="background:var(--panel); color:#8ec9ff; border:1px dashed #3a6ea5;">📐 Broadening (read from the chart)</span>`
+          : '');
     // Anything Schwab did not send is marked, so a trade he does not
     // recognise can be told apart from one he does at a glance. Sample
     // entries from early in the project are still in there, dated after
@@ -3544,6 +3555,15 @@ async function collectReadings(){
       live[idx].playConfidence = result.playConfidence;
       live[idx].playReasoning = result.playReasoning;
       wrote++;
+    }
+    if(result.notation && result.notation !== 'unclear' && !live[idx].stratNotation){
+      live[idx].stratNotation = result.notation;
+      live[idx].stratNotationDirection = result.notationDirection || null;
+    }
+    if(result.broadeningFormation && result.broadeningFormation !== 'unclear'
+       && live[idx].broadeningDetected == null){
+      live[idx].broadeningDetected = result.broadeningFormation === 'yes';
+      live[idx].broadeningReasoning = result.broadeningReasoning || null;
     }
   }
   if(changed){ saveTrades(live); renderDashboard(); renderJournal(); }
@@ -5302,6 +5322,15 @@ function refreshTradeFacts(saved, fresh){
   // A setup or play only where he has not chosen one himself.
   if(!saved.strat && fresh.strat){ saved.strat = fresh.strat; saved.stratConfidence = fresh.stratConfidence || null; changed = true; }
   if(!saved.play && fresh.play){ saved.play = fresh.play; saved.playConfidence = fresh.playConfidence || null; changed = true; }
+  if(!saved.stratNotation && fresh.stratNotation){
+    saved.stratNotation = fresh.stratNotation;
+    saved.stratNotationDirection = fresh.stratNotationDirection || null; changed = true;
+  }
+  // The AI's own reading of the formation. Never his own toggle.
+  if(saved.broadeningDetected == null && fresh.broadeningDetected != null){
+    saved.broadeningDetected = fresh.broadeningDetected;
+    saved.broadeningReasoning = fresh.broadeningReasoning || null; changed = true;
+  }
 
   // A worked-out stop, never one he typed in himself.
   if(saved.stop == null && fresh.stop != null){
