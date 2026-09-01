@@ -23,6 +23,18 @@ const POLL_PERIOD_MINUTES = 1; // Chrome's minimum alarm granularity
 // A missing picture is recoverable; a wrong one looks real for ever.
 const MAX_EVENT_AGE_MS = 3 * 60 * 1000;
 
+// The other side of the same coin. A moment can carry a time that has not
+// arrived yet -- the middle of a trade, or the later steps of a rehearsal
+// -- and capturing it early photographs the wrong thing just as surely as
+// capturing it late. Left in place, not cleared, so it is picked up when
+// its moment comes.
+const EARLY_TOLERANCE_MS = 20 * 1000;
+
+function isNotDueYet(event, now = Date.now()) {
+  if (!event || typeof event.timestamp !== 'number') return false;
+  return event.timestamp > (now + EARLY_TOLERANCE_MS);
+}
+
 function isTooOldToCapture(event, now = Date.now()) {
   if (!event || typeof event.timestamp !== 'number') return false; // no time on it: leave the decision to the server
   return (now - event.timestamp) > MAX_EVENT_AGE_MS;
@@ -33,10 +45,20 @@ function isTooOldToCapture(event, now = Date.now()) {
 // timestampMs comes from the trade event itself (the real open/close time),
 // not "now", so a delayed poll doesn't throw off the app's 10-minute
 // entry/exit matching window.
-function buildUploadUrl(backendUrl, appKey, timestampMs) {
+function buildUploadUrl(backendUrl, appKey, timestampMs, opts = {}) {
   const base = backendUrl.replace(/\/+$/, '');
   const timestampSeconds = Math.round(timestampMs / 1000);
-  return `${base}/media/upload?key=${encodeURIComponent(appKey)}&timestamp=${timestampSeconds}`;
+  let url = `${base}/media/upload?key=${encodeURIComponent(appKey)}&timestamp=${timestampSeconds}`;
+  // A rehearsal says so all the way through, so nothing it produces can
+  // ever be filed against a real trade.
+  if (opts.test) url += '&test=1';
+  if (opts.moment) url += `&moment=${encodeURIComponent(opts.moment)}`;
+  return url;
+}
+
+function buildTestTradeUrl(backendUrl, appKey) {
+  const base = backendUrl.replace(/\/+$/, '');
+  return `${base}/browser/test-trade?key=${encodeURIComponent(appKey)}`;
 }
 
 function buildEventsUrl(backendUrl, appKey) {
@@ -75,7 +97,7 @@ async function uploadCapture(backendUrl, appKey, event) {
   const form = new FormData();
   form.append('image', blob, 'capture.png');
 
-  const uploadUrl = buildUploadUrl(backendUrl, appKey, event.timestamp);
+  const uploadUrl = buildUploadUrl(backendUrl, appKey, event.timestamp, { test: event.test, moment: event.type });
   const res = await fetch(uploadUrl, { method: 'POST', body: form });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -98,7 +120,13 @@ async function pollAndCapture() {
     let captured = 0;
     let skippedTooOld = 0;
     let failed = 0;
+    let waiting = 0;
     for (const event of events || []) {
+      if (isNotDueYet(event)) {
+        // Its moment has not come. Left alone on purpose.
+        waiting++;
+        continue;
+      }
       if (isTooOldToCapture(event)) {
         // Cleared rather than left: otherwise it is offered again every
         // minute until it expires, and each attempt is another chance to
@@ -127,27 +155,42 @@ async function pollAndCapture() {
       lastEventCount: (events || []).length,
       lastCapturedCount: captured,
       lastSkippedCount: skippedTooOld,
+      lastWaitingCount: waiting,
     });
   } catch (err) {
     await setStatus({ lastPollAt: Date.now(), lastError: err.message });
   }
 }
 
-// Takes one picture right now and sends it, stamped with this moment
-// rather than a trade's. Nothing in the journal will match it, which is
-// the point: it proves the whole path works -- permission, address, key,
-// upload -- without waiting for a real trade to come along.
-async function captureTestShot() {
+// Rehearses a whole trade rather than taking one picture. The three
+// moments a real trade produces -- opened, still open, closed -- are
+// queued a minute and a half apart, and the ordinary once-a-minute check
+// picks each one up as its time arrives. So what gets exercised is the
+// real path, in the real order, end to end: permission to photograph the
+// tab, the address, the key, the upload, and the app noticing.
+//
+// Every picture it produces is labelled a rehearsal and never attaches to
+// a real trade.
+async function startTestTrade() {
   const { backendUrl, appKey } = await getSettings();
   if (!backendUrl || !appKey) throw new Error('Fill in the address and key in Settings first.');
-  await uploadCapture(backendUrl, appKey, { id: 'test', timestamp: Date.now() });
+  const res = await fetch(buildTestTradeUrl(backendUrl, appKey), { method: 'POST' });
+  if (!res.ok) {
+    if (res.status === 403) throw new Error('The key does not match. Check it in Settings.');
+    throw new Error(`Could not start the test (${res.status}).`);
+  }
+  const body = await res.json().catch(() => ({}));
+  // The first moment is due immediately -- take it now rather than making
+  // him wait up to a minute for the next scheduled check.
+  await pollAndCapture();
+  return body;
 }
 
 if (typeof chrome !== 'undefined' && chrome.runtime) {
   // Asked for from the small window behind the toolbar icon.
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg && msg.type === 'testShot') {
-      captureTestShot()
+    if (msg && msg.type === 'testTrade') {
+      startTestTrade()
         .then(() => sendResponse({ ok: true }))
         .catch(err => sendResponse({ ok: false, error: err.message }));
       return true; // the answer comes later
@@ -181,5 +224,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 // Node-testable exports — chrome.* dependent functions are intentionally
 // left out, since those can only be exercised in a real browser.
 if (typeof module !== 'undefined') {
-  module.exports = { buildUploadUrl, buildEventsUrl, buildDeleteEventUrl, isTooOldToCapture, MAX_EVENT_AGE_MS };
+  module.exports = { buildUploadUrl, buildEventsUrl, buildDeleteEventUrl, buildTestTradeUrl,
+    isTooOldToCapture, isNotDueYet, MAX_EVENT_AGE_MS, EARLY_TOLERANCE_MS };
 }

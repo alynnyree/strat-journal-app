@@ -24,6 +24,56 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+60. **A middle picture, with a slot of its own** (asked for 2026-09-01:
+    "We should build out a slot for a middle picture").
+    **Status: BUILT AND TESTED (21 checks in a real browser). Never run
+    on a real trade.**
+
+    A trade held past fifteen minutes gets a picture from the middle of
+    it. There was nowhere to put one -- a trade had exactly two picture
+    slots -- AND the fifteen-minute moment was stamped with the ENTRY
+    time, so that picture would have been filed as the entry one and
+    quietly replaced the real beginning with a shot taken fifteen
+    minutes later. A picture labelled "entry" showing something else.
+
+    Now: a third slot on every trade, a third box on the trade form, the
+    moment stamped with the fifteen-minute mark, and matching that only
+    offers the middle slot on a trade that actually ran past it with
+    room to spare -- on a trade that closed around the fifteen-minute
+    mark the close and the middle are the same moment, and the close is
+    the one that means something.
+
+    **Correction on the record:** I described the beginning picture as
+    missing on the laptop too. It is not -- the add-on photographs the
+    opening moment. It is missing on the PHONE, where the opening
+    notification starts a recording rather than taking a picture, and
+    that recording is discarded at fifteen minutes if the trade is still
+    open. He was right and I was wrong.
+
+    **Still open:** the phone path should keep a still from the start of
+    a long trade before the recording is discarded. Not built.
+
+59. **"Run a test trade now"** (asked for 2026-09-01, replacing the test
+    picture button I had built the day before). **Status: BUILT AND
+    TESTED (18 server checks, 26 add-on checks, 21 app checks). Never
+    run in a real browser.**
+
+    His idea and a better one: a single test picture proved the path
+    worked but not that the app reacts to a trade properly. The button
+    now rehearses a WHOLE trade -- the three moments a real one produces,
+    ninety seconds apart -- and the pictures appear on the Checks page
+    labelled Opening, Middle and Close, with a button that removes every
+    trace.
+
+    Nothing a rehearsal produces can reach his journal. The mark travels
+    from the queued moment, through the upload, to the app, which files
+    test pictures somewhere else entirely and never attaches one to a
+    trade. Tested directly, including that a REAL moment does not carry
+    the mark -- otherwise the mark would mean nothing.
+
+    No timers on the server: each moment carries the time it belongs to
+    and is captured when that time arrives, so it survives a restart.
+
 58. **A phone buzz before the Schwab sign-in runs out** (asked for and
     confirmed 2026-09-01: "Yes for the phone buzz on day 6").
     **Status: BUILT AND TESTED (54 checks). Not confirmed on his phone --

@@ -16,8 +16,9 @@ function timeAgo(ms) {
 }
 
 async function render() {
-  const { backendUrl, appKey, lastPollAt, lastError, lastEventCount, lastCapturedCount } =
-    await chrome.storage.local.get(['backendUrl', 'appKey', 'lastPollAt', 'lastError', 'lastEventCount', 'lastCapturedCount']);
+  const { backendUrl, appKey, lastPollAt, lastError, lastEventCount, lastCapturedCount, lastWaitingCount } =
+    await chrome.storage.local.get(['backendUrl', 'appKey', 'lastPollAt', 'lastError',
+      'lastEventCount', 'lastCapturedCount', 'lastWaitingCount']);
 
   const content = document.getElementById('content');
 
@@ -32,6 +33,9 @@ async function render() {
     lines.push(`<div class="row err">${escapeHtml(lastError)}</div>`);
   } else {
     lines.push(`<div class="row ok">Connected, no errors.</div>`);
+  }
+  if (lastWaitingCount) {
+    lines.push(`<div class="row"><b>${lastWaitingCount}</b> moment(s) waiting for their time.</div>`);
   }
   if (lastEventCount != null) {
     lines.push(`<div class="row">Last check found <b>${lastEventCount}</b> trade moment(s), captured <b>${lastCapturedCount ?? 0}</b>.</div>`);
@@ -63,7 +67,9 @@ function wire(id, message, busyText, doneText) {
   });
 }
 
-wire('testShot', 'testShot', 'Taking a picture…', 'Sent. It will not attach to a trade — that is expected.');
+wire('testTrade', 'testTrade',
+  'Starting a test trade…',
+  'Started. Three pictures over the next 90 seconds — opening, middle, close. They are marked as a test and will not touch your real trades.');
 wire('checkNow', 'checkNow', 'Checking…', 'Checked.');
 
 document.getElementById('openOptions').addEventListener('click', (e) => {
