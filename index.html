@@ -952,9 +952,15 @@
       <div style="font-size:12px; color:var(--text-dim);">No API can auto-capture your screen at entry/exit — snap it yourself and attach it here.</div>
       <div class="shot-row">
         <div class="shot-box" id="shotEntryBox" onclick="document.getElementById('shotEntryInput').click()">+ Entry shot</div>
+        <!-- A trade held past fifteen minutes gets a picture from the
+             middle of it too. Without a slot of its own, that picture was
+             filed as the entry one and quietly replaced the real
+             beginning with a shot taken fifteen minutes later. -->
+        <div class="shot-box" id="shotMidBox" onclick="document.getElementById('shotMidInput').click()">+ Mid-trade shot</div>
         <div class="shot-box" id="shotExitBox" onclick="document.getElementById('shotExitInput').click()">+ Exit shot</div>
       </div>
       <input type="file" id="shotEntryInput" accept="image/*" capture="environment" style="display:none;" onchange="handleShot(this,'entry')">
+      <input type="file" id="shotMidInput" accept="image/*" capture="environment" style="display:none;" onchange="handleShot(this,'mid')">
       <input type="file" id="shotExitInput" accept="image/*" capture="environment" style="display:none;" onchange="handleShot(this,'exit')">
     </div>
 
@@ -1119,6 +1125,13 @@
       </div>
       <div id="appStatus" style="margin-top:12px;"></div>
       <div id="checklistBody" style="margin-top:12px;"><div class="empty">Working it out…</div></div>
+    </div>
+    <!-- Only ever on screen after a rehearsal. A test must be able to
+         prove itself and then leave nothing behind. -->
+    <div class="card" id="testTradeCard" style="display:none;">
+      <h3>Test Trade</h3>
+      <div id="testTradeBody"></div>
+      <button class="secondary" onclick="clearTestShots()">Clear this test</button>
     </div>
   </div>
 
@@ -1682,20 +1695,32 @@ function toggleBroadeningFormation(){
   document.getElementById('broadeningToggleLabel').textContent = 'Off Broadening Formation: ' + (!isOn ? 'Yes' : 'No');
 }
 
+// Three moments on a trade, not two. A trade held past fifteen minutes
+// gets a picture from the middle of it, and before this there was nowhere
+// to put one -- so it was filed as the entry picture and quietly replaced
+// the real beginning with a shot taken fifteen minutes later.
+const SHOT_SLOTS = ['entry', 'mid', 'exit'];
+const SHOT_FIELD = { entry: 'shotEntry', mid: 'shotMid', exit: 'shotExit' };
+const SHOT_LABEL = { entry: 'Entry', mid: 'Mid-trade', exit: 'Exit' };
+function shotBoxId(which){
+  return which === 'entry' ? 'shotEntryBox' : which === 'mid' ? 'shotMidBox' : 'shotExitBox';
+}
+function shotEmptyLabel(which){ return '+ ' + SHOT_LABEL[which] + ' shot'; }
+
 function handleShot(input, which){
   const file = input.files[0];
   if(!file) return;
   const reader = new FileReader();
   reader.onload = e=>{
     currentShots[which] = e.target.result;
-    const box = document.getElementById(which==='entry'?'shotEntryBox':'shotExitBox');
+    const box = document.getElementById(shotBoxId(which));
     box.innerHTML = `<img src="${e.target.result}"><div class="close-x" onclick="event.stopPropagation(); clearShot('${which}')">✕</div>`;
   };
   reader.readAsDataURL(file);
 }
 function clearShot(which){
   currentShots[which]=null;
-  const box = document.getElementById(which==='entry'?'shotEntryBox':'shotExitBox');
+  const box = document.getElementById(shotBoxId(which));
   box.innerHTML = `+ ${which==='entry'?'Entry':'Exit'} shot`;
 }
 
@@ -2559,11 +2584,14 @@ function editTrade(id){
 
   currentReplayData = trade.replayData || null;
 
-  currentShots = { entry: trade.shotEntry||null, exit: trade.shotExit||null };
-  document.getElementById('shotEntryBox').innerHTML = currentShots.entry
-    ? `<img src="${currentShots.entry}"><div class="close-x" onclick="event.stopPropagation(); clearShot('entry')">✕</div>` : '+ Entry shot';
-  document.getElementById('shotExitBox').innerHTML = currentShots.exit
-    ? `<img src="${currentShots.exit}"><div class="close-x" onclick="event.stopPropagation(); clearShot('exit')">✕</div>` : '+ Exit shot';
+  currentShots = { entry: trade.shotEntry||null, mid: trade.shotMid||null, exit: trade.shotExit||null };
+  SHOT_SLOTS.forEach(slot => {
+    const box = document.getElementById(shotBoxId(slot));
+    if(!box) return;
+    box.innerHTML = currentShots[slot]
+      ? `<img src="${currentShots[slot]}"><div class="close-x" onclick="event.stopPropagation(); clearShot('${slot}')">✕</div>`
+      : shotEmptyLabel(slot);
+  });
 }
 function deleteTrade(id){
   if(!confirm('Delete this trade permanently? This cannot be undone.')) return;
@@ -2630,7 +2658,7 @@ function saveTrade(){
     pnlDollar, pnlPercent,
     winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
     notes: document.getElementById('f_notes').value,
-    shotEntry: currentShots.entry, shotExit: currentShots.exit,
+    shotEntry: currentShots.entry, shotMid: currentShots.mid, shotExit: currentShots.exit,
     source: editingTradeId ? (editingSourceValue || 'manual') : 'manual'
   };
 
@@ -2659,8 +2687,10 @@ function saveTrade(){
   editingSourceValue = null;
   document.getElementById('saveTradeBtn').textContent = 'Save Trade';
   currentShots = {entry:null, exit:null};
-  document.getElementById('shotEntryBox').innerHTML = '+ Entry shot';
-  document.getElementById('shotExitBox').innerHTML = '+ Exit shot';
+  SHOT_SLOTS.forEach(slot => {
+    const box = document.getElementById(shotBoxId(slot));
+    if(box) box.innerHTML = shotEmptyLabel(slot);
+  });
   buildTfGrid();
   updateFtfcResult();
 
@@ -3842,6 +3872,60 @@ async function renderAppStatus(){
   el.innerHTML = line('var(--bull)', '<b>Everything is up to date.</b> Your trades are in, priced, and read.');
 }
 
+// A rehearsed trade's pictures. Kept apart from the journal entirely --
+// their own place in storage, their own card, and a button that removes
+// every trace. A test that leaves anything behind in his journal is worse
+// than no test at all.
+const TEST_SHOTS_KEY = 'strat_test_shots';
+
+function loadTestShots(){
+  try{ return JSON.parse(localStorage.getItem(TEST_SHOTS_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+
+function recordTestShots(shots, url){
+  const held = loadTestShots();
+  const seen = new Set(held.map(x => x.id));
+  for(const shot of shots){
+    if(seen.has(shot.id)) continue;
+    held.push({ id: shot.id, image: shot.image, timestamp: shot.timestamp, moment: shot.moment || null });
+    // Cleared from the server as soon as it is safely held here, exactly
+    // as a real picture is once it lands on its trade.
+    if(url) fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}).catch(()=>{});
+  }
+  held.sort((a,b) => (a.timestamp||0) - (b.timestamp||0));
+  try{ localStorage.setItem(TEST_SHOTS_KEY, JSON.stringify(held.slice(-12))); }catch(e){}
+  renderTestShots();
+}
+
+function clearTestShots(){
+  try{ localStorage.removeItem(TEST_SHOTS_KEY); }catch(e){}
+  renderTestShots();
+}
+
+const TEST_MOMENT_LABEL = { opened: 'Opening', stillOpen: 'Middle', closed: 'Close' };
+
+function renderTestShots(){
+  const card = document.getElementById('testTradeCard');
+  const body = document.getElementById('testTradeBody');
+  if(!card || !body) return;
+  const held = loadTestShots();
+  if(!held.length){ card.style.display = 'none'; body.innerHTML = ''; return; }
+  const expected = 3;
+  const heading = held.length >= expected
+    ? 'All three pictures arrived. The whole path works.'
+    : `${held.length} of ${expected} pictures so far. The rest arrive over about a minute and a half.`;
+  body.innerHTML =
+    `<div style="font-size:13px; margin-bottom:10px;">${escapeHtml(heading)}</div>` +
+    `<div style="font-size:11.5px; color:var(--text-dim); margin-bottom:10px; line-height:1.5;">These are from a test, not a real trade. Nothing here has touched your journal.</div>` +
+    `<div class="shot-row">` + held.map(x =>
+      `<div style="flex:1; min-width:0;">
+         <div style="font-size:10px; text-transform:uppercase; letter-spacing:1.4px; color:var(--text-dim); margin-bottom:4px;">${escapeHtml(TEST_MOMENT_LABEL[x.moment] || 'Picture')}</div>
+         <img src="${x.image}" style="width:100%; border-radius:8px; border:1px solid var(--border);">
+       </div>`).join('') + `</div>`;
+  card.style.display = 'block';
+}
+
 async function renderChecklist(){
   // AWAITED. It was not, so the details block was built while the health
   // check was still in flight -- and printed "server up 0m · mem ?MB"
@@ -3849,6 +3933,7 @@ async function renderChecklist(){
   // as evidence about his server and nearly told him something untrue
   // about it. A diagnostic that lies is worse than none.
   await renderAppStatus();
+  renderTestShots();
   const box = document.getElementById('checklistBody');
   if(!box) return;
   const all = loadTrades();
@@ -3860,7 +3945,7 @@ async function renderChecklist(){
   const undExact = all.filter(t=>t.undEntryExact === true).length;
   const timed    = all.filter(t=>/^\d{2}:\d{2}$/.test(t.entryTime||'') && /^\d{2}:\d{2}$/.test(t.exitTime||'')).length;
   const dated    = all.filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.entryDate||'')).length;
-  const shots    = all.filter(t=>t.shotEntry || t.shotExit).length;
+  const shots    = all.filter(t=>t.shotEntry || t.shotMid || t.shotExit).length;
   const combos   = all.filter(t=>t.strat).length;
   const plays    = all.filter(t=>t.play).length;
   const measured = all.filter(t=>t.ftfcRun != null).length;
@@ -5389,7 +5474,7 @@ async function autoImportPendingTrades(url, pending){
       pnlNet: t.pnlNet ?? (t.fees != null && pnlDollar != null
         ? Math.round((pnlDollar - t.fees) * 100) / 100 : null),
       winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
-      notes: '', shotEntry: null, shotExit: null,
+      notes: '', shotEntry: null, shotMid: null, shotExit: null,
       fillStatus: t.fillStatus || 'Closed', contractsOpened: t.contractsOpened || t.contracts || 1,
       source: 'schwab-auto'
     };
@@ -5691,6 +5776,10 @@ startAutoPoll();
 // belongs to. A screenshot has no trade ID attached at capture time — it's
 // matched purely by how close its timestamp is to a trade's entry or exit
 // time. Runs on the same cadence as pollBackend() via startAutoPoll().
+// Fifteen minutes in: the moment a trade stops being recorded and starts
+// being photographed. Matches the same fifteen minutes on the server.
+const MID_SHOT_OFFSET_MS = 15 * 60 * 1000;
+const SLOT_OF_FIELD = { shotEntry:'entry', shotMid:'mid', shotExit:'exit' };
 const SCREENSHOT_MATCH_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes — generous enough for Pushcut/Shortcut latency, tight enough not to misattach
 async function matchPendingScreenshots(){
   const url = backendUrl();
@@ -5706,17 +5795,35 @@ async function matchPendingScreenshots(){
   const trades = loadTrades();
   let changed = false;
   const readyToClassify = []; // trades that just gained a screenshot and are still "Needs Setup"
+  const testShots = [];       // from a rehearsal -- shown, never attached
 
   for(const shot of screenshots){
+    // A rehearsal picture never goes near a real trade. It is collected
+    // and shown on its own, so a test can never leave anything behind in
+    // his journal.
+    if(shot.test){ testShots.push(shot); continue; }
     let best = null; // {trade, field, diff}
     for(const t of trades){
-      if(t.entryDate && !t.shotEntry){
-        const entryTs = new Date(`${t.entryDate}T${t.entryTime||'09:30'}:00`).getTime();
+      const entryTs = t.entryDate
+        ? new Date(`${t.entryDate}T${t.entryTime||'09:30'}:00`).getTime() : null;
+      const exitTs = t.exitDate
+        ? new Date(`${t.exitDate}T${t.exitTime||'09:30'}:00`).getTime() : null;
+      if(entryTs != null && !t.shotEntry){
         const diff = Math.abs(shot.timestamp - entryTs);
         if(diff <= SCREENSHOT_MATCH_TOLERANCE_MS && (!best || diff < best.diff)) best = {trade:t, field:'shotEntry', diff};
       }
-      if(t.exitDate && !t.shotExit){
-        const exitTs = new Date(`${t.exitDate}T${t.exitTime||'09:30'}:00`).getTime();
+      // The middle of a trade: fifteen minutes in, which is the moment the
+      // recording stops and pictures take over. Only offered on a trade
+      // that actually ran past it with room to spare -- on a trade that
+      // closed around the fifteen-minute mark the exit and the middle are
+      // the same moment, and the exit is the one that means something.
+      if(entryTs != null && !t.shotMid){
+        const midTs = entryTs + MID_SHOT_OFFSET_MS;
+        const longEnough = exitTs == null || (exitTs - midTs) > SCREENSHOT_MATCH_TOLERANCE_MS;
+        const diff = Math.abs(shot.timestamp - midTs);
+        if(longEnough && diff <= SCREENSHOT_MATCH_TOLERANCE_MS && (!best || diff < best.diff)) best = {trade:t, field:'shotMid', diff};
+      }
+      if(exitTs != null && !t.shotExit){
         const diff = Math.abs(shot.timestamp - exitTs);
         if(diff <= SCREENSHOT_MATCH_TOLERANCE_MS && (!best || diff < best.diff)) best = {trade:t, field:'shotExit', diff};
       }
@@ -5725,7 +5832,7 @@ async function matchPendingScreenshots(){
       best.trade[best.field] = shot.image;
       changed = true;
       try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* worst case it's offered again and just gets re-matched harmlessly */ }
-      log('syncLog', `Auto-attached ${best.field==='shotEntry'?'entry':'exit'} screenshot to ${best.trade.ticker} (${best.trade.entryDate}).`);
+      log('syncLog', `Auto-attached ${SHOT_LABEL[SLOT_OF_FIELD[best.field]].toLowerCase()} picture to ${best.trade.ticker} (${best.trade.entryDate}).`);
       if(!best.trade.strat && !readyToClassify.includes(best.trade)) readyToClassify.push(best.trade);
     }
     // No match yet (e.g. the trade hasn't synced into the Journal as
@@ -5736,6 +5843,8 @@ async function matchPendingScreenshots(){
     saveTrades(trades);
     renderJournal();
   }
+
+  if(testShots.length) recordTestShots(testShots, url);
 
   // A screenshot just became available for these — worth a fresh AI pass
   // right away rather than waiting for the owner to notice and tap
@@ -5825,6 +5934,7 @@ function ownWorkScore(t){
   if((t.notes||'').trim()) n += 8;
   if(t.strat) n += 4;
   if(t.shotEntry) n += 3;
+  if(t.shotMid) n += 2;
   if(t.shotExit) n += 3;
   if(t.stop != null && t.stop !== 0) n += 2;
   if(t.rrPlanned != null && t.rrPlanned !== 0) n += 2;

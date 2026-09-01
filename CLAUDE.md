@@ -631,6 +631,12 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **A test that can write into his journal is not a test.** The rehearsed
+  trade produces real pictures through the real path, and his journal has
+  already been polluted once — 161 contracts he never bought. The mark
+  travels from the queued moment, through the upload, to the app, and
+  every step was tested including that a REAL moment does NOT carry it.
+  A label only means something if the other case is checked too.
 - **A capture taken late is a capture of the wrong thing.** The laptop
   add-on photographs the screen when the server says a trade opened or
   closed — and stamps the picture with the TRADE's time, which is right.
