@@ -24,6 +24,69 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+58. **A phone buzz before the Schwab sign-in runs out** (asked for and
+    confirmed 2026-09-01: "Yes for the phone buzz on day 6").
+    **Status: BUILT AND TESTED (54 checks). Not confirmed on his phone --
+    needs a live alert to actually arrive.**
+
+    Three per sign-in, each sent at most once: a day left, six hours
+    left, and run out. The record of what has gone out is stored against
+    the sign-in it belongs to, so signing in again resets it with nothing
+    to clear by hand. A later reminder marks the gentler ones as spent,
+    so a server that was down through day 6 sends "runs out today" rather
+    than following up with "runs out tomorrow" an hour before it dies.
+
+    It has its own attempt and its own catch inside the scheduled check:
+    it must not be skipped because collecting trades failed, least of all
+    when the reason collecting trades failed IS the sign-in having run
+    out. There is a test for exactly that.
+
+    Falls back to the notification name already set for closed trades, so
+    it works with the setup he has -- a reminder that needs a new setting
+    added before it works is a reminder that never arrives.
+
+    **Depends on Pushcut being switched on at his end**, which has never
+    been confirmed working. If his phone stays quiet, that is the first
+    thing to check, not this.
+
+57. **The laptop add-on, made ready to install** (2026-09-01, he asked
+    "what else is needed from me"). **Status: FIXED AND TESTED (26 new
+    checks). Still never run in a real browser.**
+
+    Read the whole thing before touching it, per the rule about full
+    review over one-at-a-time patching. Four real problems, all fixed:
+
+    - **A picture of the wrong moment could be attached, silently.** The
+      server holds a trade moment for twenty minutes. If the browser was
+      CLOSED when the trade happened and opened ten minutes later, the
+      add-on would photograph whatever was on screen and stamp it with
+      the trade's time -- attaching an unrelated picture that looks
+      entirely real. It now skips anything older than three minutes (it
+      checks every minute, so older means nobody was there) and clears
+      it so it is not retried. A missing picture is recoverable; a wrong
+      one is not.
+    - **The queue of trade moments grew without limit.** Records expire
+      after twenty minutes but their ids stayed on the pending list for
+      ever, so every check dragged the whole history along. Swept as
+      found, trimmed as written, and at most 200 read per check.
+    - **A failure was counted but invisible.** Failed captures were
+      logged where nobody would read them; the small status window said
+      nothing. It now says how many could not be sent, and what to
+      check.
+    - **Error text from the server was dropped straight into the status
+      window**, which could break the one display that explains what went
+      wrong. Escaped.
+
+    **Added: two buttons in the status window** -- "Take a test picture
+    now" and "Check for trades now". Without these the only way to find
+    out whether the whole path works is to place a real trade and hope.
+    The test picture is stamped with the current moment rather than a
+    trade's, so it deliberately attaches to nothing.
+
+    **Still needs from him:** which browser he uses (Chrome, Edge or
+    Brave -- not Safari or Firefox), whether he charts in a browser tab
+    at all, and then fifteen minutes to install it.
+
 56. **The Schwab sign-in reminder, on the first screen he sees**
     (asked for 2026-09-01). **Status: BUILT AND TESTED (39 checks in a
     real browser at phone size). Not confirmed on his phone.**
