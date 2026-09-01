@@ -108,7 +108,19 @@ Uses **The Strat**. Key concepts the code implements:
   for two days after the app itself was fixed — do not reintroduce it):
   2-1-2 Continuation, 2-1-2 Reversal, 3-1-2 Reversal, 2-2 Continuation,
   2-2 Reversal, 3-2-2 Reversal, 1-2-2 Rev Strat, 1 Bar Rev Strat, and PMG
-  (Pivot Machine Gun). Each is usable Long or Short via the trade's own
+  (Pivot Machine Gun).
+
+  **HE DOES NOT READ THEM BY THOSE NAMES** (confirmed 2026-08-31, his own
+  words): *"I don't look at 2-2 as 2-2 reversals or 2-2 continuations, I
+  look at them as 2U-2D (Bearish) or 2D-2U (Bullish). This applies to
+  every combo."* His notation: **2U** = a directional bar that took out
+  the previous bar's HIGH, **2D** = one that took out its LOW, **1** =
+  inside bar, **3** = outside bar. So a bearish 2-2 reversal is 2U-2D and
+  a bullish 2-1-2 continuation is 2U-1-2U. The AI reports the bar
+  sequence it read in `notation`, and the card shows THAT with the combo
+  name underneath — the nine names are kept only as the stable key his
+  performance is grouped by, because renaming them would relabel every
+  trade already in his journal. Each is usable Long or Short via the trade's own
   direction field, so there is no separate bullish/bearish variant of each.
   The authoritative copy of this list, with each pattern's full definition,
   lives in `aiClient.js`'s `STRATEGIES` array and must stay in sync with
@@ -134,11 +146,22 @@ Uses **The Strat**. Key concepts the code implements:
   Broadening Formation — that's still that combo, just with context worth
   recording. The app tracks these as separate fields (`ftfcConfirmed`,
   computed mechanically from Schwab candle data; `offBroadeningFormation`,
-  a manual toggle, since the owner confirmed a Broadening Formation is a
-  multi-step judgment call the app does not auto-detect for real trades).
-  The one deliberate exception is the sandbox Test Classification tool,
-  which has no Schwab data to compute from and so reads all three visually
-  from the picture.
+  his own manual toggle).
+
+  **REVERSED 2026-08-31 — the AI now reads the Broadening Formation
+  itself.** It was previously left to his toggle alone, on his earlier
+  confirmation that it is a multi-step judgement call. He asked for the
+  opposite, and his reasoning settles it: *"AI should spot broadening
+  formation itself. It needs to know how to classify my trades when a
+  trade gets automatically imported."* Without it the AI can never pick
+  **Broadening Formation Scalp** as the play. Its reading is stored as
+  `broadeningDetected` BESIDE his toggle, never over it — his answer is
+  the truth, and the card marks the AI's as "read from the chart".
+
+  **Alignment is supporting evidence now** for which combo it was, where
+  the bars alone are genuinely ambiguous. The nine remain the only valid
+  combo answers and alignment may never override what the bars plainly
+  show.
 - **Instruments:** SPY and IWM options, 0DTE–3DTE. Occasionally others.
 - **Always buys to open** (calls or puts), never sells to open. This is why
   P&L needs no sign flip: a rising option price is always profit,
@@ -423,6 +446,14 @@ Uses **The Strat**. Key concepts the code implements:
   looking straight at a failure and could only tell me the number had not
   moved. A failure is still progress through the list, and the reason
   belongs on screen in the server's own words.
+- **A hand-picked return list drops the answer added later.**
+  `runClassification` returned `{strategy, confidence, reasoning,
+  usedScreenshot}`. The PLAY was added to the schema on 29 August, the
+  model answered it every time, and this threw it away every time — so
+  `classifyStrategy` always saw `result.play` as undefined and always set
+  it to null. Not one trade could ever have been given a play by the
+  automatic reading. Return what the far end answered, not a list written
+  before half of it existed.
 - **A phone will not hold a connection open while a server thinks.**
   `/ai/classify` called Gemini and answered only when it came back — ten
   or twenty seconds, past a minute once its three retries and the

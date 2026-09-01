@@ -1994,8 +1994,23 @@ project "complete":**
 
 17. **Let FTFC alignment and Broadening Formation genuinely factor into
     how a trade gets classified, not just sit as separate disconnected
-    data** (added 2026-08-23, owner's own clarification). **Status: Needs
-    a decision before building — flagged, not started.** Two related but
+    data** (added 2026-08-23, owner's own clarification). **Status: BOTH
+    HALVES NOW DONE (2026-08-31) — he answered the open question himself.**
+
+    Part (a), showing the combo and the alignment together rather than as
+    two unconnected summaries, was delivered on 30 August: the Setup and
+    Play cards each split into "taken WITH the timeframes" and "not with
+    them".
+
+    Part (b) — he answered both open questions directly: YES the AI may
+    use timeframe alignment as evidence for the combo, and YES it should
+    spot a Broadening Formation itself, reversing the earlier decision,
+    because it cannot pick "Broadening Formation Scalp" as the play
+    otherwise. He also corrected the naming: he reads 2U-2D (Bearish) and
+    2D-2U (Bullish), not Reversal/Continuation, for every combo. Built in
+    strat-journal-backend PR #50; his own toggle still wins.
+
+    **The original open question, kept for the record:** Two related but
     different asks, worth telling apart:
 
     (a) **Record whether each classified combo was taken with FTFC
