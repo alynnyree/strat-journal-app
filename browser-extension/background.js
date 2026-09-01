@@ -13,6 +13,21 @@
 const POLL_ALARM_NAME = 'strat-journal-poll';
 const POLL_PERIOD_MINUTES = 1; // Chrome's minimum alarm granularity
 
+// A picture is only worth taking while the moment it belongs to is still
+// on screen. The server keeps an event for twenty minutes, which is right
+// for the server -- but if this browser was CLOSED when the trade
+// happened and opens ten minutes later, capturing now would photograph
+// whatever is on screen and stamp it with the trade's time, quietly
+// attaching an unrelated picture to that trade. This checks once a
+// minute, so anything older than a few minutes means nobody was here.
+// A missing picture is recoverable; a wrong one looks real for ever.
+const MAX_EVENT_AGE_MS = 3 * 60 * 1000;
+
+function isTooOldToCapture(event, now = Date.now()) {
+  if (!event || typeof event.timestamp !== 'number') return false; // no time on it: leave the decision to the server
+  return (now - event.timestamp) > MAX_EVENT_AGE_MS;
+}
+
 // Builds the address the extension uploads a captured picture to. Reuses
 // the exact same route/params the phone Shortcuts already send —
 // timestampMs comes from the trade event itself (the real open/close time),
@@ -81,28 +96,70 @@ async function pollAndCapture() {
     const { events } = await res.json();
 
     let captured = 0;
+    let skippedTooOld = 0;
+    let failed = 0;
     for (const event of events || []) {
+      if (isTooOldToCapture(event)) {
+        // Cleared rather than left: otherwise it is offered again every
+        // minute until it expires, and each attempt is another chance to
+        // attach the wrong picture.
+        skippedTooOld++;
+        await fetch(buildDeleteEventUrl(backendUrl, appKey, event.id), { method: 'DELETE' }).catch(() => {});
+        continue;
+      }
       try {
         await uploadCapture(backendUrl, appKey, event);
         await fetch(buildDeleteEventUrl(backendUrl, appKey, event.id), { method: 'DELETE' });
         captured++;
       } catch (err) {
+        // Counted, not just logged. A failure that only reaches a log
+        // nobody reads is indistinguishable from nothing having happened.
+        failed++;
         console.log(`Strat Journal: capture failed for event ${event.id}:`, err.message);
       }
     }
 
     await setStatus({
       lastPollAt: Date.now(),
-      lastError: null,
+      lastError: failed
+        ? `${failed} picture${failed === 1 ? '' : 's'} could not be sent. Check the address and key in Settings.`
+        : null,
       lastEventCount: (events || []).length,
       lastCapturedCount: captured,
+      lastSkippedCount: skippedTooOld,
     });
   } catch (err) {
     await setStatus({ lastPollAt: Date.now(), lastError: err.message });
   }
 }
 
+// Takes one picture right now and sends it, stamped with this moment
+// rather than a trade's. Nothing in the journal will match it, which is
+// the point: it proves the whole path works -- permission, address, key,
+// upload -- without waiting for a real trade to come along.
+async function captureTestShot() {
+  const { backendUrl, appKey } = await getSettings();
+  if (!backendUrl || !appKey) throw new Error('Fill in the address and key in Settings first.');
+  await uploadCapture(backendUrl, appKey, { id: 'test', timestamp: Date.now() });
+}
+
 if (typeof chrome !== 'undefined' && chrome.runtime) {
+  // Asked for from the small window behind the toolbar icon.
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg && msg.type === 'testShot') {
+      captureTestShot()
+        .then(() => sendResponse({ ok: true }))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true; // the answer comes later
+    }
+    if (msg && msg.type === 'checkNow') {
+      pollAndCapture()
+        .then(() => sendResponse({ ok: true }))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    return false;
+  });
   chrome.runtime.onInstalled.addListener(() => {
     chrome.alarms.create(POLL_ALARM_NAME, { periodInMinutes: POLL_PERIOD_MINUTES });
   });
@@ -112,10 +169,17 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === POLL_ALARM_NAME) pollAndCapture();
   });
+  // Belt and braces. The two listeners above only fire on install and on
+  // the browser starting; if the once-a-minute check is ever missing for
+  // any other reason, nothing above would ever put it back and the whole
+  // add-on would sit there doing nothing, silently.
+  chrome.alarms.get(POLL_ALARM_NAME).then((existing) => {
+    if (!existing) chrome.alarms.create(POLL_ALARM_NAME, { periodInMinutes: POLL_PERIOD_MINUTES });
+  }).catch(() => {});
 }
 
 // Node-testable exports — chrome.* dependent functions are intentionally
 // left out, since those can only be exercised in a real browser.
 if (typeof module !== 'undefined') {
-  module.exports = { buildUploadUrl, buildEventsUrl, buildDeleteEventUrl };
+  module.exports = { buildUploadUrl, buildEventsUrl, buildDeleteEventUrl, isTooOldToCapture, MAX_EVENT_AGE_MS };
 }

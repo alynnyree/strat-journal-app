@@ -11,11 +11,21 @@
   .err { color: #ff8080; }
   .ok { color: #7fd88f; }
   a { color: #4da3ff; text-decoration: none; font-size: 13px; display: inline-block; margin-top: 10px; }
+  button { width: 100%; margin-top: 10px; padding: 9px; border-radius: 8px; border: 0;
+    background: #00C46A; color: #06170E; font-weight: 700; font-size: 13px; cursor: pointer; }
+  button.secondary { background: #222; color: #ccc; border: 1px solid #333; font-weight: 600; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  #testResult { font-size: 12px; margin-top: 8px; }
 </style>
 </head>
 <body>
   <h3>Strat Journal Auto-Capture</h3>
   <div id="content">Loading…</div>
+  <!-- Without this the only way to find out whether the whole thing works
+       is to place a real trade and hope. Ten seconds instead. -->
+  <button id="testShot">Take a test picture now</button>
+  <button id="checkNow" class="secondary">Check for trades now</button>
+  <div id="testResult"></div>
   <a href="#" id="openOptions">Settings</a>
   <script src="popup.js"></script>
 </body>

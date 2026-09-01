@@ -631,6 +631,15 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **A capture taken late is a capture of the wrong thing.** The laptop
+  add-on photographs the screen when the server says a trade opened or
+  closed — and stamps the picture with the TRADE's time, which is right.
+  But the server holds that instruction for twenty minutes, so a browser
+  that was closed at the fill and opened ten minutes later would
+  photograph whatever happened to be on screen and file it against the
+  trade. An unrelated picture that looks entirely real, with nothing
+  anywhere saying so. It now refuses anything older than three minutes.
+  A missing picture is recoverable; a wrong one is evidence.
 - **Round a countdown DOWN, always.** 40 hours reads as "1 day", not
   "2 days". Overstating time left costs him a day of trades; understating
   it costs him one early sign-in.
@@ -640,6 +649,11 @@ Uses **The Strat**. Key concepts the code implements:
   was readable by the only kind of person who uses this app. Translate
   every failure into what happened, whether it is his fault, and what to
   tap.
+- **A phone alert has to work with the setup he already has.** The
+  sign-in reminder falls back to the notification name already set for
+  closed trades rather than requiring a new one. A reminder that needs a
+  setting added before it works is a reminder that never arrives — and
+  he would never know it had not.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
