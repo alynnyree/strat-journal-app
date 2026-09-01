@@ -328,6 +328,25 @@
   .status-banner.ok{background:var(--bull-dim); color:var(--bull);}
   .status-banner.err{background:var(--bear-dim); color:var(--bear);}
   .status-banner.info{background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border);}
+  /* Schwab signs him out every 7 days and cannot be talked out of it.
+     Until now the only warning lived on the Journal tab, which he has no
+     reason to open -- so the first sign was trades quietly not arriving.
+     This sits at the top of the first screen he sees. */
+  .signin-note{border-radius:12px; padding:13px 14px; font-size:13px; line-height:1.55;
+    margin:0 0 14px; border:1px solid var(--border); background:var(--panel-2); color:var(--text-dim);}
+  .signin-note.warn{background:#2B2412; border-color:#7A5E14; color:#F2CE63;}
+  .signin-note.stop{background:var(--bear-dim); border-color:var(--bear); color:#FF9A93;}
+  .signin-note .signin-head{font-weight:700; color:inherit;}
+  .signin-note button{margin-top:11px; width:100%;}
+  .signin-note .signin-link{margin-top:9px; font-size:11.5px; text-decoration:underline;
+    color:var(--text-dim); display:inline-block;}
+  .signin-note .signin-msg{margin-top:9px; font-size:12px; color:var(--text-dim); display:none;}
+  /* Nothing to act on gets one line and stays out of the way -- this is
+     the top of the screen he looks at every day. */
+  .signin-note.calm{padding:9px 12px; font-size:12px; line-height:1.5;}
+  .signin-note.calm .signin-head{display:inline; font-weight:600; color:var(--text); margin-right:5px;}
+  .signin-note.calm .signin-body{display:inline; color:var(--text-dim);}
+  .signin-note.calm .signin-link{margin-top:0; margin-left:4px;}
   button.secondary.busy{opacity:0.6; pointer-events:none;}
   button.secondary.busy::after{content:" ..."}
 
@@ -528,6 +547,12 @@
 
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
+    <!-- Schwab's sign-in lasts seven days and cannot be extended. When it
+         lapses every trade quietly stops arriving, and the only warning
+         used to be on the Journal tab -- a tab he has no reason to open.
+         One line at the top of the first screen, and the button that
+         fixes it, right there. -->
+    <div id="schwabReminder" class="signin-note" style="display:none;"></div>
     <div class="stat-grid">
       <div class="stat"><div class="label">Net P&L</div><div class="val num" id="statPnl">$0.00</div><div class="alt" id="statPnlAlt"></div></div>
       <div class="stat"><div class="label">Win Rate</div><div class="val num" id="statWinRate">0%</div><div class="alt" id="statWinRateAlt"></div></div>
@@ -2759,6 +2784,11 @@ function realPnl(t){
 }
 
 function renderDashboard(){
+  // Paint the Schwab sign-in line from what is already known, then ask
+  // again in the background. Its own attempt and its own catch: a step
+  // that must happen cannot sit downstream of one that can fail.
+  try{ drawSchwabReminder(); }catch(e){}
+  refreshSchwabReminder().catch(()=>{});
   // Newest first, by when each trade CLOSED — the same order the Journal
   // uses. This was `loadTrades()` with no sort at all, which is not an
   // order, it is the order things happen to sit in storage. Imports add at
@@ -4652,6 +4682,117 @@ function showReconnect(show){
   if(b) b.style.display = show ? 'block' : 'none';
 }
 
+// ---- The seven-day sign-in, on the first screen he sees ---------------
+// Schwab hands out a sign-in that dies after exactly seven days and there
+// is no way to extend it. When it dies, trades stop arriving and nothing
+// else goes wrong -- which is the worst possible failure, because it
+// looks like a quiet week. The warning lived only on the Journal tab, so
+// it was only ever seen by someone already going to look.
+
+// "5 days" / "9 hours" / "under an hour". Days are rounded DOWN on
+// purpose: telling him he has two days left when he has 25 hours is the
+// error that costs a day of trades.
+function signInLeftPlain(hoursLeft){
+  if(hoursLeft == null) return null;
+  if(hoursLeft <= 0) return 'none left';
+  if(hoursLeft < 1) return 'under an hour';
+  if(hoursLeft < 24) return hoursLeft + ' hour' + (hoursLeft===1?'':'s');
+  const days = Math.floor(hoursLeft/24);
+  return days + ' day' + (days===1?'':'s');
+}
+
+// Anything under this and it gets the gold treatment and a button.
+const SIGNIN_WARN_HOURS = 48;
+// How stale the answer is allowed to get before asking again. The sign-in
+// runs for a week; asking every five minutes is already generous.
+const SIGNIN_RECHECK_MS = 5 * 60 * 1000;
+let signInState = null;      // last answer, so the screen can draw at once
+let signInCheckedAt = 0;
+
+// Asks the server whether IT can still reach Schwab, and remembers the
+// answer. Deliberately never throws: this sits at the top of the first
+// screen and must not be able to take the rest of it down with it.
+async function refreshSchwabReminder(force){
+  try{
+    const url = backendUrl();
+    if(!url){ signInState = { kind:'nosetup' }; drawSchwabReminder(); return; }
+    if(!force && signInState && Date.now() - signInCheckedAt < SIGNIN_RECHECK_MS){
+      drawSchwabReminder(); return;
+    }
+    const auth = await fetchSchwabAuthState(url);
+    signInCheckedAt = Date.now();
+    signInState = auth ? { kind:'known', auth } : { kind:'unknown' };
+  }catch(e){
+    signInState = { kind:'unknown' };
+  }
+  drawSchwabReminder();
+}
+
+// Draws from whatever is already known. Split from the asking above so a
+// tab switch paints instantly instead of waiting on the network -- and so
+// a failed ask can never leave the box showing something untrue.
+function drawSchwabReminder(){
+  const box = document.getElementById('schwabReminder');
+  if(!box) return;
+  const st = signInState;
+  // Nothing connected yet, or no answer this time: say nothing rather
+  // than guess. A reminder that fires on no evidence is worse than none.
+  if(!st || st.kind !== 'known'){
+    box.style.display = 'none'; box.className = 'signin-note'; box.innerHTML = '';
+    return;
+  }
+  const auth = st.auth || {};
+  const hrs = (auth.signInHoursLeft == null) ? null : Number(auth.signInHoursLeft);
+  // needsReconnect is the server saying Schwab refused it outright. The
+  // countdown running out says the same thing a moment earlier.
+  const lapsed = auth.needsReconnect === true || (hrs != null && hrs <= 0);
+  const soon = !lapsed && hrs != null && hrs <= SIGNIN_WARN_HOURS;
+  const left = signInLeftPlain(hrs);
+
+  let cls = 'signin-note', head, body, showButton;
+  if(lapsed){
+    cls += ' stop';
+    head = 'Schwab has signed you out.';
+    body = 'No new trades can come in until you sign in again. Everything already in your journal is safe.';
+    showButton = true;
+  } else if(soon){
+    cls += ' warn';
+    head = 'Your Schwab sign-in runs out in ' + left + '.';
+    body = 'Trades keep arriving until then. Sign in again whenever it suits you.';
+    showButton = true;
+  } else {
+    cls += ' calm';
+    head = left ? ('Schwab sign-in: ' + left + ' left.') : 'Schwab is connected.';
+    body = 'Nothing for you to do.';
+    showButton = false;
+  }
+
+  box.className = cls;
+  box.innerHTML =
+    '<div class="signin-head">' + escapeHtml(head) + '</div>' +
+    '<div class="signin-body">' + escapeHtml(body) + '</div>' +
+    (showButton
+      ? '<button class="primary" onclick="schwabSignInFromHome()">Sign In to Schwab</button>'
+      : '<a class="signin-link" href="#" onclick="schwabSignInFromHome(); return false;">Sign in again now</a>') +
+    '<div class="signin-msg" id="schwabReminderMsg"></div>';
+  box.style.display = 'block';
+}
+
+// Its own opener rather than reusing the Journal tab's, because that one
+// writes its reply into a banner that lives on the Journal tab -- tapped
+// from here, the answer would appear on a screen he is not looking at.
+function schwabSignInFromHome(){
+  const msg = document.getElementById('schwabReminderMsg');
+  const say = (t)=>{ if(msg){ msg.textContent = t; msg.style.display = 'block'; } };
+  const url = backendUrl(), key = appKey();
+  if(!url || !key){
+    say('Open the Journal tab first and fill in your connection details — signing in to Schwab needs them.');
+    return;
+  }
+  window.open(url + '/auth/schwab/login?key=' + encodeURIComponent(key), '_blank');
+  say('Sign in to Schwab on the page that just opened, then come back here. This box updates itself.');
+}
+
 // True when a message from the server is Schwab saying the sign-in has
 // run out. Schwab words this several ways, none of them plainly.
 function isSchwabLoginExpired(text){
@@ -5526,6 +5667,8 @@ function startAutoPoll(){
   autoPollTimer = setInterval(()=>{
     if(backendUrl() && document.visibilityState==='visible'){
       pollBackend(true); matchPendingScreenshots(); showRebuildState(backendUrl());
+      // Rechecks itself no more than once every five minutes.
+      refreshSchwabReminder().catch(()=>{});
       // Answers the server has finished working out since last time.
       collectReadings();
       // Picks reading back up after an hour's pause, or after new trades
@@ -5536,6 +5679,9 @@ function startAutoPoll(){
   }, 30000);
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); collectReadings(); autoClassifyLoop(); }
+    // Forced, not the five-minute one: he may have just come back from
+    // signing in, and the whole point is that the box changes when he does.
+    if(document.visibilityState==='visible') refreshSchwabReminder(true).catch(()=>{});
   });
 }
 startAutoPoll();

@@ -621,6 +621,19 @@ Uses **The Strat**. Key concepts the code implements:
   re-measure for ever with no way out — a worse failure than asking for
   one that turns out not to help. Absent means unknown; only an explicit
   lower number means behind.
+- **A warning only counts where he actually looks.** Schwab's seven-day
+  sign-in has a countdown, a lapse check and a "Reconnect to Schwab"
+  button — all of it on the Journal tab, which he opens roughly never,
+  because the whole point of this app is that trades arrive on their own.
+  So the first sign of a lapsed sign-in was still a quiet week with no
+  trades in it. The countdown now sits at the top of the Home tab, the
+  first thing on the first screen: one calm line above two days left, gold
+  with a button under two days, red with a button once it has gone. A
+  warning placed where the failure gets diagnosed is not a warning; it
+  goes where the failure gets NOTICED.
+- **Round a countdown DOWN, always.** 40 hours reads as "1 day", not
+  "2 days". Overstating time left costs him a day of trades; understating
+  it costs him one early sign-in.
 - **Never show him a server's raw error text.** A lapsed sign-in reached
   the screen as `{"error":"unsupported_token_type","error_description":
   "400 Bad Request: ..."}`. The whole answer was in there and none of it

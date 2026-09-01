@@ -24,6 +24,38 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+56. **The Schwab sign-in reminder, on the first screen he sees**
+    (asked for 2026-09-01). **Status: BUILT AND TESTED (39 checks in a
+    real browser at phone size). Not confirmed on his phone.**
+
+    Schwab hands out a sign-in that dies after exactly seven days and
+    cannot be extended. When it dies, trades simply stop arriving and
+    nothing else goes wrong -- the worst possible failure, because it
+    looks like a quiet week. He spent weeks being told "Schwab had
+    nothing new" when nothing could reach Schwab at all.
+
+    The warning already existed, but only on the Journal tab, which he
+    has no reason to open. It now sits at the top of the Home tab in
+    three states, drawn from what the server says it can actually do
+    with Schwab (not from whether the app can reach the server):
+    - **more than 2 days left** -- one quiet line, no button, and a small
+      "Sign in again now" link so the way in is always there
+    - **under 2 days** -- gold, with the button, and it says trades keep
+      arriving until then so he does not think something is broken
+    - **run out, or Schwab refused the server outright** -- red, with the
+      button, and it says the journal is safe
+
+    Time left is always rounded DOWN, so 40 hours reads as "1 day" -- he
+    signs in early rather than late. An unknown countdown invents
+    nothing, an unreachable server shows nothing at all rather than a
+    guess, and the reminder has its own attempt and its own catch so it
+    can never take the rest of the Home tab down with it. It re-checks
+    when he comes back to the app, which is how it clears itself the
+    moment he has signed in.
+
+    **Left open:** the sign-in still has to be done by hand every week.
+    Nothing can change that -- it is Schwab's rule, not the app's.
+
 55. **One journal across every device** (asked for 2026-08-31).
     **Status: NOT STARTED — he asked to be reminded about this, and said
     it is important to him. Needs a proposal before any building.**
@@ -1878,6 +1910,19 @@ project "complete":**
     actually reliable. Owner's own sequencing: get task 6's automatic
     photos fully working and confirmed first, then start this as its own
     dedicated effort.
+
+    **He asked directly how this would get built, 2026-09-01** -- "how do
+    we build out the fully automatic version with its own app?" and "how
+    do we build out the video capture portion?" A full plain-English
+    answer was given in that session: the four stages (an app that
+    records on one-time consent; a way for the server to wake it; the
+    upload and trimming to each trade; keeping it signed), what each one
+    costs him in time and money, and the one decision that has to come
+    first -- Apple's $99/year fee versus re-signing a free app roughly
+    every 7 days on his own MacBook. **Nothing has been built. Needs his
+    answer on the fee before it can start**, and his own sequencing above
+    still stands: task 6's automatic photos confirmed on a real trade
+    first.
 
 14. **Track stock share trades (buying/selling shares of a company), not
     just options** (added 2026-08-23, owner's own question). **Status: CANCELLED by the
