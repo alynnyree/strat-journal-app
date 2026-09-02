@@ -24,6 +24,35 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+62. **Picking the day and time for a rehearsed trade** (asked for
+    2026-09-02: "am I able to pick a specific date and a random time").
+    **Status: BUILT AND TESTED (54 server checks, 48 app checks). Never
+    run against the live services.**
+
+    The rehearsal was fixed to the most recent weekday at 10:30 for 22
+    minutes on SPY. He can now pick the day, the time it opened, how many
+    minutes it ran, the ticker and Long or Short -- or leave all of it
+    alone and get exactly what it did before.
+
+    This is what makes the rehearsal worth more than a smoke test: on a
+    day he actually traded he can see whether the app reads the setup the
+    way HE read it.
+
+    Everything he chooses is checked BEFORE anything is fetched, so a bad
+    choice is one sentence he can act on rather than two steps failing
+    confusingly later. Proven directly: a bad time reaches none of the
+    outside services at all.
+
+    Awkward but allowed choices warn instead of refusing -- a weekend, a
+    time outside market hours, a trade running past the close, and above
+    all a day older than about thirty days, where Schwab has thrown the
+    minute data away. That last one says plainly it is NOT a fault,
+    because otherwise two empty steps look like a broken app rather than
+    an empty market.
+
+    Short builds a put and Long a call, the same rule his real trades
+    follow.
+
 61. **A test that runs a whole trade through everything** (asked for
     2026-09-01, clarifying what he had meant by a test trade button).
     **Status: BUILT AND TESTED (50 server checks, 30 app checks). Never
