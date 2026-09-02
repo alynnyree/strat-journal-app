@@ -631,6 +631,14 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **A rehearsal must run the REAL thing, and be unable to reach his
+  data.** The full test trade calls the actual matcher and the actual
+  enrichment steps, which is how it found that the matcher reads
+  `state.pending` as well as `state.openLegs` — a hand-written stand-in
+  would have hidden that. And it is kept OUT of the journal rather than
+  filtered out of it: 33 places read `loadTrades()`, and a rule needing
+  all 33 to remember an exclusion is a rule that will be broken. Separate
+  storage cannot be forgotten.
 - **A test that can write into his journal is not a test.** The rehearsed
   trade produces real pictures through the real path, and his journal has
   already been polluted once — 161 contracts he never bought. The mark

@@ -24,6 +24,44 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+61. **A test that runs a whole trade through everything** (asked for
+    2026-09-01, clarifying what he had meant by a test trade button).
+    **Status: BUILT AND TESTED (50 server checks, 30 app checks). Never
+    run against the live Schwab, Alpaca or AI services -- which is
+    exactly what it exists to find out.**
+
+    The picture rehearsal built earlier only proved the camera worked.
+    He wanted a rehearsal that samples a trade from beginning to end and
+    fills in the trade information itself -- the strategy, the dates,
+    the times -- so every capability gets exercised at once.
+
+    Two synthetic fills, a buy to open and a sell to close on a recent
+    real trading session, pushed through the SAME matcher and the SAME
+    enrichment a genuine Schwab fill goes through. Nine steps, each
+    reporting for itself: reach Schwab, find where SPY was, pair the buy
+    with the sell, work out the money, price the stock at both ends,
+    measure the 13 timeframes, load the replay candles, read the setup
+    with AI, work out the stop.
+
+    **One failing step never stops the ones after it.** The value is
+    finding out WHICH parts work. A lapsed Schwab sign-in still leaves
+    the pairing and the money proven, because those need nothing from
+    outside.
+
+    **It calls the real steps, never a copy.** Every enrichment step was
+    exported for this rather than reimplemented, and that immediately
+    earned its keep: the real matcher reads `state.pending` as well as
+    `state.openLegs`, which a hand-written stand-in would have hidden.
+
+    **It cannot reach his journal.** The server writes nothing at all --
+    no trade store, no pending list, no lastProcessedIds -- and the app
+    keeps the result in its OWN place in storage rather than filtering
+    it out of the journal. Thirty-three different places read the
+    journal, and a rule that depends on all thirty-three remembering to
+    exclude something is a rule that will be broken. Checked directly:
+    his P&L, win rate and trade count do not move, and his journal holds
+    exactly his own trades afterwards.
+
 60. **A middle picture, with a slot of its own** (asked for 2026-09-01:
     "We should build out a slot for a middle picture").
     **Status: BUILT AND TESTED (21 checks in a real browser). Never run

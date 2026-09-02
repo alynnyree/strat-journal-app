@@ -1126,6 +1126,25 @@
       <div id="appStatus" style="margin-top:12px;"></div>
       <div id="checklistBody" style="margin-top:12px;"><div class="empty">Working it out…</div></div>
     </div>
+    <!-- The full rehearsal. A whole trade pushed through the real
+         machinery -- the pairing, the stock price, the thirteen
+         timeframes, the replay candles, the AI reading the setup, the
+         stop rule -- with each step reporting for itself.
+
+         It is kept in its OWN place in storage, never in the journal, so
+         it is not merely filtered out of his figures: it physically
+         cannot reach them. -->
+    <div class="card" id="fullTestCard">
+      <h3>Test a Whole Trade</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
+        Runs a made-up trade through everything the app does to a real one
+        and tells you which parts worked. It never touches your journal or
+        your figures.
+      </div>
+      <button class="primary" id="btnFullTest" onclick="runFullTest()" style="margin-top:12px;">Run a Full Test</button>
+      <div id="fullTestBody" style="margin-top:12px;"></div>
+    </div>
+
     <!-- Only ever on screen after a rehearsal. A test must be able to
          prove itself and then leave nothing behind. -->
     <div class="card" id="testTradeCard" style="display:none;">
@@ -3872,6 +3891,114 @@ async function renderAppStatus(){
   el.innerHTML = line('var(--bull)', '<b>Everything is up to date.</b> Your trades are in, priced, and read.');
 }
 
+// ---- The full rehearsal ----------------------------------------------
+// A made-up trade pushed through everything the app does to a real one.
+// Kept in its OWN place in storage, never in the journal: it is not
+// merely filtered out of his figures, it physically cannot reach them.
+// Thirty-three different places read the journal, and a rule that
+// depends on all thirty-three remembering to exclude something is a rule
+// that will be broken. His journal has been polluted once already.
+const FULL_TEST_KEY = 'strat_full_test';
+
+function loadFullTest(){
+  try{ return JSON.parse(localStorage.getItem(FULL_TEST_KEY) || 'null'); }
+  catch(e){ return null; }
+}
+function saveFullTest(result){
+  try{ localStorage.setItem(FULL_TEST_KEY, JSON.stringify(result)); }catch(e){}
+}
+function clearFullTest(){
+  try{ localStorage.removeItem(FULL_TEST_KEY); }catch(e){}
+  renderFullTest();
+}
+
+async function runFullTest(){
+  const btn = document.getElementById('btnFullTest');
+  const body = document.getElementById('fullTestBody');
+  const url = backendUrl();
+  if(!url || !appKey()){
+    body.innerHTML = '<div class="empty">Fill in your connection details on the Journal tab first.</div>';
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'Testing…'; }
+  body.innerHTML = '<div class="empty">Running a whole trade through the app. This takes up to a minute — the AI reading is the slow part.</div>';
+  let result = null;
+  try{
+    const r = await fetch(url+'/api/test-trade?key='+encodeURIComponent(appKey()), { method:'POST' });
+    if(r.status === 403) throw new Error('Your App Key does not match. Check it on the Journal tab.');
+    if(!r.ok) throw new Error('The test could not be started.');
+    result = await r.json();
+    result.ranAt = Date.now();
+    saveFullTest(result);
+  }catch(e){
+    // Never his own words dressed up as the server's, and never the
+    // server's raw text dressed up as an explanation.
+    body.innerHTML = `<div class="status-banner err show">${escapeHtml(e.message || 'The test could not be run.')}</div>`;
+    if(btn){ btn.disabled = false; btn.textContent = 'Run a Full Test'; }
+    return;
+  }
+  if(btn){ btn.disabled = false; btn.textContent = 'Run It Again'; }
+  renderFullTest();
+}
+
+// What each step means to him, in his terms rather than the app's.
+const FULL_TEST_PLAIN = {
+  'Reach Schwab': 'Talking to Schwab',
+  'Find where SPY was': 'Finding where SPY was trading',
+  'Pair the buy with the sell': 'Turning your buy and sell into one trade',
+  'Work out the money': 'Working out profit and fees',
+  'Price the stock at both ends': 'Stock price at entry and exit',
+  'Measure the 13 timeframes': 'Measuring all 13 timeframes',
+  'Load the replay candles': 'Loading Bar Replay',
+  'Read the setup with AI': 'Reading your setup and play',
+  'Work out the stop': 'Working out your stop and R:R',
+};
+
+function renderFullTest(){
+  const body = document.getElementById('fullTestBody');
+  if(!body) return;
+  const result = loadFullTest();
+  if(!result){ body.innerHTML = ''; return; }
+
+  const steps = result.steps || [];
+  const worked = steps.filter(s=>s.ok).length;
+  const heading = result.ok
+    ? 'Every part worked.'
+    : `${worked} of ${steps.length} parts worked. The rest are named below.`;
+
+  const rows = steps.map(s=>{
+    const label = FULL_TEST_PLAIN[s.name] || s.name;
+    const mark = s.ok ? '✓' : '✕';
+    const colour = s.ok ? 'var(--bull)' : 'var(--bear)';
+    return `<div style="display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);">
+      <span style="color:${colour}; font-weight:700; flex:0 0 14px;">${mark}</span>
+      <span style="flex:1; min-width:0;">
+        <span style="font-size:13.5px; font-weight:600;">${escapeHtml(label)}</span>
+        <span style="display:block; font-size:12px; color:var(--text-dim); line-height:1.5; margin-top:2px;">${escapeHtml(s.summary||'')}</span>
+      </span>
+    </div>`;
+  }).join('');
+
+  const t = result.trade;
+  const tradeBlock = t ? `
+    <div style="margin-top:14px; padding:12px; background:var(--panel-2); border:1px solid var(--border); border-radius:8px;">
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:1.6px; color:var(--text-dim); margin-bottom:8px;">The made-up trade it built</div>
+      <div style="font-size:13.5px; font-weight:600;">${escapeHtml(t.ticker||'')} ${escapeHtml(t.dir||'')} · ${t.contracts||0} contract${t.contracts===1?'':'s'}</div>
+      <div style="font-size:12.5px; color:var(--text-dim); line-height:1.6; margin-top:4px;">
+        In ${escapeHtml(t.entryDate||'')} at ${escapeHtml(t.entryTime||'')} · out ${escapeHtml(t.exitDate||'')} at ${escapeHtml(t.exitTime||'')}<br>
+        ${t.pnlDollar!=null ? `${t.pnlDollar>=0?'+':'-'}$${Math.abs(t.pnlDollar).toFixed(2)} before fees` : 'no profit worked out'}${t.pnlNet!=null ? ` · ${t.pnlNet>=0?'+':'-'}$${Math.abs(t.pnlNet).toFixed(2)} after` : ''}<br>
+        ${t.stratNotation ? escapeHtml(t.stratNotation) + (t.stratNotationDirection ? ' · '+escapeHtml(t.stratNotationDirection) : '') + '<br>' : ''}
+        ${t.strat ? escapeHtml(t.strat) : 'no setup named'}${t.play ? ' · '+escapeHtml(t.play) : ''}
+      </div>
+    </div>` : '';
+
+  body.innerHTML =
+    `<div style="font-size:13.5px; font-weight:600; margin-bottom:4px; color:${result.ok?'var(--bull)':'var(--gold)'};">${escapeHtml(heading)}</div>` +
+    `<div style="font-size:11.5px; color:var(--text-dim); margin-bottom:10px;">This trade is made up. It is not in your journal and none of your figures have changed.</div>` +
+    rows + tradeBlock +
+    `<button class="secondary" onclick="clearFullTest()" style="margin-top:12px;">Clear this test</button>`;
+}
+
 // A rehearsed trade's pictures. Kept apart from the journal entirely --
 // their own place in storage, their own card, and a button that removes
 // every trace. A test that leaves anything behind in his journal is worse
@@ -3934,6 +4061,7 @@ async function renderChecklist(){
   // about it. A diagnostic that lies is worse than none.
   await renderAppStatus();
   renderTestShots();
+  renderFullTest();
   const box = document.getElementById('checklistBody');
   if(!box) return;
   const all = loadTrades();
