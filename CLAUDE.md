@@ -631,6 +631,14 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **An empty market is not a broken app, and he cannot tell them apart.**
+  The rehearsal lets him pick any day, but Schwab throws away
+  minute-by-minute data after about a month — so picking a day from
+  January returns no timeframes and no replay, which looks exactly like
+  two broken features. The choice is allowed and the reason is said up
+  front, in the same breath as "that is not a fault". Any input that can
+  produce an empty answer for reasons outside the app must say so before
+  it runs, not leave him reading a failure.
 - **A rehearsal must run the REAL thing, and be unable to reach his
   data.** The full test trade calls the actual matcher and the actual
   enrichment steps, which is how it found that the matcher reads

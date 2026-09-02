@@ -1142,6 +1142,37 @@
         your figures.
       </div>
       <button class="primary" id="btnFullTest" onclick="runFullTest()" style="margin-top:12px;">Run a Full Test</button>
+      <!-- Folded away by default. Pressing the button with none of this
+           touched rehearses the most recent trading day, which is what
+           he wants nearly every time. -->
+      <div onclick="toggleTestChoices()" style="margin-top:12px; cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+        <span id="testChoicesArrow">›</span> Pick a day and time
+      </div>
+      <div id="testChoices" style="display:none; margin-top:10px;">
+        <div style="font-size:11.5px; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
+          Leave these alone and it uses the most recent trading day. Pick a
+          day you actually traded and you can see whether the app reads the
+          setup the way you did.
+        </div>
+        <label>Day</label>
+        <input id="tt_date" type="date">
+        <label>Time it opened</label>
+        <input id="tt_time" type="time" value="10:30">
+        <label>Minutes it ran</label>
+        <input id="tt_hold" type="number" min="1" max="390" value="22" inputmode="numeric">
+        <label>Ticker</label>
+        <input id="tt_ticker" placeholder="SPY" value="SPY" autocapitalize="characters" autocorrect="off" spellcheck="false">
+        <label>Direction</label>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <div class="pill sel" id="tt_long" onclick="setTestDir('Long')">Long</div>
+          <div class="pill" id="tt_short" onclick="setTestDir('Short')">Short</div>
+        </div>
+        <div style="font-size:11.5px; color:var(--text-dim); line-height:1.5; margin-top:10px;">
+          Schwab throws away minute-by-minute data after about a month, so a
+          day older than that will come back without timeframes or Bar
+          Replay. That is not a fault.
+        </div>
+      </div>
       <div id="fullTestBody" style="margin-top:12px;"></div>
     </div>
 
@@ -3912,6 +3943,35 @@ function clearFullTest(){
   renderFullTest();
 }
 
+// Which way the rehearsed trade goes. Long is a call, Short is a put --
+// the same rule his real trades follow.
+let testDir = 'Long';
+function setTestDir(d){
+  testDir = d;
+  const l = document.getElementById('tt_long'), sh = document.getElementById('tt_short');
+  if(l) l.classList.toggle('sel', d === 'Long');
+  if(sh) sh.classList.toggle('sel', d === 'Short');
+}
+function toggleTestChoices(open){
+  const box = document.getElementById('testChoices');
+  const arrow = document.getElementById('testChoicesArrow');
+  if(!box) return;
+  const show = open === true ? true : box.style.display === 'none';
+  box.style.display = show ? 'block' : 'none';
+  if(arrow) arrow.textContent = show ? '⌄' : '›';
+}
+
+// Only what he actually filled in. An empty box means "you choose", not
+// "blank" -- sending a blank day would be a different question entirely.
+function testChoices(){
+  const val = id => {
+    const el = document.getElementById(id);
+    return el && String(el.value || '').trim() ? String(el.value).trim() : undefined;
+  };
+  return { date: val('tt_date'), time: val('tt_time'), holdMinutes: val('tt_hold'),
+           ticker: val('tt_ticker'), dir: testDir };
+}
+
 async function runFullTest(){
   const btn = document.getElementById('btnFullTest');
   const body = document.getElementById('fullTestBody');
@@ -3924,10 +3984,22 @@ async function runFullTest(){
   body.innerHTML = '<div class="empty">Running a whole trade through the app. This takes up to a minute — the AI reading is the slow part.</div>';
   let result = null;
   try{
-    const r = await fetch(url+'/api/test-trade?key='+encodeURIComponent(appKey()), { method:'POST' });
+    const r = await fetch(url+'/api/test-trade?key='+encodeURIComponent(appKey()), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(testChoices()),
+    });
     if(r.status === 403) throw new Error('Your App Key does not match. Check it on the Journal tab.');
     if(!r.ok) throw new Error('The test could not be started.');
     result = await r.json();
+    // A choice it could not accept: say so where he made the choice, and
+    // open the boxes so he can see which one to change.
+    if(result.error){
+      body.innerHTML = `<div class="status-banner err show">${escapeHtml(result.error)}</div>`;
+      toggleTestChoices(true);
+      if(btn){ btn.disabled = false; btn.textContent = 'Run a Full Test'; }
+      return;
+    }
     result.ranAt = Date.now();
     saveFullTest(result);
   }catch(e){
@@ -3967,7 +4039,10 @@ function renderFullTest(){
     : `${worked} of ${steps.length} parts worked. The rest are named below.`;
 
   const rows = steps.map(s=>{
-    const label = FULL_TEST_PLAIN[s.name] || s.name;
+    // The price step carries whichever ticker he chose, so it is matched
+    // by shape rather than by an exact name that only fits SPY.
+    const label = FULL_TEST_PLAIN[s.name]
+      || (/^Find where /.test(s.name) ? s.name.replace(/^Find where (\w+) was$/, 'Finding where $1 was trading') : s.name);
     const mark = s.ok ? '✓' : '✕';
     const colour = s.ok ? 'var(--bull)' : 'var(--bear)';
     return `<div style="display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);">
@@ -3992,8 +4067,21 @@ function renderFullTest(){
       </div>
     </div>` : '';
 
+  const ran = result.ran;
+  const ranLine = ran
+    ? `<div style="font-size:11.5px; color:var(--text-dim); margin-bottom:8px;">${escapeHtml(ran.ticker)} ${escapeHtml(ran.dir)} on ${escapeHtml(ran.date)}, in at ${escapeHtml(ran.time)} for ${ran.holdMinutes} minutes.</div>`
+    : '';
+  // Things worth knowing that are not failures -- an old day, a weekend,
+  // a time outside market hours. Without these, two empty steps look like
+  // a fault when they are just an empty market.
+  const warnLines = (result.warnings || []).length
+    ? `<div style="font-size:12px; color:var(--gold); background:var(--gold-dim); border-radius:8px; padding:9px 11px; margin-bottom:10px; line-height:1.5;">`
+      + result.warnings.map(w=>escapeHtml(w)).join('<br>') + `</div>`
+    : '';
+
   body.innerHTML =
     `<div style="font-size:13.5px; font-weight:600; margin-bottom:4px; color:${result.ok?'var(--bull)':'var(--gold)'};">${escapeHtml(heading)}</div>` +
+    ranLine + warnLines +
     `<div style="font-size:11.5px; color:var(--text-dim); margin-bottom:10px;">This trade is made up. It is not in your journal and none of your figures have changed.</div>` +
     rows + tradeBlock +
     `<button class="secondary" onclick="clearFullTest()" style="margin-top:12px;">Clear this test</button>`;
