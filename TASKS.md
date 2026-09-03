@@ -24,6 +24,30 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+64. **The rehearsal must always land on a REAL setup** (his own fix,
+    2026-09-02: "wherever the journal gets this test trade from, it needs
+    to always present a setup (not a made-up setup)").
+    **Status: BUILT AND TESTED (12 + 70 + 58 checks). Not run against
+    the live market data.**
+
+    A random minute may have no setup, which left the reading step nothing
+    to read. He asked for the test trade to be SOURCED from a real setup
+    so every capability has real work to do -- he is not trying to
+    categorise whether a setup was found, he wants one guaranteed present.
+
+    The journal already knows how to find his setups: the backtester's
+    own detectors number the bars and match all nine combos. findRecentSetup
+    reuses those exact detectors to scan recent candles for an actual
+    occurrence, and the full test now anchors the trade there by default
+    -- his ticker first, then the other of SPY/IWM, the freshest match
+    winning. The candles come from the same source the enrichment reads
+    (Alpaca if connected, else Schwab), so a setup found is one whose
+    surrounding data still exists for the timeframes and replay.
+
+    The card leads with "Tested on a real 2-1-2 Continuation (5m)". Pinning
+    an exact time still overrides this, for when he wants a specific trade
+    he took.
+
 63. **A rehearsal at a random minute must not call an empty market a
     failure** (he spotted this 2026-09-02 after running a full test).
     **Status: BUILT AND TESTED (59 + 54 + 57 checks). Not run against
