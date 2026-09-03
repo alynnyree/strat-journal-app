@@ -4034,8 +4034,9 @@ function renderFullTest(){
 
   const steps = result.steps || [];
   const worked = steps.filter(s=>s.ok).length;
+  const soft = steps.filter(s=>s.ok && s.soft).length;
   const heading = result.ok
-    ? 'Every part worked.'
+    ? (soft ? 'Every part worked. One had nothing to show — see below.' : 'Every part worked.')
     : `${worked} of ${steps.length} parts worked. The rest are named below.`;
 
   const rows = steps.map(s=>{
@@ -4043,8 +4044,12 @@ function renderFullTest(){
     // by shape rather than by an exact name that only fits SPY.
     const label = FULL_TEST_PLAIN[s.name]
       || (/^Find where /.test(s.name) ? s.name.replace(/^Find where (\w+) was$/, 'Finding where $1 was trading') : s.name);
-    const mark = s.ok ? '✓' : '✕';
-    const colour = s.ok ? 'var(--bull)' : 'var(--bear)';
+    // Three marks, not two. A "soft" pass -- the AI read the chart and
+    // answered, but there was no setup at that exact minute -- is not a
+    // failure and must not show a red cross, but it did not find anything
+    // either, so it is not a plain green tick. Gold, with a dash.
+    const mark = s.ok ? (s.soft ? '–' : '✓') : '✕';
+    const colour = s.ok ? (s.soft ? 'var(--gold)' : 'var(--bull)') : 'var(--bear)';
     return `<div style="display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);">
       <span style="color:${colour}; font-weight:700; flex:0 0 14px;">${mark}</span>
       <span style="flex:1; min-width:0;">
