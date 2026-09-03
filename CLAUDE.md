@@ -631,6 +631,15 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **A test must ask whether the information transferred, not whether the
+  market obliged.** The full-test setup step failed whenever the AI named
+  no combo — but at a random minute there may be no setup, and the AI
+  honestly saying so is the transfer WORKING (candles in, a real answer
+  back). "Reached the AI, not confident" and "could not reach the AI" had
+  been folded into one null; a rehearsal has to tell them apart, because
+  only the second is a fault. Reached-with-nothing is a pass, shown as a
+  gold dash and said plainly not to be a fault — never a red cross that
+  sends him chasing a bug that is not there.
 - **An empty market is not a broken app, and he cannot tell them apart.**
   The rehearsal lets him pick any day, but Schwab throws away
   minute-by-minute data after about a month — so picking a day from

@@ -24,6 +24,31 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+63. **A rehearsal at a random minute must not call an empty market a
+    failure** (he spotted this 2026-09-02 after running a full test).
+    **Status: BUILT AND TESTED (59 + 54 + 57 checks). Not run against
+    the live AI.**
+
+    The full test judged the setup-reading step as FAILED whenever the AI
+    did not name a combo. But at a random minute there may simply be no
+    setup, and the AI honestly saying so is the transfer WORKING --
+    candles in, a real structured answer back. The test was calling an
+    empty market a fault, which would have had him chasing a bug that was
+    not there.
+
+    The reader collapsed two outcomes into one: "reached the AI, not
+    confident" and "could not reach the AI at all". Those are now told
+    apart. The setup step ends three ways: could not reach (a real
+    failure, named as one), reached and confident (shows the combo),
+    reached with no setup here (a pass, flagged "worked, nothing to
+    show", said plainly to be a real answer and not a fault, with a nudge
+    to pick a time he knows had a setup). On his screen the last one is a
+    gold dash, never a red cross.
+
+    The rule underneath: the test asks whether the INFORMATION
+    transferred, not whether a setup happened to exist. A step that needs
+    a setup to exist before it can pass was asking the wrong question.
+
 62. **Picking the day and time for a rehearsed trade** (asked for
     2026-09-02: "am I able to pick a specific date and a random time").
     **Status: BUILT AND TESTED (54 server checks, 48 app checks). Never
