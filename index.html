@@ -1137,22 +1137,24 @@
     <div class="card" id="fullTestCard">
       <h3>Test a Whole Trade</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
-        Runs a made-up trade through everything the app does to a real one
-        and tells you which parts worked. It never touches your journal or
-        your figures.
+        Finds a real setup in recent trading and runs a trade on it through
+        everything the app does to a real one, then tells you which parts
+        worked. It never touches your journal or your figures.
       </div>
       <button class="primary" id="btnFullTest" onclick="runFullTest()" style="margin-top:12px;">Run a Full Test</button>
       <!-- Folded away by default. Pressing the button with none of this
-           touched rehearses the most recent trading day, which is what
-           he wants nearly every time. -->
+           touched now FINDS A REAL SETUP in recent trading and rehearses
+           the trade there, so the setup reading has real work to do --
+           which is the whole point of the test. -->
       <div onclick="toggleTestChoices()" style="margin-top:12px; cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
         <span id="testChoicesArrow">›</span> Pick a day and time
       </div>
       <div id="testChoices" style="display:none; margin-top:10px;">
         <div style="font-size:11.5px; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
-          Leave these alone and it uses the most recent trading day. Pick a
-          day you actually traded and you can see whether the app reads the
-          setup the way you did.
+          Leave these alone and the test finds a real setup in recent
+          trading on its own, so every part has real work to do. Pick a
+          day to search just that day. Fill in a time as well only if you
+          want that exact minute instead of a found setup.
         </div>
         <label>Day</label>
         <input id="tt_date" type="date">
@@ -4015,6 +4017,7 @@ async function runFullTest(){
 
 // What each step means to him, in his terms rather than the app's.
 const FULL_TEST_PLAIN = {
+  'Find a real setup to test on': 'Finding a real setup to test on',
   'Reach Schwab': 'Talking to Schwab',
   'Find where SPY was': 'Finding where SPY was trading',
   'Pair the buy with the sell': 'Turning your buy and sell into one trade',
@@ -4074,7 +4077,9 @@ function renderFullTest(){
 
   const ran = result.ran;
   const ranLine = ran
-    ? `<div style="font-size:11.5px; color:var(--text-dim); margin-bottom:8px;">${escapeHtml(ran.ticker)} ${escapeHtml(ran.dir)} on ${escapeHtml(ran.date)}, in at ${escapeHtml(ran.time)} for ${ran.holdMinutes} minutes.</div>`
+    ? `<div style="font-size:11.5px; color:var(--text-dim); margin-bottom:8px;">`
+      + (ran.setup ? `Tested on a real <b style="color:var(--text);">${escapeHtml(ran.setup)}</b>${ran.setupTimeframe ? ' ('+escapeHtml(ran.setupTimeframe)+')' : ''} — ` : '')
+      + `${escapeHtml(ran.ticker)} ${escapeHtml(ran.dir)} on ${escapeHtml(ran.date)}, in at ${escapeHtml(ran.time)} for ${ran.holdMinutes} minutes.</div>`
     : '';
   // Things worth knowing that are not failures -- an old day, a weekend,
   // a time outside market hours. Without these, two empty steps look like
