@@ -631,6 +631,15 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **Marking the app against its own earlier answer is not a check.** The
+  replay marks a rebuilt trade against the saved one — right for the times,
+  prices, fees and profit, which came from Schwab. But the timeframes on
+  file are the app's OWN earlier reading, and were measured under a rule
+  since corrected, so a difference there is EXPECTED and was being shown
+  as "got yes, should be no". Same for a setup the AI tagged, and for
+  replay candles where the saved trade has none either. Each of those is
+  now an uncounted line that says what it is. Only a field whose answer
+  came from outside the app can be marked right or wrong.
 - **A test that chooses the moment by the answer is marking its own
   homework.** The full test was made to FIND a setup and then ask what the
   setup was. Beyond the circularity, it leaked: the direction came from

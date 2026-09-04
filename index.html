@@ -4107,13 +4107,23 @@ function markReplay(saved, got, exactMoments){
         got.undEntry != null ? '$'+Number(got.undEntry).toFixed(2) : '—',
         near(saved.undEntry, got.undEntry, Math.max(0.05, saved.undEntry * 0.002)));
   }
+  // The timeframes on file are the app's OWN earlier answer, not an
+  // independent record -- so this compares the app with its past self.
+  // And the rule was corrected: anything measured under the old one was
+  // partly read from price action that happened AFTER the entry, so a
+  // difference there is expected and must not be marked wrong.
+  const ftfcStale = saved.ftfcRun != null && Number(saved.ftfcVersion || 1) < FTFC_RULE_VERSION;
+  const ftfcNote = ftfcStale
+    ? 'measured before the timeframe rule was corrected, so a difference here is expected'
+    : 'the app checked against its own earlier reading, not an outside record';
   if(saved.ftfcConfirmed != null){
     add('Timeframes agreed', saved.ftfcConfirmed ? 'yes' : 'no',
-        got.ftfcConfirmed ? 'yes' : 'no', !!saved.ftfcConfirmed === !!got.ftfcConfirmed);
+        got.ftfcConfirmed ? 'yes' : 'no',
+        ftfcStale ? null : (!!saved.ftfcConfirmed === !!got.ftfcConfirmed), ftfcNote);
   }
   if(saved.ftfcDirection){
     add('Which way they agreed', saved.ftfcDirection, got.ftfcDirection || '—',
-        saved.ftfcDirection === got.ftfcDirection);
+        ftfcStale ? null : (saved.ftfcDirection === got.ftfcDirection), ftfcNote);
   }
 
   // The setup, marked ONLY against one he chose himself.
@@ -4126,8 +4136,17 @@ function markReplay(saved, got, exactMoments){
         'the app tagged this one itself, so there is nothing independent to mark it against');
   }
 
+  // Only expect candles where the saved trade actually has some. An old
+  // trade whose minute data has aged out has none on file either, and
+  // demanding them would mark an empty market as a fault.
   const candles = ((got.replayData && got.replayData.candles) || []).length;
-  add('Bar Replay candles', 'some', candles ? candles + ' candles' : 'none', candles > 0);
+  const savedCandles = ((saved.replayData && saved.replayData.candles) || []).length;
+  if(savedCandles){
+    add('Bar Replay candles', savedCandles + ' candles', candles ? candles + ' candles' : 'none', candles > 0);
+  } else {
+    add('Bar Replay candles', 'none on file either', candles ? candles + ' candles' : 'none', null,
+        'this trade has no candles saved, so there is nothing to compare against');
+  }
   return rows;
 }
 
@@ -4160,11 +4179,18 @@ function renderReplay(){
       </span></div>`;
   }).join('');
 
-  const steps = (result.steps || []).filter(s => !s.ok).map(s =>
-    `<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
-      <span style="color:var(--bear); font-weight:700; flex:0 0 14px;">✕</span>
+  // Failed steps AND the ones that worked but had nothing to give. The
+  // second kind was being hidden, which is exactly backwards: "the chart
+  // reading is out of its free allowance, try again shortly" is the one
+  // message he most needs to see, and it was never reaching the screen.
+  const steps = (result.steps || []).filter(s => !s.ok || s.soft).map(s => {
+    const mark = s.ok ? '–' : '✕';
+    const colour = s.ok ? 'var(--gold)' : 'var(--bear)';
+    return `<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
+      <span style="color:${colour}; font-weight:700; flex:0 0 14px;">${mark}</span>
       <span style="flex:1;"><span style="font-size:13px; font-weight:600;">${escapeHtml(FULL_TEST_PLAIN[s.name] || s.name)}</span>
-      <span style="display:block; font-size:12px; color:var(--text-dim); margin-top:2px;">${escapeHtml(s.summary||'')}</span></span></div>`).join('');
+      <span style="display:block; font-size:12px; color:var(--text-dim); margin-top:2px;">${escapeHtml(s.summary||'')}</span></span></div>`;
+  }).join('');
 
   body.innerHTML =
     `<div style="font-size:13.5px; font-weight:600; color:${allRight?'var(--bull)':'var(--gold)'};">${escapeHtml(heading)}</div>` +
