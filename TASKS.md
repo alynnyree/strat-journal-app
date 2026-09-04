@@ -24,6 +24,33 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+67. **Alpaca said connected and delivered nothing** (found 2026-09-04
+    from his own screenshot). **Status: FIXED AND TESTED (18 new checks).
+    Not confirmed against his live key.**
+
+    His Connection settings read "Alpaca is connected (key ending QY5H)"
+    and his February trade still replayed with no candles. Both true.
+
+    Every Alpaca request hardcoded `feed: 'sip'` -- the PAID consolidated
+    tape. A free key is refused it. The file contradicts itself in plain
+    sight: the comment above the delay constant says "Alpaca's FREE PLAN
+    serves full-market history", and forty lines below three requests
+    demand the paid feed. **Two settings that contradict each other in one
+    file mean one of them has never been exercised.**
+
+    The refusal was caught, logged where nobody reads it, and returned as
+    null -- so Alpaca contributed nothing at all while reporting itself
+    connected. No candles, no exact prices.
+
+    Now it asks for the better feed, falls back to the one the key has,
+    remembers which worked, and REPORTS the downgrade so it can never be
+    silent again. A real failure is still a failure.
+
+    **This likely explains a long trail of things:** the "approx." prices
+    he reported for weeks, empty replays on older trades, and why task 43
+    (Alpaca never actually being used) did not fully fix it -- that fixed
+    the GATE, this fixes the request the gate let through.
+
 66. **What his first real replay found** (2026-09-04, run on his laptop
     against a SPY Short from 2026-02-26). **Status: FIXED AND TESTED
     (59 server checks, 50 app checks). The run itself is the first real

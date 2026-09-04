@@ -556,6 +556,16 @@ Uses **The Strat**. Key concepts the code implements:
   backtesting. `underlyingPriceAt` did load the keys, but the gate closed
   before it was reached. Use `alpaca.isReady()`, never `isConfigured()`;
   `guardCheck.js` now fails on the latter.
+- **Asking a free key for a paid feed makes "connected" mean nothing.**
+  Every Alpaca request hardcoded `feed: 'sip'` — the paid consolidated
+  tape — in the same file whose own comment says the plan is the free one.
+  A free key is refused it, the refusal was logged where nobody reads, and
+  the answer came back null. So the app said "Alpaca is connected (key
+  ending QY5H)" while every request for candles was being turned away, and
+  a February trade replayed with nothing. Ask for the better feed, fall
+  back to the one the key HAS, remember which, and report the downgrade on
+  screen. Two settings that contradict each other in one file mean one of
+  them has never been exercised.
 - **"Silently falls back" is the same as "quietly wrong".** Nothing was
   logged, nothing was flagged, every trade got a price, and the only
   visible sign was one small word — "approx." — that he had to notice
