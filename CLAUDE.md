@@ -641,6 +641,13 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **A report that hides the successful steps hides the diagnosis.** The
+  replay card showed only the FAILED steps, so on a clean run there was no
+  way to tell whether the stock price had come from Alpaca or from a
+  Schwab daily close — the successful step's own summary says which, and
+  it was being filtered out. Every step is shown now, with where its
+  answer came from. The passing steps are the evidence; only showing the
+  failures leaves the cause unknowable.
 - **Marking the app against its own earlier answer is not a check.** The
   replay marks a rebuilt trade against the saved one — right for the times,
   prices, fees and profit, which came from Schwab. But the timeframes on

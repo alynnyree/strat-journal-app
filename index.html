@@ -4179,13 +4179,13 @@ function renderReplay(){
       </span></div>`;
   }).join('');
 
-  // Failed steps AND the ones that worked but had nothing to give. The
-  // second kind was being hidden, which is exactly backwards: "the chart
-  // reading is out of its free allowance, try again shortly" is the one
-  // message he most needs to see, and it was never reaching the screen.
-  const steps = (result.steps || []).filter(s => !s.ok || s.soft).map(s => {
-    const mark = s.ok ? '–' : '✕';
-    const colour = s.ok ? 'var(--gold)' : 'var(--bear)';
+  // EVERY step, not only the failures. The successful ones carry where
+  // each answer came from -- "from Alpaca, exact" versus "from Schwab
+  // candles" -- which is exactly what was needed to tell whether the
+  // chart data was working, and it was being hidden.
+  const steps = (result.steps || []).map(s => {
+    const mark = s.ok ? (s.soft ? '–' : '✓') : '✕';
+    const colour = s.ok ? (s.soft ? 'var(--gold)' : 'var(--bull)') : 'var(--bear)';
     return `<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
       <span style="color:${colour}; font-weight:700; flex:0 0 14px;">${mark}</span>
       <span style="flex:1;"><span style="font-size:13px; font-weight:600;">${escapeHtml(FULL_TEST_PLAIN[s.name] || s.name)}</span>
@@ -4195,7 +4195,7 @@ function renderReplay(){
   body.innerHTML =
     `<div style="font-size:13.5px; font-weight:600; color:${allRight?'var(--bull)':'var(--gold)'};">${escapeHtml(heading)}</div>` +
     `<div style="font-size:11.5px; color:var(--text-dim); margin:4px 0 10px;">Tested on your ${escapeHtml(about.ticker||'')} ${escapeHtml(about.dir||'')} from ${escapeHtml(about.entryDate||'')} at ${escapeHtml(about.entryTime||'')}. Your journal is unchanged.</div>` +
-    (steps ? `<div style="margin-bottom:8px;">${steps}</div>` : '') +
+    (steps ? `<div style="font-size:10px; text-transform:uppercase; letter-spacing:1.6px; color:var(--text-dim); margin:12px 0 4px;">What it did, and where each answer came from</div><div style="margin-bottom:14px;">${steps}</div><div style="font-size:10px; text-transform:uppercase; letter-spacing:1.6px; color:var(--text-dim); margin:0 0 4px;">How the answers scored</div>` : '') +
     rows +
     `<button class="secondary" onclick="clearReplay()" style="margin-top:12px;">Clear this test</button>`;
 }
