@@ -24,6 +24,39 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+66. **What his first real replay found** (2026-09-04, run on his laptop
+    against a SPY Short from 2026-02-26). **Status: FIXED AND TESTED
+    (59 server checks, 50 app checks). The run itself is the first real
+    evidence any of this works.**
+
+    It ran, and 12 of 14 answers came back correct -- the dates, times,
+    direction, size, both prices, the FEE worked back out of the cash,
+    profit before and after, and win/loss all matched his file. That is
+    the first end-to-end proof of those components on real data.
+
+    Four things came out of it, two of them my faults:
+
+    - **Raw machine text reached his screen** -- "Request failed with
+      status code 429" -- which CLAUDE.md bans outright, and which only
+      means the free AI tier is out of allowance. Every step failure now
+      goes through a plain-words translator, and a spent allowance is its
+      own answer rather than a failure.
+    - **Old trades were marked down for an empty market.** A February
+      trade has no minute data without Alpaca, so the replay candles step
+      now says how old the trade is and why, and only fails when Alpaca
+      IS connected.
+    - **"Timeframes agreed: got yes, should be no" was wrong of me.** The
+      saved reading is the app's own earlier answer, measured under the
+      rule corrected in task 47. A difference there is expected. Marked
+      as an uncounted consistency line that says so.
+    - **Bar Replay candles expected "some" unconditionally**, so a trade
+      with none on file either was marked wrong. Now compared against
+      what the trade actually has.
+
+    **Still open from this run:** whether Alpaca is actually connected on
+    his server. Everything old failing for want of minute data points at
+    it, and the Checks page can answer it.
+
 65. **Replay one of his own real trades, blind** (his correction and his
     decision, 2026-09-04: pick one at random).
     **Status: BUILT AND TESTED (37 server checks, 31 app checks). Not run
