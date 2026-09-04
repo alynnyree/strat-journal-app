@@ -631,6 +631,15 @@ Uses **The Strat**. Key concepts the code implements:
   with a button under two days, red with a button once it has gone. A
   warning placed where the failure gets diagnosed is not a warning; it
   goes where the failure gets NOTICED.
+- **A test that chooses the moment by the answer is marking its own
+  homework.** The full test was made to FIND a setup and then ask what the
+  setup was. Beyond the circularity, it leaked: the direction came from
+  the found setup and is handed to the AI in its prompt, and the finder
+  read 5-minute bars while the AI reads fifteen one-minute candles — so it
+  graded the AI against a chart it never saw. The honest shape is the
+  opposite: feed a trade in exactly as Schwab delivers it, let the journal
+  derive everything blind, and mark the answers from a key it never saw.
+  His own real trades are that key.
 - **A test must ask whether the information transferred, not whether the
   market obliged.** The full-test setup step failed whenever the AI named
   no combo — but at a random minute there may be no setup, and the AI
