@@ -1137,11 +1137,19 @@
     <div class="card" id="fullTestCard">
       <h3>Test a Whole Trade</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
-        Finds a real setup in recent trading and runs a trade on it through
-        everything the app does to a real one, then tells you which parts
-        worked. It never touches your journal or your figures.
+        Picks one of your own trades at random, hands the app only what
+        Schwab itself gives — the contract, the two times, the two prices
+        and the cash — and makes it work out everything else from scratch.
+        Then it marks every answer against what you already have on file.
+        It never changes your journal or your figures.
       </div>
-      <button class="primary" id="btnFullTest" onclick="runFullTest()" style="margin-top:12px;">Run a Full Test</button>
+      <button class="primary" id="btnReplayTest" onclick="runReplayTest()" style="margin-top:12px;">Test One of My Trades</button>
+      <div id="replayBody" style="margin-top:12px;"></div>
+      <div onclick="toggleMadeUp()" style="margin-top:14px; cursor:pointer; font-size:10px; text-transform:uppercase; letter-spacing:1.8px; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+        <span id="madeUpArrow">›</span> Or test with a made-up trade
+      </div>
+      <div id="madeUpBox" style="display:none; margin-top:10px;">
+      <button class="secondary" id="btnFullTest" onclick="runFullTest()" style="margin-top:0;">Run a Made-Up Trade</button>
       <!-- Folded away by default. Pressing the button with none of this
            touched now FINDS A REAL SETUP in recent trading and rehearses
            the trade there, so the setup reading has real work to do --
@@ -1176,6 +1184,7 @@
         </div>
       </div>
       <div id="fullTestBody" style="margin-top:12px;"></div>
+      </div>
     </div>
 
     <!-- Only ever on screen after a rehearsal. A test must be able to
@@ -3924,6 +3933,212 @@ async function renderAppStatus(){
   el.innerHTML = line('var(--bull)', '<b>Everything is up to date.</b> Your trades are in, priced, and read.');
 }
 
+// ---- A blind replay of one of his own trades -------------------------
+// The real test. One of his own trades is picked at random and stripped
+// back to the bare facts Schwab itself provides -- the contract, the two
+// instants, the two fill prices, the size and the cash. Nothing else is
+// sent. The server works out everything else from scratch, and THIS side
+// marks the answers, because this is where the answers live.
+//
+// Kept in its own place in storage, never in the journal.
+const REPLAY_KEY = 'strat_replay_check';
+
+function loadReplay(){
+  try{ return JSON.parse(localStorage.getItem(REPLAY_KEY) || 'null'); }catch(e){ return null; }
+}
+function clearReplay(){
+  try{ localStorage.removeItem(REPLAY_KEY); }catch(e){}
+  renderReplay();
+}
+function toggleMadeUp(open){
+  const box = document.getElementById('madeUpBox');
+  const arrow = document.getElementById('madeUpArrow');
+  if(!box) return;
+  const show = open === true ? true : box.style.display === 'none';
+  box.style.display = show ? 'block' : 'none';
+  if(arrow) arrow.textContent = show ? '⌄' : '›';
+}
+
+// A trade can only be replayed if it carries everything Schwab originally
+// gave. Anything typed in by hand, or imported before those facts were
+// kept, cannot be put back through the machine.
+function replayable(t){
+  return t && t.source === 'schwab-auto'
+    && t.optExit != null && t.optEntry != null
+    && t.occ && t.contracts
+    && t.entryTimestamp != null && t.exitTimestamp != null;
+}
+
+// Only a setup HE chose is an answer key. The AI writes a confidence
+// alongside its own guesses; a setup he picked by hand has none. Marking
+// the AI against its own earlier answer would prove nothing.
+function ownSetup(t){
+  return t && t.strat && !t.stratConfidence ? t.strat : null;
+}
+
+function pickReplayTrade(){
+  const all = loadTrades().filter(replayable);
+  if(!all.length) return null;
+  return all[Math.floor(Math.random() * all.length)];
+}
+
+async function runReplayTest(){
+  const btn = document.getElementById('btnReplayTest');
+  const body = document.getElementById('replayBody');
+  const url = backendUrl();
+  if(!url || !appKey()){
+    body.innerHTML = '<div class="empty">Fill in your connection details on the Journal tab first.</div>';
+    return;
+  }
+  const trade = pickReplayTrade();
+  if(!trade){
+    body.innerHTML = '<div class="empty">None of your trades carry everything needed to put one back through. This needs a trade that came in from Schwab on its own.</div>';
+    toggleMadeUp(true);
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'Testing…'; }
+  body.innerHTML = '<div class="empty">Putting one of your trades back through the app from scratch. This takes up to a minute.</div>';
+
+  // ONLY what Schwab itself provides. Everything else is the answer.
+  const facts = {
+    occ: trade.occ, ticker: trade.ticker,
+    putCall: String(trade.dir).toLowerCase() === 'short' ? 'PUT' : 'CALL',
+    contracts: trade.contracts,
+    entryTimestamp: trade.entryTimestamp, exitTimestamp: trade.exitTimestamp,
+    entryPrice: trade.optEntry, exitPrice: trade.optExit,
+    entryFees: trade.entryFees != null ? trade.entryFees : null,
+    exitFees: trade.exitFees != null ? trade.exitFees : null,
+  };
+
+  let result = null;
+  try{
+    const r = await fetch(url+'/api/replay-trade?key='+encodeURIComponent(appKey()), {
+      method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(facts),
+    });
+    if(r.status === 403) throw new Error('Your App Key does not match. Check it on the Journal tab.');
+    if(!r.ok) throw new Error('The test could not be started.');
+    result = await r.json();
+    if(result.error){
+      body.innerHTML = `<div class="status-banner err show">${escapeHtml(result.error)}</div>`;
+      if(btn){ btn.disabled = false; btn.textContent = 'Test One of My Trades'; }
+      return;
+    }
+    result.marks = markReplay(trade, result.trade);
+    result.about = {
+      ticker: trade.ticker, dir: trade.dir,
+      entryDate: trade.entryDate, entryTime: trade.entryTime,
+    };
+    result.ranAt = Date.now();
+    try{ localStorage.setItem(REPLAY_KEY, JSON.stringify(result)); }catch(e){}
+  }catch(e){
+    body.innerHTML = `<div class="status-banner err show">${escapeHtml(e.message || 'The test could not be run.')}</div>`;
+    if(btn){ btn.disabled = false; btn.textContent = 'Test One of My Trades'; }
+    return;
+  }
+  if(btn){ btn.disabled = false; btn.textContent = 'Test Another Trade'; }
+  renderReplay();
+}
+
+// The marking. Each row is one thing the app had to work out, what it
+// should have been, and what it actually came back with.
+function markReplay(saved, got){
+  const rows = [];
+  const add = (label, expected, actual, ok, note) => rows.push({ label, expected, actual, ok, note: note || null });
+  const money = v => v == null ? '—' : (v >= 0 ? '$' : '-$') + Math.abs(v).toFixed(2);
+  const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= tol;
+
+  if(!got){ return rows; }
+  add('Entry date', saved.entryDate, got.entryDate, saved.entryDate === got.entryDate);
+  add('Entry time', saved.entryTime, got.entryTime, saved.entryTime === got.entryTime);
+  add('Exit date', saved.exitDate, got.exitDate, saved.exitDate === got.exitDate);
+  add('Exit time', saved.exitTime, got.exitTime, saved.exitTime === got.exitTime);
+  add('Direction', saved.dir, got.dir, saved.dir === got.dir);
+  add('Contracts', saved.contracts, got.contracts, Number(saved.contracts) === Number(got.contracts));
+  add('Price paid', money(saved.optEntry), money(got.optEntry), near(saved.optEntry, got.optEntry, 0.001));
+  add('Price sold', money(saved.optExit), money(got.optExit), near(saved.optExit, got.optExit, 0.001));
+
+  if(saved.fees != null){
+    add('Fees', money(saved.fees), money(got.fees), near(saved.fees, got.fees, 0.03),
+        'worked back out of the cash, not sent in');
+  }
+  add('Profit before fees', money(saved.pnlDollar), money(got.pnlDollar), near(saved.pnlDollar, got.pnlDollar, 0.02));
+  if(saved.pnlNet != null){
+    add('Profit after fees', money(saved.pnlNet), money(got.pnlNet), near(saved.pnlNet, got.pnlNet, 0.05));
+  }
+  add('Win or loss', saved.winLoss, got.winLoss, saved.winLoss === got.winLoss);
+
+  if(saved.undEntry != null){
+    add('Stock price at entry', '$'+Number(saved.undEntry).toFixed(2),
+        got.undEntry != null ? '$'+Number(got.undEntry).toFixed(2) : '—',
+        near(saved.undEntry, got.undEntry, Math.max(0.05, saved.undEntry * 0.002)));
+  }
+  if(saved.ftfcConfirmed != null){
+    add('Timeframes agreed', saved.ftfcConfirmed ? 'yes' : 'no',
+        got.ftfcConfirmed ? 'yes' : 'no', !!saved.ftfcConfirmed === !!got.ftfcConfirmed);
+  }
+  if(saved.ftfcDirection){
+    add('Which way they agreed', saved.ftfcDirection, got.ftfcDirection || '—',
+        saved.ftfcDirection === got.ftfcDirection);
+  }
+
+  // The setup, marked ONLY against one he chose himself.
+  const mine = ownSetup(saved);
+  if(mine){
+    add('The setup you saw', mine, got.strat || 'not named', mine === got.strat,
+        'marked against your own reading');
+  } else if(saved.strat){
+    add('The setup', 'not marked', got.strat || 'not named', null,
+        'the app tagged this one itself, so there is nothing independent to mark it against');
+  }
+
+  const candles = ((got.replayData && got.replayData.candles) || []).length;
+  add('Bar Replay candles', 'some', candles ? candles + ' candles' : 'none', candles > 0);
+  return rows;
+}
+
+function renderReplay(){
+  const body = document.getElementById('replayBody');
+  if(!body) return;
+  const result = loadReplay();
+  if(!result){ body.innerHTML = ''; return; }
+
+  const marks = result.marks || [];
+  const graded = marks.filter(m => m.ok !== null);
+  const right = graded.filter(m => m.ok).length;
+  const allRight = graded.length && right === graded.length;
+  const heading = allRight
+    ? `All ${graded.length} answers came back correct.`
+    : `${right} of ${graded.length} answers came back correct. The rest are marked below.`;
+
+  const about = result.about || {};
+  const rows = marks.map(m => {
+    const mark = m.ok === null ? '–' : (m.ok ? '✓' : '✕');
+    const colour = m.ok === null ? 'var(--gold)' : (m.ok ? 'var(--bull)' : 'var(--bear)');
+    const detail = m.ok === false
+      ? `<span style="color:var(--bear);">got ${escapeHtml(String(m.actual))}</span>, should be ${escapeHtml(String(m.expected))}`
+      : (m.ok === null ? escapeHtml(String(m.actual)) : escapeHtml(String(m.actual)));
+    return `<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
+      <span style="color:${colour}; font-weight:700; flex:0 0 14px;">${mark}</span>
+      <span style="flex:1; min-width:0;">
+        <span style="font-size:13px; font-weight:600;">${escapeHtml(m.label)}</span>
+        <span style="display:block; font-size:12px; color:var(--text-dim); line-height:1.5; margin-top:2px;">${detail}${m.note ? ' · '+escapeHtml(m.note) : ''}</span>
+      </span></div>`;
+  }).join('');
+
+  const steps = (result.steps || []).filter(s => !s.ok).map(s =>
+    `<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
+      <span style="color:var(--bear); font-weight:700; flex:0 0 14px;">✕</span>
+      <span style="flex:1;"><span style="font-size:13px; font-weight:600;">${escapeHtml(FULL_TEST_PLAIN[s.name] || s.name)}</span>
+      <span style="display:block; font-size:12px; color:var(--text-dim); margin-top:2px;">${escapeHtml(s.summary||'')}</span></span></div>`).join('');
+
+  body.innerHTML =
+    `<div style="font-size:13.5px; font-weight:600; color:${allRight?'var(--bull)':'var(--gold)'};">${escapeHtml(heading)}</div>` +
+    `<div style="font-size:11.5px; color:var(--text-dim); margin:4px 0 10px;">Tested on your ${escapeHtml(about.ticker||'')} ${escapeHtml(about.dir||'')} from ${escapeHtml(about.entryDate||'')} at ${escapeHtml(about.entryTime||'')}. Your journal is unchanged.</div>` +
+    (steps ? `<div style="margin-bottom:8px;">${steps}</div>` : '') +
+    rows +
+    `<button class="secondary" onclick="clearReplay()" style="margin-top:12px;">Clear this test</button>`;
+}
+
 // ---- The full rehearsal ----------------------------------------------
 // A made-up trade pushed through everything the app does to a real one.
 // Kept in its OWN place in storage, never in the journal: it is not
@@ -4159,6 +4374,7 @@ async function renderChecklist(){
   // about it. A diagnostic that lies is worse than none.
   await renderAppStatus();
   renderTestShots();
+  renderReplay();
   renderFullTest();
   const box = document.getElementById('checklistBody');
   if(!box) return;

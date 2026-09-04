@@ -24,6 +24,46 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+65. **Replay one of his own real trades, blind** (his correction and his
+    decision, 2026-09-04: pick one at random).
+    **Status: BUILT AND TESTED (37 server checks, 31 app checks). Not run
+    against his real journal or the live services.**
+
+    Task 64 was built backwards and he said so: making the journal find a
+    setup and then asking it what the setup was is marking its own
+    homework. Going back over it found two concrete faults -- the trade
+    DIRECTION was derived from the found setup and then handed to the AI
+    in its prompt, and the finder read 5-minute bars while the AI reads
+    fifteen one-minute candles, so it could grade the AI against a chart
+    it never saw.
+
+    What he actually wanted: a trade that arrives exactly as if he had
+    placed it at Schwab, with the journal working everything else out
+    blind, and every answer marked.
+
+    One of his own trades is picked AT RANDOM and stripped back to the
+    bare facts Schwab provides -- contract, the two instants, the two
+    fill prices, size, cash. The server rebuilds Schwab-shaped
+    transactions and runs the REAL extraction, matcher and enrichment.
+    The app marks the answers, because the app is where the answers live.
+
+    Running the real extraction is what makes the dates/times and the
+    fees genuinely testable: the Eastern times are re-derived from the raw
+    instant (checked summer, winter, and a late trade that must not roll
+    onto the next day), and the fee is worked back OUT of the cash rather
+    than sent in.
+
+    **The setup is only marked against one HE tagged.** The AI writes a
+    confidence alongside its own guesses; a setup he picked by hand has
+    none, so the two are distinguishable. Marking the AI against its own
+    earlier answer would prove nothing, and the card says so plainly when
+    that is the case.
+
+    **Still cannot be tested this way:** the chart picture and the video.
+    They capture a live screen at the moment of the fill, and a trade from
+    July cannot be photographed now. Those stay the separate live
+    rehearsal.
+
 64. **The rehearsal must always land on a REAL setup** (his own fix,
     2026-09-02: "wherever the journal gets this test trade from, it needs
     to always present a setup (not a made-up setup)").
