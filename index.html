@@ -3962,11 +3962,40 @@ function toggleMadeUp(open){
 // A trade can only be replayed if it carries everything Schwab originally
 // gave. Anything typed in by hand, or imported before those facts were
 // kept, cannot be put back through the machine.
+// Eastern wall-clock back to a real instant, the reverse of what the
+// journal did when it stored the trade. Done in two passes because the
+// offset itself depends on the date -- a single fixed offset would put
+// every winter trade an hour out.
+function instantFromEastern(dateStr, timeStr){
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr||''));
+  const t = /^(\d{1,2}):(\d{2})$/.exec(String(timeStr||''));
+  if(!d || !t) return null;
+  const naive = Date.UTC(+d[1], +d[2]-1, +d[3], +t[1], +t[2], 0);
+  const tz = new Intl.DateTimeFormat('en-US', { timeZone:'America/New_York', timeZoneName:'shortOffset' })
+    .formatToParts(new Date(naive)).find(p => p.type === 'timeZoneName');
+  const m = /GMT([+-]\d{1,2})(?::(\d{2}))?/.exec(tz ? tz.value : '');
+  const offsetMin = m ? (Number(m[1]) * 60 + (m[1].startsWith('-') ? -1 : 1) * Number(m[2] || 0)) : -300;
+  return naive - offsetMin * 60 * 1000;
+}
+
+// The instants a replay needs. Trades imported before those were kept
+// have only the Eastern date and time, so they are converted back --
+// which still lets every trade already on file be tested.
+function replayInstants(t){
+  if(!t) return null;
+  const entry = t.entryTimestamp != null ? t.entryTimestamp : instantFromEastern(t.entryDate, t.entryTime);
+  const exit  = t.exitTimestamp  != null ? t.exitTimestamp  : instantFromEastern(t.exitDate, t.exitTime);
+  if(entry == null || exit == null || !Number.isFinite(entry) || !Number.isFinite(exit)) return null;
+  // Whether the instants are Schwab's own or worked back from the stored
+  // date and time changes how honestly the date rows can be marked.
+  return { entry, exit, exact: t.entryTimestamp != null && t.exitTimestamp != null };
+}
+
 function replayable(t){
-  return t && t.source === 'schwab-auto'
+  return !!(t && t.source === 'schwab-auto'
     && t.optExit != null && t.optEntry != null
     && t.occ && t.contracts
-    && t.entryTimestamp != null && t.exitTimestamp != null;
+    && replayInstants(t));
 }
 
 // Only a setup HE chose is an answer key. The AI writes a confidence
@@ -3996,6 +4025,7 @@ async function runReplayTest(){
     toggleMadeUp(true);
     return;
   }
+  const moments = replayInstants(trade);
   if(btn){ btn.disabled = true; btn.textContent = 'Testing…'; }
   body.innerHTML = '<div class="empty">Putting one of your trades back through the app from scratch. This takes up to a minute.</div>';
 
@@ -4004,7 +4034,7 @@ async function runReplayTest(){
     occ: trade.occ, ticker: trade.ticker,
     putCall: String(trade.dir).toLowerCase() === 'short' ? 'PUT' : 'CALL',
     contracts: trade.contracts,
-    entryTimestamp: trade.entryTimestamp, exitTimestamp: trade.exitTimestamp,
+    entryTimestamp: moments.entry, exitTimestamp: moments.exit,
     entryPrice: trade.optEntry, exitPrice: trade.optExit,
     entryFees: trade.entryFees != null ? trade.entryFees : null,
     exitFees: trade.exitFees != null ? trade.exitFees : null,
@@ -4023,7 +4053,7 @@ async function runReplayTest(){
       if(btn){ btn.disabled = false; btn.textContent = 'Test One of My Trades'; }
       return;
     }
-    result.marks = markReplay(trade, result.trade);
+    result.marks = markReplay(trade, result.trade, moments.exact);
     result.about = {
       ticker: trade.ticker, dir: trade.dir,
       entryDate: trade.entryDate, entryTime: trade.entryTime,
@@ -4041,17 +4071,22 @@ async function runReplayTest(){
 
 // The marking. Each row is one thing the app had to work out, what it
 // should have been, and what it actually came back with.
-function markReplay(saved, got){
+function markReplay(saved, got, exactMoments){
   const rows = [];
   const add = (label, expected, actual, ok, note) => rows.push({ label, expected, actual, ok, note: note || null });
   const money = v => v == null ? '—' : (v >= 0 ? '$' : '-$') + Math.abs(v).toFixed(2);
   const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= tol;
 
   if(!got){ return rows; }
-  add('Entry date', saved.entryDate, got.entryDate, saved.entryDate === got.entryDate);
-  add('Entry time', saved.entryTime, got.entryTime, saved.entryTime === got.entryTime);
-  add('Exit date', saved.exitDate, got.exitDate, saved.exitDate === got.exitDate);
-  add('Exit time', saved.exitTime, got.exitTime, saved.exitTime === got.exitTime);
+  // On a trade imported before Schwab's raw instants were kept, the
+  // moment had to be worked back from the stored date and time -- so
+  // these four rows check the two conversions agree, rather than checking
+  // against something independent. Said plainly rather than implied.
+  const dateNote = exactMoments ? null : 'checked for consistency — this trade predates the exact moment being kept';
+  add('Entry date', saved.entryDate, got.entryDate, saved.entryDate === got.entryDate, dateNote);
+  add('Entry time', saved.entryTime, got.entryTime, saved.entryTime === got.entryTime, dateNote);
+  add('Exit date', saved.exitDate, got.exitDate, saved.exitDate === got.exitDate, dateNote);
+  add('Exit time', saved.exitTime, got.exitTime, saved.exitTime === got.exitTime, dateNote);
   add('Direction', saved.dir, got.dir, saved.dir === got.dir);
   add('Contracts', saved.contracts, got.contracts, Number(saved.contracts) === Number(got.contracts));
   add('Price paid', money(saved.optEntry), money(got.optEntry), near(saved.optEntry, got.optEntry, 0.001));
@@ -5897,6 +5932,11 @@ async function autoImportPendingTrades(url, pending){
       entryDate: t.entryDate, entryTime: t.entryTime,
       exitDate: t.exitDate, exitTime: t.exitTime,
       occ: t.occ || '',
+      // The raw instants Schwab gave, kept so a trade can be put back
+      // through the machine later exactly as it first arrived. These were
+      // never stored before, which left every trade on file unable to be
+      // replayed.
+      entryTimestamp: t.entryTimestamp ?? null, exitTimestamp: t.exitTimestamp ?? null,
       optEntry: t.optEntry ?? 0, optExit: hasExit ? t.optExit : null, contracts: t.contracts||1,
       undEntry: t.undEntry ?? null, undExit: t.undExit ?? null,
       stop: null, rrPlanned: null, // requires the trader's own risk plan — not derivable from Schwab data
