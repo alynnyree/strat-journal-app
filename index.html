@@ -5241,6 +5241,13 @@ async function refreshAlpacaState(){
     const st = await r.json();
     out.innerHTML = st.connected
       ? `<span style="color:var(--bull);">Alpaca is connected${st.keyEnding ? ` (key ending ${escapeHtml(st.keyEnding)})` : ''} — stock prices come from the real market.</span>`
+        // Which feed it actually turned out to have. A key on the free
+        // plan cannot use the full market feed, and that refusal used to
+        // be silent -- so this said "connected" while every request for
+        // candles was being turned away.
+        + (st.downgraded
+            ? `<div style="color:var(--gold); margin-top:4px;">Your Alpaca plan covers fewer exchanges than the full one. Prices and chart data still work — they just come from part of the market rather than all of it.</div>`
+            : '')
       : '<span style="color:var(--text-dim);">Alpaca is not connected. Stock prices on your trades are estimates until it is.</span>';
   }catch(e){ /* the app works perfectly well without this */ }
 }
