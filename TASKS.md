@@ -24,6 +24,47 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+70. **The server's data allowance, and what was eating it** (found
+    2026-09-05 from his Render warning email at 70% of 5GB). **Status:
+    FIXED AND TESTED (10 checks, measured before and after). Not confirmed
+    against his live usage, which I cannot see.**
+
+    Every thirty seconds the app is open it asks the server for trades
+    waiting to be imported, and that answer carries every one of them
+    WITH its chart bars. Measured: 8KB a trade, 161KB for twenty, 2.5MB
+    for three hundred.
+
+    That is fine if the queue empties. It did not always. Three ways out
+    of the import loop and only two of them told the server "I have taken
+    this":
+    - a trade already in his journal (what a delete that failed to land
+      leaves behind -- the comment in the code named that exact case and
+      then did nothing about it)
+    - a duplicate of a trade already claimed earlier in the same batch
+
+    Both just moved on, so those trades sat in the queue and were re-sent
+    on every check from then on. Measured at 160KB a poll for twenty stuck
+    trades -- about 19MB an hour with the app open, for ever.
+
+    A second, smaller one: two checks overlapping both downloaded the
+    whole queue, because the first one's deletes had not landed when the
+    second asked. Measured as a full extra 153KB payload on every reopen.
+
+    Fixed: every exit from the loop clears the server's copy, and a check
+    refuses to start while one is already running. Measured after: the
+    queue is carried once and then costs nothing (161KB, 0, 0, 0) in all
+    three cases, including twenty copies of the same trade.
+
+    **What I could not determine:** how much of his 3.5GB this actually
+    accounts for. I cannot see his usage. What is certain is that the leak
+    was real, unbounded, and is now closed.
+
+    **If the allowance does run out** the server stops answering, which
+    means trades stop importing on their own. The free tier resets
+    monthly. Adding a card keeps the free tier and charges only for
+    overage ($15 per 100GB); nothing needs deciding until we see whether
+    usage flattens now.
+
 69. **Bar Replay had never worked on Alpaca data, and the reason was a
     shape, not a feed** (found 2026-09-05 from his fourth replay run).
     **Status: FIXED AND TESTED (28 new server checks, 10 new app checks,

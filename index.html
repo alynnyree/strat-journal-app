@@ -5863,9 +5863,27 @@ function setConnState(connected, text){
 // "no new trades" while quietly doing the entire job.
 let pollTally = { imported: 0, refreshed: 0, seen: new Set() };
 
+// True while a check is actually in flight. Two checks overlapping both
+// download the WHOLE queue of trades waiting to be imported -- chart bars
+// and all -- because the first one's "I have taken this" messages have not
+// landed yet when the second one asks. That is the same waste as a trade
+// stuck in the queue, just briefly, and it happens every time the app is
+// reopened while one is already running.
+let pollInFlight = false;
+
 async function pollBackend(silent=false){
   const url = backendUrl();
   if(!url){ if(!silent) showStatus('err', 'No backend connected yet — enter a URL and tap Connect first.'); return; }
+  if(pollInFlight) return;
+  pollInFlight = true;
+  try{
+    return await pollBackendOnce(url, silent);
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+async function pollBackendOnce(url, silent){
   if(!silent){ setBusy('btnRefresh', true); showStatus('info', 'Checking for new trades...'); }
   try{
     const r = await fetch(url+'/api/trades/pending');
@@ -5943,14 +5961,33 @@ async function autoImportPendingTrades(url, pending){
   let imported = 0;
   let refreshed = 0;
   for(const t of pending){
-    if(existingIds.has(t.id)) continue; // already imported (e.g. a prior delete-from-pending failed silently)
+    if(existingIds.has(t.id)){
+      // Already in his journal. This used to just move on -- which left
+      // the trade sitting in the server's queue for ever, and that queue
+      // is re-sent IN FULL, chart bars and all, every thirty seconds the
+      // app is open. Twenty stuck trades measured at 160KB a poll, about
+      // 19MB an hour, for ever. The comment here even named the cause (a
+      // delete that did not land) and then did nothing about it.
+      //
+      // Every way out of this loop now clears the server's copy, because
+      // the trade is accounted for however it got here.
+      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+      continue;
+    }
     const print = tradeFingerprint(t);
     // has(), not the value — a trade claimed earlier in THIS batch is
     // stored as null, and testing truthiness let it through and imported
     // it a second time.
     if(byPrint.has(print)){
       const already = byPrint.get(print);
-      if(!already) continue;   // already taken by this same batch
+      if(!already){
+        // A second copy of a trade already claimed earlier in this same
+        // batch. Skipping it was right; leaving it in the server's queue
+        // was not -- it would be re-sent, chart bars and all, on every
+        // check from then on.
+        try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+        continue;
+      }
       // Same trade, arriving again. This is what "Reset & Re-import"
       // produces, and the whole point of pressing it is that the rebuilt
       // copy knows things the saved one does not — the fees Schwab
