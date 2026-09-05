@@ -566,6 +566,18 @@ Uses **The Strat**. Key concepts the code implements:
   back to the one the key HAS, remember which, and report the downgrade on
   screen. Two settings that contradict each other in one file mean one of
   them has never been exercised.
+- **Remembering which option worked must not delete the others.** The
+  fallback above remembered the feed that succeeded — as
+  `feedInUse ? [feedInUse] : ['sip', 'iex']`, so once learned it was the
+  only one ever tried again and the fallback existed exactly once. His
+  key IS allowed the paid feed for TRADES, so the underlying price
+  arrived "from Alpaca, exact" and wrote 'sip' down as the answer; CANDLES
+  are refused it, and every bars request afterwards had nothing left to
+  try. Everything on the card was right and Bar Replay was empty. A cache
+  of "the answer" is only safe when every caller asks the same question —
+  two different data sets shared one memory and the first to succeed spoke
+  for both. The learned answer goes FIRST, the rest stay behind it, and a
+  refusal corrects it downward.
 - **"Silently falls back" is the same as "quietly wrong".** Nothing was
   logged, nothing was flagged, every trade got a price, and the only
   visible sign was one small word — "approx." — that he had to notice
