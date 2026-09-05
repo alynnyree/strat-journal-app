@@ -24,6 +24,60 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+69. **Bar Replay had never worked on Alpaca data, and the reason was a
+    shape, not a feed** (found 2026-09-05 from his fourth replay run).
+    **Status: FIXED AND TESTED (28 new server checks, 10 new app checks,
+    every existing suite re-run green). Not confirmed on his phone.**
+
+    His run scored 15 of 15 with Bar Replay the only cross, saying:
+    "Alpaca does have 36 bars for those minutes, so the fault is in how
+    the replay asks for them." That message was exactly right and my two
+    previous diagnoses (tasks 67 and 68, both real bugs) were both aimed
+    at the wrong thing.
+
+    The replay builder had two ways out. When Schwab answered it returned
+    a labelled package -- the bars, plus which bar the entry sits on and
+    which the exit does. When Alpaca answered it returned a BARE LIST of
+    bars. Everything that reads it asks for the candles inside the
+    package. A bare list has none. Proven by running the real code down
+    both paths: 36 bars in, and what the caller reads is zero.
+
+    **This is bigger than the replay chart.** The setup reading takes the
+    last fifteen candles off that same package, so every Alpaca-served
+    trade was read by the AI **with no chart at all** -- its combo and
+    play answers on those trades were made blind. And the app's own
+    "is this trade finished?" count scored the bare list as present, so
+    nothing ever came back to fix them; he would have had to press a
+    button he was never told about.
+
+    Fixed so every path returns one shape. An empty answer is no longer a
+    bare nothing either: it carries the reason, in plain words, saying
+    which part was asked and what it said -- Alpaca refusing, Alpaca
+    having nothing, Schwab refusing and Schwab having nothing are now four
+    different answers rather than one silence. The app shows that reason
+    instead of guessing at a cause, and a trade still holding the old
+    unreadable shape marks itself as needing measuring again, so it heals
+    without him doing anything.
+
+    A sweep of every backend file for the same fault -- a function whose
+    different exits hand back different shapes -- found no others where a
+    caller could receive something truthy that lacks the key it reads.
+
+    **Two rules came out of it,** both now in CLAUDE.md: a function with
+    more than one way out returns the same shape from all of them, judged
+    by what the CALLER receives; and a test must store and read things the
+    way the real code does. `rebuild-memory.js` wrapped the answer itself,
+    exactly as the real caller failed to, so it passed for the whole time
+    the feature was broken and only failed once the bug was fixed.
+
+    **And the working rule he asked for.** In his words: *"Everytime we
+    have an error it takes Claude code maybe the 2nd or 3rd time to code
+    it whereas when the error comes back it'll let you know exactly which
+    part was the error... Why don't you write that in code to begin
+    with?"* He is right, and this is the proof: three rounds, two wrong
+    causes, and the thing that settled it was the one message that named
+    which part came up empty. Now working rule 7 in CLAUDE.md.
+
 68. **The fallback was thrown away the moment one answer worked**
     (found 2026-09-05 from his own screenshot). **Status: FIXED AND
     TESTED (24 checks in `tests/alpaca-feed.js`, including a direct
