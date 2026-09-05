@@ -24,6 +24,39 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+68. **The fallback was thrown away the moment one answer worked**
+    (found 2026-09-05 from his own screenshot). **Status: FIXED AND
+    TESTED (24 checks in `tests/alpaca-feed.js`, including a direct
+    replay of his exact sequence). Not confirmed against his live key.**
+
+    Task 67 taught Alpaca to ask for the better market feed and fall back
+    to the free one. It then REMEMBERED which worked -- and the memory
+    was written as `feedInUse ? [feedInUse] : ['sip','iex']`, so once a
+    feed was learned it became the only one ever tried again. The
+    fallback existed exactly once.
+
+    That is precisely what his last run showed. The stock price comes
+    from Alpaca's TRADES data, which his key IS allowed on the better
+    feed -- so the price arrived marked "from Alpaca, exact" and the
+    better feed was written down as the answer. Chart bars come from a
+    different data set his key is NOT allowed on the better feed, and
+    every request for them was then refused with nothing left to try.
+    Result: everything else on the card correct, Bar Replay empty.
+
+    Proven, not inferred. The diagnostic added in task 66 reported
+    "Alpaca does have 108 bars for those minutes, so the fault is in how
+    the replay asks for them", and running the real replay code against
+    a stand-in Alpaca returned all 108 -- which ruled out the replay
+    itself and left only the request.
+
+    Now the learned feed is tried FIRST and the others stay behind it as
+    fallbacks, and a refusal corrects the remembered answer downward.
+
+    **The rule: remembering which option worked must never delete the
+    others.** A cache of "the answer" is only safe when every caller asks
+    the same question -- here two different data sets shared one memory,
+    and the first one to succeed silently spoke for both.
+
 67. **Alpaca said connected and delivered nothing** (found 2026-09-04
     from his own screenshot). **Status: FIXED AND TESTED (18 new checks).
     Not confirmed against his live key.**
