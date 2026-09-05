@@ -628,6 +628,25 @@ Uses **The Strat**. Key concepts the code implements:
   the real caller never did. It passed happily for the entire time the
   feature was broken, and only started failing once the bug was FIXED.
   A test must store, read, and pass things the way the real code does.
+- **A queue is only emptied by the path that succeeds.** Every thirty
+  seconds the app asks the server for trades waiting to be imported, and
+  that answer carries every one of them WITH its chart bars — measured at
+  8KB a trade, 161KB for twenty, 2.5MB for three hundred. Three ways out
+  of the import loop, and only two of them told the server "I have taken
+  this". A trade already in his journal (a delete that did not land, the
+  comment even named the case) and a duplicate inside the same batch both
+  just moved on — so they were re-sent on every check, for ever. Measured:
+  twenty stuck trades cost 160KB a poll, about 19MB an hour with the app
+  open, and Render's free allowance is 5GB. His warning email at 70% is
+  what surfaced it. **Every exit from a loop that consumes a queue must
+  clear its item**, and the way to test it is to poll repeatedly and check
+  the cost does not keep coming back — not to check one poll works.
+- **Two checks running at once both download everything.** `pollBackend`
+  had no in-flight guard, so a check starting while another was still
+  handing back its trades asked for the whole queue again — the first
+  one's deletes had not landed yet. Measured as a second full 153KB
+  payload on every reopen. Anything that drains a shared queue needs to
+  refuse to start twice.
 - **"Silently falls back" is the same as "quietly wrong".** Nothing was
   logged, nothing was flagged, every trade got a price, and the only
   visible sign was one small word — "approx." — that he had to notice
