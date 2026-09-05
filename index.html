@@ -1992,7 +1992,12 @@ function resizeReplayChartToContainer(){
 }
 function openReplay(trade){
   if(!trade.replayData || !trade.replayData.candles || !trade.replayData.candles.length){
-    alert('No replay data available for this trade — either it was tagged before this feature was added, or the trade is too old for Schwab\'s minute-data history.');
+    // The reason travels with the trade now. Offering him a choice of two
+    // possible causes told him nothing and was usually wrong once Alpaca
+    // was connected.
+    alert(Array.isArray(trade.replayData)
+      ? 'This trade\'s bars were saved in a form the chart cannot read. The app has asked for them again — check back in a few minutes.'
+      : ('No bar replay for this trade. ' + (trade.replayNote || 'Nothing said why, which is itself worth telling me about.')));
     return;
   }
   replayRaw = trade.replayData;
@@ -3443,7 +3448,7 @@ function renderJournal(){
       </div>
       ${(t.notes||'').trim() ? `<div class="tc-notes clamped" onclick="toggleTradeNotes(this)"><span class="tc-notes-label">Notes</span><div class="tc-notes-body">${escapeHtml(t.notes.trim())}</div></div>` : ''}
       <div class="tc-actions">
-        ${t.replayData ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
+        ${((t.replayData && t.replayData.candles) || []).length ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
         <button onclick="editTrade('${t.id}')">✎ Edit</button>
         <button class="tc-del" onclick="deleteTrade('${t.id}')">🗑 Delete</button>
       </div>
@@ -5577,6 +5582,15 @@ function tradeIsStale(t){
   // each reading with the rule that produced it, so a trade measured the
   // old way asks to be measured again — once.
   if(t.ftfcRun != null && Number(t.ftfcVersion || 1) < FTFC_RULE_VERSION) return true;
+  // A replay saved as a bare list of bars rather than the labelled
+  // package everything reads. For as long as Alpaca has been connected
+  // its bars arrived in that shape, so every reader asked for the
+  // candles inside and found nothing -- a Replay button that opened on
+  // an empty chart, and a setup read with no chart at all. Those trades
+  // are not short of DATA, they are holding it in a shape nothing can
+  // read, so they ask to be measured again rather than waiting for him
+  // to press something.
+  if(Array.isArray(t.replayData)) return true;
   return false;
 }
 
@@ -6153,10 +6167,13 @@ async function autoFillEnrichment(){
     if(data.undEntry!=null) document.getElementById('f_undEntry').value = data.undEntry;
     if(data.undExit!=null) document.getElementById('f_undExit').value = data.undExit;
     currentReplayData = data.replayData || null;
+    // The reason comes back WITH the answer now. Saying "this date is
+    // likely outside Schwab's window" was a guess, and once Alpaca was
+    // connected it was usually the wrong one.
     showNewTradeStatus(currentReplayData ? 'ok' : 'info',
       currentReplayData
-        ? `Underlying price and replay data filled in for ${ticker}.`
-        : `Underlying price filled in — no replay data available (this date is likely outside Schwab's ~30-35 day minute-data window).`);
+        ? `Stock price and bar replay filled in for ${ticker}.`
+        : `Stock price filled in. No bar replay: ${data.replayNote || 'nothing said why.'}`);
   }catch(e){
     showNewTradeStatus('err', `Auto-fill failed (${e.message}).`);
   }

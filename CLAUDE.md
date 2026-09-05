@@ -53,6 +53,34 @@ not a fix.
    and anything he needs to click, tap, or check — but the rest of the
    response should already meet the same bar, not require translating.
 
+7. **Write the diagnosis in at the start, not after it has cost a round.**
+   He asked this directly (2026-09-05): *"Everytime we have an error it
+   takes Claude code maybe the 2nd or 3rd time to code it whereas when the
+   error comes back it'll let you know exactly which part was the error...
+   Why don't you write that in code to begin with?"* He is right, and the
+   evidence is on this project's own record. Bar Replay came back empty
+   three times. Round one I blamed the paid market feed — wrong. Round two
+   I blamed the remembered feed having no fallback — also wrong, though
+   both were real bugs. Only after I added something that reported which
+   part came up empty did the actual cause appear in one run.
+
+   So: a failure names the part that refused **where the failure happens**,
+   at the time that code is written. Not "it did not work" — which part was
+   asked, what it said, and how that differs from the next possibility
+   along. Specifically:
+   - An empty or failed answer carries its own reason, in plain words,
+     back to whoever will display it. Never a bare `null`.
+   - The one showing it never invents a cause. If no reason came back,
+     it says so — silence is itself the fault worth reporting.
+   - A reason is not a log line. A server log is not evidence he or I
+     will ever see.
+   - "Could not reach it", "it answered with nothing", and "it refused
+     me" are three different faults with three different fixes, and must
+     never share one answer.
+
+   The cost of skipping this is not a tidier codebase — it is him running
+   the same test three times and me guessing three times.
+
 ## Architecture
 
 **Frontend** — repo `alynnyree/strat-journal-app`, hosted on GitHub Pages at
@@ -578,6 +606,28 @@ Uses **The Strat**. Key concepts the code implements:
   two different data sets shared one memory and the first to succeed spoke
   for both. The learned answer goes FIRST, the rest stay behind it, and a
   refusal corrects it downward.
+- **One function, two shapes, and the caller reads the wrong one.**
+  `getReplayCandles` returned a labelled package — `{candles, entryIndex,
+  exitIndex}` — when Schwab answered, and a BARE LIST of bars when Alpaca
+  did. Every reader in both halves asks for `.candles`, and a bare list
+  has none. So Bar Replay had never once worked on Alpaca data: 36 good
+  bars arrived and were read as zero. Worse, `aiClient` takes the last
+  fifteen candles to read the setup — so every Alpaca-served trade was
+  classified with NO CHART AT ALL, and the app's own completeness count
+  scored the bare list as present, so nothing ever came back to fix them.
+  Two rounds were spent blaming the market feed first. **A function with
+  more than one way out returns the same shape from all of them**, and the
+  check is what the CALLER receives, not what the function hands back.
+  A sweep of every backend file for two-shape returns found this was the
+  only one where a truthy answer lacked the key its caller reads —
+  `stopFromBars` and `checkSignInAndNotify` both keep the key present and
+  attach a reason, which is the pattern to copy.
+- **A test that stands in for the caller cannot catch a fault in what the
+  caller receives.** `rebuild-memory.js` stored the replay as
+  `{ candles: await getReplayCandles(...) }` — wrapping it itself, which
+  the real caller never did. It passed happily for the entire time the
+  feature was broken, and only started failing once the bug was FIXED.
+  A test must store, read, and pass things the way the real code does.
 - **"Silently falls back" is the same as "quietly wrong".** Nothing was
   logged, nothing was flagged, every trade got a price, and the only
   visible sign was one small word — "approx." — that he had to notice
