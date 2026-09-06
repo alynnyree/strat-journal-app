@@ -24,6 +24,53 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+72. **"How do we double check our work?"** (his own question,
+    2026-09-06: *"Everytime we update the app the p&l changes. How do we
+    double check our work to be sure that all of our numbers for the
+    journal entries and input are accurate?"*). **Status: BUILT AND
+    VERIFIED AGAINST BOTH HIS REAL SCHWAB EXPORTS (31 checks on the
+    comparison, 15 driving it through the real screen). Not yet run by him
+    on his own journal.**
+
+    Every figure in the journal is worked out by this app, so the app
+    checking itself proves nothing. The one number in this whole project
+    that the code had no hand in is the file Schwab hands him. So the
+    Checks page now has **"Check My Numbers Against Schwab"**: he picks
+    that file, it is read in the browser (nothing is uploaded, nothing
+    leaves the phone), and the journal is marked against it.
+
+    It compares money after fees, money before fees, fees, and the number
+    of contracts -- and then goes contract by contract and day by day,
+    because two errors that cancel out leave the total looking almost
+    right. That is not hypothetical: duplicated wins and duplicated losses
+    once left his P&L within $15 of the truth while the win rate and the
+    per-setup breakdown were badly wrong.
+
+    **Marked against his real files.** Both exports read exactly: 480
+    fills, **-$1,100.73** after fees, **$404.73** of fees, **306
+    contracts**, 2 January to 23 July -- and a journal built by pairing
+    his own fills matches all of it to the cent. Deliberate faults are all
+    caught: a duplicated trade, a missing trade, a trade his broker has no
+    record of, a wrong figure where the contracts still agree, and a fee
+    not worked out yet (reported as unknown, never as zero). Trades
+    outside the file's dates are set aside and said to be set aside, not
+    marked wrong. A file that is not an export is refused with the reason.
+
+    Cannot check entry and exit TIMES -- the export carries none. Said on
+    screen rather than left for him to assume.
+
+    **And the answer to his actual question.** The P&L moves for a
+    legitimate reason and a gap:
+    - Fees arriving late. A trade imported before the server could work
+      the fee out has none; when a rebuild fills it in, the after-fee
+      total moves. The number is becoming more correct, not drifting.
+    - The gap: `refreshTradeFacts` updates the fee and recomputes the
+      after-fee figure from the SAVED gross -- it never re-checks
+      `optEntry`, `optExit`, `contracts` or `pnlDollar`. A price wrong at
+      first import stays wrong for ever. **Not changed yet**: fixing it
+      rewrites money figures in his journal, and the new check will show
+      whether it actually matters on his data first.
+
 71. **Three cards asking one question** (his own words, 2026-09-06:
     "play performance and Does alignment pay are basically the same
     question just expressed differently. Combine them."). **Status: DONE

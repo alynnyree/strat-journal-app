@@ -647,6 +647,40 @@ Uses **The Strat**. Key concepts the code implements:
   one's deletes had not landed yet. Measured as a second full 153KB
   payload on every reopen. Anything that drains a shared queue needs to
   refuse to start twice.
+- **The app cannot audit its own arithmetic.** He asked how to be sure
+  the journal's numbers are right, and every answer that came to mind was
+  the app checking itself — which proves nothing when the app is what is
+  in doubt. His Schwab CSV export is the one figure in this project that
+  the code had no hand in, and the Checks page now reads it in the browser
+  and marks the journal against it: money after fees, before fees, fees,
+  and the contract count, plus contract-by-contract and day-by-day.
+  Verified against BOTH his real exports — 480 fills, −$1,100.73 net,
+  $404.73 fees, 306 contracts, matching to the cent. **Compare the
+  CONTRACTS as well as the money**: duplicated wins and duplicated losses
+  once cancelled out to within $15 of the truth while the win rate and the
+  per-setup breakdown were badly wrong.
+- **A fixture that splits a fill's fee per contract drifts.** Building the
+  expected journal from his own fills, `fee / qty` rounded per contract
+  came out 40 cents high across 480 fills. Fees are attached to a FILL,
+  not to a contract; hand the whole fee to one trade. The real app keeps
+  trades whole so it never hit this, but any future code that splits a
+  fill must.
+- **A rebuild fills in fees but never re-checks the prices.**
+  `refreshTradeFacts` updates `fees` and recomputes `pnlNet` from the
+  SAVED `pnlDollar` — it never touches `optEntry`, `optExit`, `contracts`
+  or `pnlDollar`. So a price wrong at first import stays wrong for ever,
+  and the after-fee figure is rebuilt on top of it. This is also the
+  honest answer to "why does the P&L change every time?": a fee arriving
+  late legitimately moves the after-fee total. Not yet changed — it would
+  rewrite money figures in his journal, which is his call.
+- **A banned word is a banned WORD.** The Checks page test matched
+  `/MB/i`, which fires inside "Numbers", and `/error/i` inside "errors".
+  A unit or a jargon term is banned as a token, not as a run of letters;
+  match with boundaries or the test blocks ordinary English.
+- **One malformed trade must not cost him the other three hundred.**
+  `t.dir.toLowerCase()` threw while drawing the Journal list for a trade
+  with no direction, which takes the whole list down. This app has already
+  shown him a blank Journal holding 233 trades once. Guarded.
 - **"Silently falls back" is the same as "quietly wrong".** Nothing was
   logged, nothing was flagged, every trade got a price, and the only
   visible sign was one small word — "approx." — that he had to notice
