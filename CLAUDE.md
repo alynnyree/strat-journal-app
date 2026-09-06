@@ -681,6 +681,38 @@ Uses **The Strat**. Key concepts the code implements:
   `t.dir.toLowerCase()` threw while drawing the Journal list for a trade
   with no direction, which takes the whole list down. This app has already
   shown him a blank Journal holding 233 trades once. Guarded.
+- **Money is settled ONCE, at import, and never changed again**
+  (his instruction, 2026-09-06: *"The trades should not be constantly
+  updating... It should import one time accurately and one time only."*).
+  Both prices, the size, the fee and the profit all come straight out of
+  Schwab's own fills the moment the trade is paired — nothing arriving
+  later is a better source, so a second opinion is not an improvement,
+  it is a DISAGREEMENT. `refreshTradeFacts` used to overwrite the fee and
+  recompute the after-fee figure on every pass, which is precisely why his
+  totals moved whenever anything ran. Now: an UNKNOWN figure may be filled
+  in once; a known one is never touched; a disagreement is recorded in
+  `moneyDisagreement` and shown on the Checks page. Silently rewriting his
+  history is how he ended up unable to trust the numbers at all.
+- **A trade gets ONE catch-up pass and is then finished for good.** Every
+  time the server learned something new, every old trade was put back in
+  the queue — the constant updating he reported. `tradeIsStale` now
+  returns false once `settled` is set, which `refreshTradeFacts` sets
+  after its one pass. Money is never a reason to queue a rebuild.
+- **A fee belongs to a FILL, not to a contract.** Splitting one across
+  several closes as a rounded proportion does not add back up: $1.00 over
+  three contracts closed one at a time paid out 33+33+33 = 99 cents, and
+  $2.00 as 67+67+67 = $2.01. Drawn down in whole cents now, with the last
+  piece taking the exact remainder. The same trap caught my own test
+  fixture 40 cents high across his 480 fills before it was found here.
+- **The import is now marked against his broker end to end.**
+  `tests/import-exact.js` pushes both of his real exports through the REAL
+  matcher, in the batches a live sync uses, and compares fees, profit
+  before fees, profit after fees and the contract count against what
+  Schwab charged and paid — $404.73 / −$1,100.73 / 306 and $334.73 /
+  −$1,603.73 / 253, all to the penny. Which buy meets which sell can
+  differ without changing a single total, so pairing is not what this
+  proves; it proves nothing is lost, invented or rounded away between a
+  fill and a trade. Any future change to the money path must keep it green.
 - **"Silently falls back" is the same as "quietly wrong".** Nothing was
   logged, nothing was flagged, every trade got a price, and the only
   visible sign was one small word — "approx." — that he had to notice
