@@ -1137,6 +1137,28 @@
          It is kept in its OWN place in storage, never in the journal, so
          it is not merely filtered out of his figures: it physically
          cannot reach them. -->
+    <!-- The only check in the app that is marked against something the
+         app had no hand in. Every other figure here is worked out by this
+         code; the file Schwab hands him is the one outside witness, which
+         is why this reads it rather than asking the server to check its
+         own arithmetic. It never leaves the phone -- the file is read in
+         the browser and nothing is sent anywhere. -->
+    <div class="card" id="brokerCheckCard">
+      <h3>Check My Numbers Against Schwab</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
+        Everything in your journal is worked out by this app. The one place
+        a figure exists that this app had nothing to do with is the file
+        Schwab gives you. This puts the two side by side and tells you
+        whether they agree, to the cent and contract by contract.
+        The file stays on your phone.
+      </div>
+      <div style="margin-top:10px; font-size:12px; color:var(--text-dim); line-height:1.55;">
+        In Schwab: <b>History</b>, choose your dates, then <b>Export</b>.
+      </div>
+      <input type="file" id="brokerFile" accept=".csv,text/csv" style="display:none;" onchange="runBrokerCheck(this)">
+      <button class="primary" onclick="document.getElementById('brokerFile').click()" style="margin-top:12px;">Choose the File Schwab Gave Me</button>
+      <div id="brokerBody" style="margin-top:12px;"></div>
+    </div>
     <div class="card" id="fullTestCard">
       <h3>Test a Whole Trade</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
@@ -3163,7 +3185,12 @@ function renderDashboard(){
       <div class="idx-row">
         <div class="n">${String(i+1).padStart(2,'0')}</div>
         <div class="body">
-          <div class="t">${t.ticker} <span class="badge ${t.dir.toLowerCase()}" style="vertical-align:middle;">${t.dir}</span></div>
+          <!-- Guarded: one trade missing its direction used to throw while
+               drawing the list, which takes the WHOLE Journal down with it.
+               This app has already shown him a blank Journal holding 233
+               trades once. A single bad record must never cost him the
+               other 300. -->
+          <div class="t">${t.ticker} <span class="badge ${String(t.dir||'').toLowerCase()}" style="vertical-align:middle;">${escapeHtml(t.dir||'')}</span></div>
           <div class="s">${t.strat || 'Needs setup'}${closedOn(t)}</div>
         </div>
         <div class="v ${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</div>
@@ -3446,7 +3473,7 @@ function renderJournal(){
       <div class="tc-head">
         <div>
           <span class="tc-ticker">${t.ticker}</span>
-          <span class="badge ${t.dir.toLowerCase()}" style="margin-left:6px;">${t.dir}</span>
+          <span class="badge ${String(t.dir||'').toLowerCase()}" style="margin-left:6px;">${escapeHtml(t.dir||'')}</span>
         </div>
         <div><div class="tc-pnl num ${pnlClass}">${pnlKnown ? fmtMoney(shown) : 'Open'}</div>${pnlNote}</div>
       </div>
@@ -3456,7 +3483,7 @@ function renderJournal(){
         ${ftfcBadge}
         ${broadeningBadge}
         ${sourceBadge}
-        <span class="badge ${t.winLoss.toLowerCase()}">${t.winLoss}</span>
+        <span class="badge ${String(t.winLoss||'').toLowerCase()}">${escapeHtml(t.winLoss||'')}</span>
       </div>
       <div class="tc-details">
         <div>Entry: ${t.entryDate||''} ${t.entryTime||''}</div>
@@ -3851,6 +3878,302 @@ async function retryUnclearTrades(){
 // this page. Where a thing cannot be counted (whether a picture looks
 // right on a phone, whether a number matches his broker) it says so
 // rather than claiming a pass.
+// ---- Checking the journal against the broker's own record ------------
+//
+// Every number in the journal is worked out by the app. The one place a
+// figure exists that the app had no hand in is the file Schwab itself
+// hands him. So that file, and only that file, can say whether the
+// journal is right -- which is why this reads it rather than asking the
+// server to check its own work.
+//
+// It cannot check entry and exit TIMES: the export does not carry them.
+// It can check every figure that touches money.
+
+// Schwab writes "$1,234.56", "-$58.66" and sometimes nothing at all.
+function brokerMoney(s){
+  const t = String(s == null ? '' : s).trim().replace(/[$,]/g, '');
+  if(!t) return 0;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// A comma-separated line where any field may itself be quoted and hold
+// commas. Written out rather than split(',') because "PUT SPDR S&P ...500
+// $682 EXP 01/02/26" would otherwise become three fields.
+function splitCsvLine(line){
+  const out = []; let cur = ''; let inQuotes = false;
+  for(let i = 0; i < line.length; i++){
+    const c = line[i];
+    if(inQuotes){
+      if(c === '"' && line[i+1] === '"'){ cur += '"'; i++; }
+      else if(c === '"') inQuotes = false;
+      else cur += c;
+    } else if(c === '"') inQuotes = true;
+    else if(c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+
+// "SPY   260828C00655000" -> "SPY 08/28/2026 655.00 C", which is how the
+// export writes the same contract.
+function occToBrokerSymbol(occ){
+  const s = String(occ || '');
+  const m = s.match(/^([A-Z.]{1,6})\s*(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
+  if(!m) return null;
+  const [, root, yy, mm, dd, cp, strike8] = m;
+  const strike = Number(strike8) / 1000;
+  return `${root} ${mm}/${dd}/20${yy} ${strike.toFixed(2)} ${cp}`;
+}
+
+// "07/23/2026" -> "2026-07-23", so both sides speak one language.
+function brokerDate(d){
+  const m = String(d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[1]}-${m[2]}` : null;
+}
+
+// Reads the export into the fills it actually contains. Anything that is
+// not an option buy or sell -- wires, deposits, service fees -- is not
+// trading and is counted separately rather than silently dropped, so the
+// row count always adds up.
+function readBrokerFile(text){
+  const lines = String(text || '').split(/\r?\n/).filter(l => l.trim());
+  if(!lines.length) return { ok: false, reason: 'That file is empty.' };
+  const header = splitCsvLine(lines[0]).map(h => h.toLowerCase());
+  const need = ['date', 'action', 'symbol', 'quantity', 'price', 'amount'];
+  const missing = need.filter(n => !header.some(h => h === n || h.startsWith(n)));
+  if(missing.length){
+    return { ok: false, reason: `That does not look like a Schwab export — it has no ${missing.join(', ')} column.` };
+  }
+  const col = name => header.findIndex(h => h === name || h.startsWith(name));
+  const iDate = col('date'), iAction = col('action'), iSym = col('symbol'),
+        iQty = col('quantity'), iPrice = col('price'), iFees = col('fees'), iAmt = col('amount');
+
+  const fills = []; let nonTrading = 0; let unreadable = 0;
+  for(let i = 1; i < lines.length; i++){
+    const f = splitCsvLine(lines[i]);
+    const action = (f[iAction] || '').trim();
+    if(action !== 'Buy to Open' && action !== 'Sell to Close'){ nonTrading++; continue; }
+    const date = brokerDate(f[iDate]);
+    const qty = Number(f[iQty]);
+    if(!date || !Number.isFinite(qty) || !qty){ unreadable++; continue; }
+    fills.push({
+      date, action, symbol: (f[iSym] || '').trim(), qty,
+      price: brokerMoney(f[iPrice]),
+      fees: iFees >= 0 ? brokerMoney(f[iFees]) : 0,
+      amount: brokerMoney(f[iAmt]),
+      isBuy: action === 'Buy to Open',
+    });
+  }
+  if(!fills.length){
+    return { ok: false, reason: `That file has no option trades in it — ${nonTrading} other rows, such as transfers and fees.` };
+  }
+  return { ok: true, fills, nonTrading, unreadable };
+}
+
+// ---- The comparison itself -------------------------------------------
+//
+// Two errors that cancel out leave the total looking almost right, which
+// is exactly what happened once before: duplicated wins and duplicated
+// losses left the P&L within $15 of the truth while the win rate and the
+// per-setup breakdown were quietly wrong. So this compares the CONTRACTS,
+// contract by contract and day by day, as well as the money.
+function compareJournalToBroker(trades, fills){
+  const cents = n => Math.round(n * 100) / 100;
+  const buys = fills.filter(f => f.isBuy);
+
+  // What the file covers. A journal trade outside it cannot be checked
+  // against it, and saying so is not the same as saying it is wrong.
+  const dates = fills.map(f => f.date).sort();
+  const from = dates[0], to = dates[dates.length - 1];
+
+  // A file that begins part-way through his history holds sells whose buys
+  // happened before it. The money in it then cannot add up on its own, and
+  // saying "your journal is wrong" would be false. Detected, said, and the
+  // money comparison stood down rather than reported as a failure.
+  const sold = fills.filter(f => !f.isBuy).reduce((s, f) => s + f.qty, 0);
+  const bought = buys.reduce((s, f) => s + f.qty, 0);
+  const unpaired = sold - bought;
+
+  const broker = {
+    from, to, unpaired,
+    contracts: bought,
+    fees: cents(fills.reduce((s, f) => s + f.fees, 0)),
+    afterFees: cents(fills.reduce((s, f) => s + f.amount, 0)),
+    fills: fills.length,
+  };
+  broker.beforeFees = cents(broker.afterFees + broker.fees);
+
+  const byBroker = new Map();          // "symbol|date" -> contracts bought
+  for(const f of buys){
+    const k = f.symbol + '|' + f.date;
+    byBroker.set(k, (byBroker.get(k) || 0) + f.qty);
+  }
+
+  const closed = trades.filter(t => t.optExit != null);
+  const inRange = closed.filter(t => t.entryDate >= from && t.entryDate <= to);
+  const outside = closed.length - inRange.length;
+
+  const byJournal = new Map();
+  const unreadable = [];               // no contract code, so nothing to match on
+  let feesUnknown = 0;
+  const journal = { contracts: 0, beforeFees: 0, fees: 0, afterFees: 0, trades: inRange.length };
+  for(const t of inRange){
+    journal.contracts += (t.contracts || 0);
+    if(t.pnlDollar != null) journal.beforeFees += t.pnlDollar;
+    if(t.fees == null) feesUnknown++;
+    else journal.fees += t.fees;
+    if(t.pnlNet != null) journal.afterFees += t.pnlNet;
+    else if(t.pnlDollar != null) journal.afterFees += t.pnlDollar;   // fee not known yet
+    const sym = occToBrokerSymbol(t.occ);
+    if(!sym){ unreadable.push(t); continue; }
+    const k = sym + '|' + t.entryDate;
+    byJournal.set(k, (byJournal.get(k) || 0) + (t.contracts || 0));
+  }
+  journal.beforeFees = cents(journal.beforeFees);
+  journal.fees = cents(journal.fees);
+  journal.afterFees = cents(journal.afterFees);
+
+  // Contract by contract, day by day.
+  const differences = [];
+  for(const [k, n] of byBroker){
+    const mine = byJournal.get(k) || 0;
+    if(mine !== n){
+      const [symbol, date] = k.split('|');
+      differences.push({ symbol, date, broker: n, journal: mine,
+        kind: mine === 0 ? 'missing' : (mine > n ? 'too many' : 'too few') });
+    }
+  }
+  for(const [k, n] of byJournal){
+    if(byBroker.has(k)) continue;
+    const [symbol, date] = k.split('|');
+    differences.push({ symbol, date, broker: 0, journal: n, kind: 'not at your broker' });
+  }
+  differences.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+
+  const same = (a, b) => Math.abs(a - b) < 0.005;
+  const money = {
+    afterFees:  { journal: journal.afterFees,  broker: broker.afterFees,  ok: same(journal.afterFees, broker.afterFees) },
+    beforeFees: { journal: journal.beforeFees, broker: broker.beforeFees, ok: same(journal.beforeFees, broker.beforeFees) },
+    fees:       { journal: journal.fees,       broker: broker.fees,       ok: same(journal.fees, broker.fees) },
+  };
+  const contracts = { journal: journal.contracts, broker: broker.contracts, ok: journal.contracts === broker.contracts };
+
+  // With buys missing from the file, its own money does not add up, so the
+  // money lines are not evidence either way and are not counted.
+  const moneyComparable = unpaired === 0;
+  const everythingMatches = (moneyComparable ? (money.afterFees.ok && money.beforeFees.ok && money.fees.ok) : true)
+    && contracts.ok && !differences.length && !unreadable.length && !feesUnknown;
+
+  return { ok: true, from, to, broker, journal, money, contracts, moneyComparable,
+           differences, outside, unreadable: unreadable.length, feesUnknown, everythingMatches };
+}
+
+// Reads the chosen file in the browser and shows the answer. Nothing is
+// uploaded: the file never leaves the phone.
+function runBrokerCheck(input){
+  const box = document.getElementById('brokerBody');
+  const file = input && input.files && input.files[0];
+  input.value = '';                     // so choosing the same file twice still runs
+  if(!file){ return; }
+  box.innerHTML = '<div class="empty"><span class="spin"></span> Reading your file…</div>';
+  const reader = new FileReader();
+  reader.onerror = () => {
+    box.innerHTML = brokerNote('That file could not be read. If it came from another app, try downloading it from Schwab again.');
+  };
+  reader.onload = () => {
+    let result;
+    try{
+      const read = readBrokerFile(String(reader.result || ''));
+      if(!read.ok){ box.innerHTML = brokerNote(read.reason); return; }
+      result = compareJournalToBroker(loadTrades(), read.fills);
+      result.nonTrading = read.nonTrading;
+    }catch(e){
+      box.innerHTML = brokerNote('Something went wrong reading that file: ' + (e && e.message ? e.message : 'no reason given') + '. Send me this and I will fix it.');
+      return;
+    }
+    box.innerHTML = renderBrokerCheck(result);
+  };
+  reader.readAsText(file);
+}
+
+function brokerNote(text){
+  return `<div style="font-size:13px; color:var(--amber); line-height:1.5;">${escapeHtml(text)}</div>`;
+}
+
+function renderBrokerCheck(r){
+  const niceDate = d => {
+    const m = String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return d;
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return `${Number(m[3])} ${months[Number(m[2])-1]} ${m[1]}`;
+  };
+  const row = (label, mine, theirs, ok, isMoney) => {
+    const colour = ok ? 'var(--bull)' : 'var(--bear)';
+    const show = v => isMoney ? fmtMoney(v) : String(v);
+    return `<div style="display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:12.5px;">
+      <span style="flex:1;">${ok ? '✅' : '✕'} ${escapeHtml(label)}</span>
+      <span class="num" style="color:var(--text-dim);">${escapeHtml(show(mine))}</span>
+      <span class="num" style="color:${colour}; min-width:78px; text-align:right;">${escapeHtml(show(theirs))}</span>
+    </div>`;
+  };
+
+  const problems = [];
+  if(!r.contracts.ok) problems.push('the number of contracts');
+  if(r.moneyComparable){
+    if(!r.money.afterFees.ok) problems.push('your profit after fees');
+    if(!r.money.beforeFees.ok) problems.push('your profit before fees');
+    if(!r.money.fees.ok) problems.push('your fees');
+  }
+  if(r.differences.length) problems.push(`${r.differences.length} day${r.differences.length===1?'':'s'} of trading`);
+  if(r.unreadable) problems.push(`${r.unreadable} trade${r.unreadable===1?'':'s'} with no contract code to match on`);
+  if(r.feesUnknown) problems.push(`${r.feesUnknown} trade${r.feesUnknown===1?'':'s'} whose fee is not known yet`);
+
+  const headline = r.everythingMatches
+    ? `<div style="font-size:14px; font-weight:700; color:var(--bull);">Your journal matches Schwab exactly.</div>`
+    : `<div style="font-size:14px; font-weight:700; color:var(--bear);">Your journal does not match Schwab.</div>
+       <div style="font-size:12.5px; color:var(--text-dim); margin-top:4px; line-height:1.5;">What differs: ${escapeHtml(problems.join('; '))}.</div>`;
+
+  const scope = `<div style="font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.5;">
+      Covering ${escapeHtml(niceDate(r.from))} to ${escapeHtml(niceDate(r.to))} — ${r.journal.trades} of your trades against ${r.broker.fills} fills from Schwab.
+      ${r.outside ? `${r.outside} trade${r.outside===1?'':'s'} sit outside those dates and were left out — that is not a fault.` : ''}
+      ${r.nonTrading ? `${r.nonTrading} rows in the file were transfers and account fees, not trades.` : ''}
+    </div>`;
+
+  const heads = `<div style="display:flex; justify-content:space-between; gap:8px; margin-top:12px; font-size:10px; text-transform:uppercase; letter-spacing:1.4px; color:var(--text-dim);">
+      <span style="flex:1;"></span><span>Your journal</span><span style="min-width:78px; text-align:right;">Schwab</span>
+    </div>`;
+
+  const moneyRows = r.moneyComparable
+    ? row('Profit after fees', r.money.afterFees.journal, r.money.afterFees.broker, r.money.afterFees.ok, true)
+      + row('Profit before fees', r.money.beforeFees.journal, r.money.beforeFees.broker, r.money.beforeFees.ok, true)
+      + row('Fees', r.money.fees.journal, r.money.fees.broker, r.money.fees.ok, true)
+    : `<div style="font-size:12px; color:var(--text-dim); padding:8px 0; line-height:1.5;">
+         This file has ${Math.abs(r.broker.unpaired)} more contracts sold than bought, so some positions were opened before the file starts. Its money cannot add up on its own, so the money is not compared — the contracts below still are. Export from an earlier date to compare the money too.
+       </div>`;
+
+  const diffs = !r.differences.length ? '' : `
+    <div style="margin-top:12px; font-size:11px; text-transform:uppercase; letter-spacing:1.4px; color:var(--text-dim);">Days that do not match</div>
+    ${r.differences.slice(0, 25).map(d => `
+      <div style="display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;">
+        <span style="flex:1;">${escapeHtml(niceDate(d.date))}<div style="color:var(--text-dim); font-size:11px;">${escapeHtml(d.symbol)}</div></span>
+        <span class="num" style="color:var(--text-dim);">${d.journal}</span>
+        <span class="num" style="color:var(--bear); min-width:78px; text-align:right;">${d.broker}</span>
+      </div>`).join('')}
+    ${r.differences.length > 25 ? `<div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">…and ${r.differences.length - 25} more.</div>` : ''}`;
+
+  const caveat = `<div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border); font-size:11.5px; color:var(--text-dim); line-height:1.55;">
+      Schwab's file carries no times, so entry and exit times cannot be checked this way — everything to do with money and contracts can.
+      ${r.feesUnknown ? ` ${r.feesUnknown} of your trades have no fee worked out yet, so their after-fee figure is still short.` : ''}
+    </div>`;
+
+  return headline + scope + heads
+    + moneyRows
+    + row('Contracts bought', r.contracts.journal, r.contracts.broker, r.contracts.ok, false)
+    + diffs + caveat;
+}
+
 // ---- The Checks page ------------------------------------------------
 //
 // Rewritten 2026-08-31. It had turned into a diagnostics console: three
