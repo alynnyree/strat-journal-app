@@ -24,6 +24,40 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+71. **Three cards asking one question** (his own words, 2026-09-06:
+    "play performance and Does alignment pay are basically the same
+    question just expressed differently. Combine them."). **Status: DONE
+    AND TESTED (21 checks in a real browser). Not seen on his phone.**
+
+    He was right, and it was the second time the same merge was needed.
+    "FTFC Timeframe Hit Rate" had already been folded into "Does
+    Alignment Pay?" for showing the same split two ways. "Play
+    Performance" was the third: it already broke every play down BY FTFC
+    stance, and one of the three plays IS the FTFC Direction Play. So the
+    Dashboard asked "does trading with FTFC pay?" twice on one screen,
+    with different words each time.
+
+    Now one card -- **FTFC & Play Performance**. The answer first, the
+    four FTFC states under it, then the same trades cut by play.
+
+    **And his wording, which matters more than the merge.** He does not
+    read FTFC as something that "agreed with his direction"; he reads it
+    as which side of it he traded. So: "Traded in the direction of FTFC"
+    and "Traded in the opposite direction of FTFC", with "No FTFC either
+    way" and "FTFC direction never recorded" kept as their own answers --
+    the four states stay four.
+
+    The words now live in ONE place (`FTFC_STANCE`), because the same
+    distinction was being phrased three different ways on one screen --
+    "agreed with your direction", "taken WITH the timeframes", "not with
+    them" -- which is exactly how three cards asking one question happened
+    in the first place. Swept through the Setup Performance card, the
+    verdict sentence and the not-enough-trades-yet message as well.
+
+    Left alone deliberately: the badge on each trade card still reads
+    "you went Short — with it". It is space-constrained on a phone and the
+    long phrasing would wrap badly. Worth revisiting if he wants it.
+
 70. **The server's data allowance, and what was eating it** (found
     2026-09-05 from his Render warning email at 70% of 5GB). **Status:
     FIXED AND TESTED (10 checks, measured before and after). Not confirmed

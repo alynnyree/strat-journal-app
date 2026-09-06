@@ -571,20 +571,23 @@
     </div>
 
     <div class="card" style="margin-top:14px;">
-      <h3>Play Performance</h3>
-      <div id="playBreakdown"><div class="empty">Once your trades carry a play, this shows which of the three actually pays.</div></div>
-    </div>
+      <h3>FTFC &amp; Play Performance</h3>
+      <!-- This used to be THREE cards, merged twice for the same reason.
+           "FTFC Timeframe Hit Rate" showed the win rate for the same
+           groups as "Does Alignment Pay?", so it was the same table with
+           two of its four columns removed -- and it counted a win by the
+           price move while the other counted the money that actually
+           arrived, so on a trade whose fees turned a small win into a
+           small loss the two cards disagreed.
 
-    <div class="card" style="margin-top:14px;">
-      <h3>Does Alignment Pay?</h3>
-      <!-- This used to be two cards. "FTFC Timeframe Hit Rate" showed the
-           win rate for the same three groups shown below, so it was the
-           same table with two of its four columns removed -- and it
-           counted a win by the price move while this one counts it by the
-           money that actually arrived, so on a trade whose fees turned a
-           small win into a small loss the two cards disagreed. One card,
-           counting the money. -->
+           Then "Play Performance" turned out to be asking the same
+           question a third way (2026-09-06, his own words: "basically the
+           same question just expressed differently"). It already split
+           every play by FTFC stance, and one of the three plays IS the
+           FTFC Direction Play. So: one card. The answer first, the FTFC
+           breakdown under it, then the same trades cut by play. -->
       <div id="alignmentVerdict"></div>
+      <div id="playBreakdown" style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border);"><div class="empty">Once your trades carry a play, this shows which of the three actually pays.</div></div>
     </div>
 
     <div class="card" style="margin-top:14px;">
@@ -2879,6 +2882,26 @@ function realPnl(t){
   return t.pnlNet != null ? t.pnlNet : (t.pnlDollar || 0);
 }
 
+// How the FTFC stance is worded, in ONE place. It appears in three
+// spots on the Dashboard, and the same distinction phrased three ways on
+// one screen is how "agreed with your direction", "taken WITH the
+// timeframes" and "not with them" all ended up meaning the same thing.
+// His own words, asked for on 2026-09-06: he reads it as which side of
+// FTFC he traded, not as whether something "agreed" with him.
+const FTFC_STANCE = {
+  with:    'Traded in the direction of FTFC',
+  against: 'Traded in the opposite direction of FTFC',
+  none:    'No FTFC either way',
+  unknown: 'FTFC direction never recorded — not counted either side',
+};
+// The same vocabulary, shortened only by dropping the repeated verb, for
+// the indented rows under each play where the line already carries a
+// count and a figure.
+const FTFC_STANCE_SHORT = {
+  with:    'In the direction of FTFC',
+  against: 'In the opposite direction of FTFC',
+};
+
 function renderDashboard(){
   // Paint the Schwab sign-in line from what is already known, then ask
   // again in the background. Its own attempt and its own catch: a step
@@ -3003,7 +3026,7 @@ function renderDashboard(){
           <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s.all.count} trades · ${Math.round(s.all.wins/s.all.count*100)}% win</div></div>
           <div class="num ${s.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.all.pnl)}</div>
         </div>
-        ${worthSplitting ? sub('✅ taken WITH the timeframes', s.aligned) + sub('✕ not with them', s.against) : ''}
+        ${worthSplitting ? sub('✅ ' + FTFC_STANCE_SHORT.with, s.aligned) + sub('✕ ' + FTFC_STANCE_SHORT.against, s.against) : ''}
       </div>`;
     }).join('');
   }
@@ -3043,7 +3066,7 @@ function renderDashboard(){
             <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s2.all.count} trades · ${Math.round(s2.all.wins/s2.all.count*100)}% win</div></div>
             <div class="num ${s2.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s2.all.pnl)}</div>
           </div>
-          ${worthSplitting ? sub('✅ taken WITH the timeframes', s2.aligned) + sub('✕ not with them', s2.against) : ''}
+          ${worthSplitting ? sub('✅ ' + FTFC_STANCE_SHORT.with, s2.aligned) + sub('✕ ' + FTFC_STANCE_SHORT.against, s2.against) : ''}
         </div>`;
       }).join('');
     }
@@ -3077,8 +3100,8 @@ function renderDashboard(){
   const av = document.getElementById('alignmentVerdict');
   if(av){
     if(!alignedAll.count || !againstAll.count){
-      av.innerHTML = `<div style="font-size:12px; color:var(--text-dim); line-height:1.5;">Once you have trades both with and without the timeframes agreeing, this will tell you whether waiting for alignment actually pays.${
-        alignedAll.count || againstAll.count ? ` So far every trade here is ${alignedAll.count ? 'aligned' : 'not aligned'}.` : ''}</div>`;
+      av.innerHTML = `<div style="font-size:12px; color:var(--text-dim); line-height:1.5;">Once you have trades taken both in the direction of FTFC and not, this will tell you whether waiting for it actually pays.${
+        alignedAll.count || againstAll.count ? ` So far every trade here was taken ${alignedAll.count ? 'in the direction of FTFC' : 'some other way'}.` : ''}</div>`;
     } else {
       const perAligned = alignedAll.pnl / alignedAll.count;
       const perAgainst = againstAll.pnl / againstAll.count;
@@ -3086,10 +3109,10 @@ function renderDashboard(){
       const rateA = Math.round(alignedAll.wins / alignedAll.count * 100);
       const rateB = Math.round(againstAll.wins / againstAll.count * 100);
       const verdict = Math.abs(gap) < 1
-        ? 'Too close to call so far — alignment is not making a clear difference to your results.'
+        ? 'Too close to call so far — which side of FTFC you trade is not making a clear difference to your results.'
         : (gap > 0
-            ? `Trading <b>with</b> the timeframes is worth <b>${fmtMoney(gap)}</b> more per trade to you than everything else.`
-            : `Your trades taken <b>with</b> the timeframes are doing <b>${fmtMoney(-gap)}</b> per trade <b>worse</b> than the rest — worth a hard look before you keep waiting for it.`);
+            ? `Trading <b>in the direction of FTFC</b> is worth <b>${fmtMoney(gap)}</b> more per trade to you than everything else.`
+            : `Your trades taken <b>in the direction of FTFC</b> are doing <b>${fmtMoney(-gap)}</b> per trade <b>worse</b> than the rest — worth a hard look before you keep waiting for it.`);
       const rowOf = (label, b, colour) => !b.count ? '' : `
         <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; margin-top:4px; color:${colour};">
           <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
@@ -3097,12 +3120,12 @@ function renderDashboard(){
         </div>`;
       av.innerHTML = `
         <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; color:var(--bull);">
-          <span>✅ Agreed <b>with</b> your direction — ${alignedAll.count} trade${alignedAll.count===1?'':'s'} · ${rateA}% win</span>
+          <span>✅ ${FTFC_STANCE.with} — ${alignedAll.count} trade${alignedAll.count===1?'':'s'} · ${rateA}% win</span>
           <span><b>${fmtMoney(alignedAll.pnl)}</b> · ${fmtMoney(perAligned)}/trade</span>
         </div>
-        ${rowOf('⚠ Agreed <b>against</b> your direction', wrongWayAll, 'var(--amber)')}
-        ${rowOf('✕ No agreement either way', noneAll, 'var(--text-dim)')}
-        ${rowOf('· Agreed, but which way was never recorded — not counted either side', unknownAll, 'var(--text-dim)')}
+        ${rowOf('⚠ ' + FTFC_STANCE.against, wrongWayAll, 'var(--amber)')}
+        ${rowOf('✕ ' + FTFC_STANCE.none, noneAll, 'var(--text-dim)')}
+        ${rowOf('· ' + FTFC_STANCE.unknown, unknownAll, 'var(--text-dim)')}
         <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12.5px; color:${gap>0?'var(--bull)':(Math.abs(gap)<1?'var(--text-dim)':'var(--bear)')};">${verdict}</div>
         <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Compared per trade, not as totals — you may have taken far more of one than the other. Counted on ${judged.length} of your ${trades.length} trade${trades.length===1?'':'s'}${notSettled ? ` — ${notSettled} left out because ${notSettled===1?'it has':'they have'} no result yet` : ''}. Each timeframe is read at the minute you entered, from real price data.</div>`;
     }
