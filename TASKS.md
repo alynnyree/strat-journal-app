@@ -24,6 +24,27 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+74. **The card he did not ask for** (2026-09-06: *"I dont need the has
+    anything changed your numbers button. Everytime we update the app, you
+    tend to add more buttons that are unnecessary. Let me know before you
+    build out more buttons."*). **Status: REMOVED. The protection behind it
+    is untouched.**
+
+    Task 73 froze a trade's money and recorded any figure that came back
+    different. That much was asked for. Then I built him a card to watch
+    it with -- for something that should never happen, that he never asked
+    to see, and whose meaning he would have had to learn. The protection
+    was right; the card was mine.
+
+    The card and its heading are gone from his screen. The refusal is
+    still recorded on the trade, and now appears in the Details text,
+    which is written to be sent to me and only opened when I ask. If it
+    never fires, he never needs to know it exists.
+
+    **Standing rule now in CLAUDE.md:** a new card, button, badge, row or
+    toggle is a REQUEST, not a decision. Say what it would be and why, in
+    one line, and wait -- unless he asked for it in words.
+
 73. **"It should import one time accurately and one time only"** (his
     instruction, 2026-09-06, alongside: *"we need to make sure that moving
     forward there are no errors in how the numbers are accounted for"*).
