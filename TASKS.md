@@ -24,6 +24,47 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+73. **"It should import one time accurately and one time only"** (his
+    instruction, 2026-09-06, alongside: *"we need to make sure that moving
+    forward there are no errors in how the numbers are accounted for"*).
+    **Status: DONE AND MARKED AGAINST HIS OWN BROKER EXPORTS (23 checks on
+    the import, 24 on the freeze, every other suite green). Not yet seen on
+    his phone.**
+
+    **Why his P&L kept moving.** `refreshTradeFacts` overwrote the fee and
+    rebuilt the after-fee figure on every pass. So any time anything ran --
+    a catch-up, a re-import, a new capability -- his totals could move. And
+    `tradeIsStale` put every old trade back in the queue each time the
+    server learned something new, so the passes never stopped.
+
+    **What changed.** Money is settled once, at import, and frozen. Both
+    prices, the size, the fee and the profit come straight from Schwab's
+    fills when the trade is paired; nothing arriving later is a better
+    source. An unknown figure may be filled in once; a known one is never
+    touched; a genuine disagreement is recorded and shown on the Checks
+    page under "Has Anything Changed Your Numbers?" rather than quietly
+    applied. And a trade gets ONE catch-up pass, after which it is marked
+    finished and never queued again, whatever the app learns later.
+
+    **A real arithmetic fault found on the way.** A fee belongs to a FILL,
+    not a contract. Splitting one across several closes as a rounded
+    proportion did not add back up -- $1.00 over three contracts closed one
+    at a time paid out 33+33+33 = 99 cents; $2.00 became $2.01. Now drawn
+    down in whole cents with the last piece taking the exact remainder.
+
+    **Proven end to end.** `tests/import-exact.js` pushes both of his real
+    Schwab exports through the REAL matcher, in the batches a live sync
+    uses, and compares against what his broker actually charged and paid:
+    **$404.73 / -$1,100.73 / 306 contracts** and **$334.73 / -$1,603.73 /
+    253 contracts**, every figure to the penny. Every trade comes out with
+    a fee, an after-fee figure, both prices and a size; nothing is left
+    open; no two trades share an identity.
+
+    **Still open for him to decide:** whether a trade should get even that
+    single catch-up pass. It cannot touch money now, so it cannot move a
+    figure -- but if he wants imports to be strictly one-and-done with no
+    second pass at all, that is one line.
+
 72. **"How do we double check our work?"** (his own question,
     2026-09-06: *"Everytime we update the app the p&l changes. How do we
     double check our work to be sure that all of our numbers for the

@@ -1143,6 +1143,15 @@
          is why this reads it rather than asking the server to check its
          own arithmetic. It never leaves the phone -- the file is read in
          the browser and nothing is sent anywhere. -->
+    <div class="card" id="moneyDisagreeCard">
+      <h3>Has Anything Changed Your Numbers?</h3>
+      <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
+        Once a trade is imported, its money is settled and never changed
+        again. If anything ever comes back with a different figure, your
+        journal keeps what it has and lists it here instead.
+      </div>
+      <div id="moneyDisagreeBody" style="margin-top:12px;"></div>
+    </div>
     <div class="card" id="brokerCheckCard">
       <h3>Check My Numbers Against Schwab</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
@@ -4102,6 +4111,46 @@ function brokerNote(text){
   return `<div style="font-size:13px; color:var(--amber); line-height:1.5;">${escapeHtml(text)}</div>`;
 }
 
+// Any time something offered a different figure for money already
+// settled, that offer is kept here and NOT applied. He must never find
+// out his history changed by noticing a total move.
+function moneyDisagreements(){
+  const out = [];
+  for(const t of loadTrades()){
+    if(!t.moneyDisagreement) continue;
+    for(const key of Object.keys(t.moneyDisagreement)){
+      out.push({ trade: t, key, ...t.moneyDisagreement[key] });
+    }
+  }
+  return out;
+}
+
+const MONEY_LABEL = {
+  optEntry: 'the price you paid', optExit: 'the price you sold at',
+  contracts: 'the number of contracts', pnlDollar: 'profit before fees',
+  pnlPercent: 'profit as a percentage', fees: 'the fee',
+  entryFees: 'the fee on the way in', exitFees: 'the fee on the way out',
+  pnlNet: 'profit after fees', winLoss: 'win or loss',
+};
+
+function renderMoneyDisagreements(){
+  const el = document.getElementById('moneyDisagreeBody');
+  if(!el) return;
+  const list = moneyDisagreements();
+  if(!list.length){
+    el.innerHTML = '<div style="font-size:12.5px; color:var(--bull);">Nothing has tried to change a figure in your journal.</div>';
+    return;
+  }
+  el.innerHTML = `<div style="font-size:12.5px; color:var(--amber); line-height:1.5;">
+      ${list.length} figure${list.length===1?'':'s'} came back different from what your journal already had. Your journal was left as it was. Send me this and I will work out which is right.
+    </div>` + list.slice(0, 20).map(d => `
+    <div style="padding:7px 0; border-bottom:1px solid var(--border); font-size:12px;">
+      <div>${escapeHtml(String(d.trade.ticker || ''))} ${escapeHtml(String(d.trade.entryDate || ''))} — ${escapeHtml(MONEY_LABEL[d.key] || d.key)}</div>
+      <div style="color:var(--text-dim); margin-top:2px;">kept ${escapeHtml(String(d.kept))} · was offered ${escapeHtml(String(d.offered))}</div>
+    </div>`).join('')
+    + (list.length > 20 ? `<div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">…and ${list.length - 20} more.</div>` : '');
+}
+
 function renderBrokerCheck(r){
   const niceDate = d => {
     const m = String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -4779,6 +4828,9 @@ function renderTestShots(){
 }
 
 async function renderChecklist(){
+  // Drawn every time the page opens, so a figure that was refused is never
+  // sitting unseen.
+  try{ renderMoneyDisagreements(); }catch(e){ /* never let this hide the page */ }
   // AWAITED. It was not, so the details block was built while the health
   // check was still in flight -- and printed "server up 0m · mem ?MB"
   // every single time, whatever the server had actually said. I read that
@@ -5902,9 +5954,25 @@ function rebuildHistory(){
 // on the strength of a guess.
 let alpacaConnected = false;
 
+// Whether this trade is still short of something the server can supply.
+//
+// TWO RULES CHANGED HERE on 2026-09-06, on his instruction: "The trades
+// should not be constantly updating... It should import one time
+// accurately and one time only."
+//
+// 1. A trade that has already had ONE catch-up pass is finished, for
+//    good. Before this, a trade could keep qualifying for ever -- each
+//    new thing the server learned to work out put every old trade back in
+//    the queue, which is exactly the constant updating he is describing.
+// 2. Money is never a reason. It cannot be improved by asking again: both
+//    prices, the size and the fee all come straight from Schwab's fills
+//    when the trade is paired, and they are now settled once and frozen.
+//    A missing FEE is the one exception -- an absent figure is not a
+//    settled one, and it is filled in rather than changed.
 function tradeIsStale(t){
   if(t.optExit == null) return false;
   if(t.source !== 'schwab-auto') return false;   // his own typed entries are not the server's to fill
+  if(t.settled === true) return false;           // it has had its one pass; leave it alone
   if(t.fees == null || t.undEntrySource == null) return true;
   // A stock price that has never been looked up with Alpaca available.
   //
@@ -6416,11 +6484,49 @@ function refreshTradeFacts(saved, fresh){
     saved[key] = value; changed = true;
   };
 
-  // Fees, and the after-fee figure that depends on them.
-  set('fees', fresh.fees); set('entryFees', fresh.entryFees); set('exitFees', fresh.exitFees);
-  if(fresh.fees != null && saved.pnlDollar != null){
-    const net = Math.round((saved.pnlDollar - fresh.fees) * 100) / 100;
-    set('pnlNet', net);
+  // ---- Money is settled once and never changed again ----------------
+  //
+  // He asked for this directly (2026-09-06): "The trades should not be
+  // constantly updating... It should import one time accurately and one
+  // time only." He is right, and the reason it was ever otherwise is that
+  // this used to overwrite the fee and rebuild the after-fee figure on
+  // every pass, so his totals moved whenever anything ran.
+  //
+  // Nothing later can improve these. Every one of them -- both prices, the
+  // size, the fee, the profit -- comes straight out of Schwab's own fills
+  // at the moment the trade is paired. There is no better source arriving
+  // afterwards, so a second opinion is not an improvement, it is a
+  // disagreement.
+  //
+  // So: a figure that is UNKNOWN may be filled in once. A figure that is
+  // already known is never touched. If a later copy disagrees, that is
+  // recorded and shown on the Checks page rather than quietly applied --
+  // silently rewriting his history is exactly how he ended up unable to
+  // trust the numbers.
+  const MONEY = ['optEntry', 'optExit', 'contracts', 'pnlDollar', 'pnlPercent',
+                 'fees', 'entryFees', 'exitFees', 'pnlNet', 'winLoss'];
+  const near = (a, b) => typeof a === 'number' && typeof b === 'number'
+    ? Math.abs(a - b) < 0.005 : a === b;
+  for(const key of MONEY){
+    const incoming = fresh[key];
+    if(incoming === undefined || incoming === null) continue;
+    if(saved[key] === undefined || saved[key] === null){
+      saved[key] = incoming; changed = true;      // filling in a blank is not a change of mind
+      continue;
+    }
+    if(near(saved[key], incoming)) continue;
+    // A real disagreement about money. Kept, never applied.
+    saved.moneyDisagreement = saved.moneyDisagreement || {};
+    if(saved.moneyDisagreement[key] === undefined){
+      saved.moneyDisagreement[key] = { kept: saved[key], offered: incoming, seenAt: new Date().toISOString() };
+      changed = true;
+    }
+  }
+  // The after-fee figure only where it was never worked out, and only from
+  // figures already on the trade -- never recomputed over a good one.
+  if(saved.pnlNet == null && saved.fees != null && saved.pnlDollar != null){
+    saved.pnlNet = Math.round((saved.pnlDollar - saved.fees) * 100) / 100;
+    changed = true;
   }
 
   // The underlying price, and how it was obtained. A rebuild that has an
@@ -6474,6 +6580,13 @@ function refreshTradeFacts(saved, fresh){
   if(saved.stop == null && fresh.stop != null){
     saved.stop = fresh.stop; saved.stopAuto = fresh.stopAuto; saved.stopReason = fresh.stopReason; changed = true;
   }
+
+  // That was its catch-up. This trade is finished and is never queued for
+  // another one, whatever the app learns to work out later. Deliberately
+  // does NOT count as a change: marking it finished is not news for him,
+  // and reporting "1 trade brought up to date" for a flag would be the
+  // same as saying nothing at all.
+  saved.settled = true;
   return changed;
 }
 async function resetAndReimport(){
