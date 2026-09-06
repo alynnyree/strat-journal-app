@@ -891,6 +891,20 @@ The rule from here:
 - **"Nothing for you to do" is the default ending.** The app is supposed
   to be automatic; if he has to act, that is a failure worth naming, and
   it gets one button.
+- **ASK BEFORE PUTTING ANYTHING NEW ON HIS SCREEN.** His words
+  (2026-09-06): *"I dont need the has anything changed your numbers
+  button. Everytime we update the app, you tend to add more buttons that
+  are unnecessary. Let me know before you build out more buttons."* I had
+  built a whole card so he could watch for a figure being refused — for a
+  thing that should never happen, that he never asked to see, and that he
+  would have had to learn the meaning of. The protection was right; the
+  card was mine, not his.
+  A new card, button, badge, row or toggle is a REQUEST, not a decision:
+  say what it would be and why, in one line, and wait. The exception is
+  something he asked for in words. Everything else I want him to see goes
+  behind the existing "Details" tap, which exists precisely so I can have
+  my diagnostics without them being his problem — and if it never fires,
+  he never needs to know it is there.
 - **Technical detail still has to exist** — I need it to fix things — but
   it lives behind a "Details" tap he only opens when I ask, and it is
   written to be sent to me, not read by him.

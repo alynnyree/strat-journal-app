@@ -1143,15 +1143,6 @@
          is why this reads it rather than asking the server to check its
          own arithmetic. It never leaves the phone -- the file is read in
          the browser and nothing is sent anywhere. -->
-    <div class="card" id="moneyDisagreeCard">
-      <h3>Has Anything Changed Your Numbers?</h3>
-      <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
-        Once a trade is imported, its money is settled and never changed
-        again. If anything ever comes back with a different figure, your
-        journal keeps what it has and lists it here instead.
-      </div>
-      <div id="moneyDisagreeBody" style="margin-top:12px;"></div>
-    </div>
     <div class="card" id="brokerCheckCard">
       <h3>Check My Numbers Against Schwab</h3>
       <div style="font-size:12.5px; color:var(--text-dim); line-height:1.55;">
@@ -4112,8 +4103,13 @@ function brokerNote(text){
 }
 
 // Any time something offered a different figure for money already
-// settled, that offer is kept here and NOT applied. He must never find
-// out his history changed by noticing a total move.
+// settled, that offer is recorded on the trade and NOT applied.
+//
+// This does NOT get a card of its own. He said plainly (2026-09-06) that
+// every update adds buttons he did not ask for, and he is right — I built
+// one for this without asking. It belongs in the Details text, which is
+// written to be sent to me and is only opened when I ask for it. If it
+// never fires, he never needs to know it exists.
 function moneyDisagreements(){
   const out = [];
   for(const t of loadTrades()){
@@ -4123,32 +4119,6 @@ function moneyDisagreements(){
     }
   }
   return out;
-}
-
-const MONEY_LABEL = {
-  optEntry: 'the price you paid', optExit: 'the price you sold at',
-  contracts: 'the number of contracts', pnlDollar: 'profit before fees',
-  pnlPercent: 'profit as a percentage', fees: 'the fee',
-  entryFees: 'the fee on the way in', exitFees: 'the fee on the way out',
-  pnlNet: 'profit after fees', winLoss: 'win or loss',
-};
-
-function renderMoneyDisagreements(){
-  const el = document.getElementById('moneyDisagreeBody');
-  if(!el) return;
-  const list = moneyDisagreements();
-  if(!list.length){
-    el.innerHTML = '<div style="font-size:12.5px; color:var(--bull);">Nothing has tried to change a figure in your journal.</div>';
-    return;
-  }
-  el.innerHTML = `<div style="font-size:12.5px; color:var(--amber); line-height:1.5;">
-      ${list.length} figure${list.length===1?'':'s'} came back different from what your journal already had. Your journal was left as it was. Send me this and I will work out which is right.
-    </div>` + list.slice(0, 20).map(d => `
-    <div style="padding:7px 0; border-bottom:1px solid var(--border); font-size:12px;">
-      <div>${escapeHtml(String(d.trade.ticker || ''))} ${escapeHtml(String(d.trade.entryDate || ''))} — ${escapeHtml(MONEY_LABEL[d.key] || d.key)}</div>
-      <div style="color:var(--text-dim); margin-top:2px;">kept ${escapeHtml(String(d.kept))} · was offered ${escapeHtml(String(d.offered))}</div>
-    </div>`).join('')
-    + (list.length > 20 ? `<div style="font-size:11.5px; color:var(--text-dim); margin-top:6px;">…and ${list.length - 20} more.</div>` : '');
 }
 
 function renderBrokerCheck(r){
@@ -4828,9 +4798,6 @@ function renderTestShots(){
 }
 
 async function renderChecklist(){
-  // Drawn every time the page opens, so a figure that was refused is never
-  // sitting unseen.
-  try{ renderMoneyDisagreements(); }catch(e){ /* never let this hide the page */ }
   // AWAITED. It was not, so the details block was built while the health
   // check was still in flight -- and printed "server up 0m · mem ?MB"
   // every single time, whatever the server had actually said. I read that
@@ -4916,6 +4883,13 @@ function techText(){
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
     `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
     `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,
+    (() => {
+      const d = moneyDisagreements();
+      return d.length
+        ? `money refused ${d.length}: ` + d.slice(0, 8).map(x =>
+            `${x.trade.entryDate} ${x.key} kept ${x.kept} offered ${x.offered}`).join(' | ')
+        : 'money refused 0';
+    })(),
     !techNotes.checked ? 'server: not checked yet'
       : srv.unreachable ? `server unreachable (${srv.why || srv.status})`
       : `server up ${Math.round((srv.uptimeSeconds||0)/60)}m · mem ${srv.memoryMb ?? '?'}MB peak ${srv.peakMemoryMb ?? '?'}MB · failures ${(srv.recentFailures||[]).length}`,
