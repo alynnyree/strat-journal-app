@@ -2756,7 +2756,12 @@ function saveTrade(){
   const trades = loadTrades();
   if(editingTradeId){
     const idx = trades.findIndex(t=>t.id===editingTradeId);
-    if(idx>=0) trades[idx] = trade; else trades.unshift(trade);
+    if(idx>=0){
+      // Whatever he just changed becomes his, and is never written over.
+      const mine = markUserSet(trades[idx], trade);
+      if(mine) trade.userSet = mine;
+      trades[idx] = trade;
+    } else trades.unshift(trade);
   } else {
     trades.unshift(trade);
   }
@@ -6450,6 +6455,57 @@ async function autoImportPendingTrades(url, pending){
 //
 // Returns true if anything actually changed, so the app can say how many
 // were brought up to date rather than guessing.
+// ---- What he set himself, and what may never be written over ---------
+//
+// His instruction (2026-09-06): "Please protect my hand corrections. The
+// journal should not be able to override my entries."
+//
+// Proven necessary rather than assumed: a trade corrected by hand to "no
+// FTFC" was put back to "FTFC, run of 6" by a single catch-up pass. His
+// notes, screenshots and his own setup tag were already safe; the
+// timeframes and the stock prices were not.
+//
+// So the moment he saves an edit, anything he actually CHANGED is marked
+// as his, and nothing may write over it again. Only what he changed --
+// editing a note does not freeze the rest of the trade.
+const SERVER_ALSO_WRITES = [
+  'undEntry', 'undExit', 'stop', 'strat', 'play',
+  'optEntry', 'optExit', 'contracts', 'pnlDollar', 'pnlPercent',
+  'fees', 'entryFees', 'exitFees', 'pnlNet', 'winLoss',
+];
+
+function markUserSet(before, after){
+  // Anything already marked stays marked: a later edit of one field must
+  // not quietly unlock an earlier correction to another.
+  const set = Object.assign({}, (before && before.userSet) || {});
+  const differs = (a, b) => (typeof a === 'number' && typeof b === 'number')
+    ? Math.abs(a - b) >= 0.005
+    : (a === undefined ? null : a) !== (b === undefined ? null : b);
+  for(const k of SERVER_ALSO_WRITES){
+    const now = after[k];
+    // Only a VALUE claims a field. Clearing one to blank does not, and
+    // deliberately so: the edit screen shows every box, so a field he
+    // never looked at could otherwise be claimed as an intentional blank
+    // and locked empty for ever. A blank stays fillable; the cost of
+    // getting that wrong is a figure appearing that he did not need,
+    // rather than one that can never appear at all.
+    if(now === null || now === undefined || now === '') continue;
+    if(differs(before ? before[k] : null, now)) set[k] = true;
+  }
+  // The thirteen timeframes are ONE answer, not thirteen: tapping a single
+  // one changes the run, the direction and the list of them together. So
+  // they are locked as a group or not at all.
+  const sameGrid = JSON.stringify((before && before.ftfc) || {}) === JSON.stringify(after.ftfc || {});
+  const sameVerdict = !!(before && before.ftfcConfirmed) === !!after.ftfcConfirmed;
+  if(!sameGrid || !sameVerdict) set.ftfc = true;
+  return Object.keys(set).length ? set : undefined;
+}
+
+// True when he has claimed this field and nothing else may touch it.
+function his(saved, key){
+  return !!(saved && saved.userSet && saved.userSet[key]);
+}
+
 function refreshTradeFacts(saved, fresh){
   let changed = false;
   const set = (key, value) => {
@@ -6484,6 +6540,9 @@ function refreshTradeFacts(saved, fresh){
   for(const key of MONEY){
     const incoming = fresh[key];
     if(incoming === undefined || incoming === null) continue;
+    // He typed this in. It is not a disagreement to be recorded, it is
+    // simply his answer, and nothing here has a say in it.
+    if(his(saved, key)) continue;
     if(saved[key] === undefined || saved[key] === null){
       saved[key] = incoming; changed = true;      // filling in a blank is not a change of mind
       continue;
@@ -6505,7 +6564,7 @@ function refreshTradeFacts(saved, fresh){
 
   // The underlying price, and how it was obtained. A rebuild that has an
   // exact print replaces a candle close; one that does not, does not.
-  if(fresh.undEntry != null){ set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact); }
+  if(fresh.undEntry != null && !his(saved, 'undEntry')){ set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact); }
   // Whether Alpaca was available when the server worked this price out.
   // Without carrying this over, a rebuild that DID use Alpaca would look
   // exactly like one that never tried, and the trade would be rebuilt for
@@ -6513,11 +6572,14 @@ function refreshTradeFacts(saved, fresh){
   if(fresh.undPricedWithAlpaca === true && saved.undPricedWithAlpaca !== true){
     saved.undPricedWithAlpaca = true; changed = true;
   }
-  if(fresh.undExit  != null){ set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact); }
+  if(fresh.undExit  != null && !his(saved, 'undExit')){ set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact); }
 
   // Timeframe alignment. Only taken when the rebuild actually measured
   // something — an empty answer must not wipe a good one.
-  if(fresh.ftfcRun != null){
+  // His reading of the timeframes outranks the app's. This is the one
+  // that was actually overwriting him: a trade he had corrected to "no
+  // FTFC" came back as "FTFC, run of 6" after a single catch-up.
+  if(fresh.ftfcRun != null && !his(saved, 'ftfc')){
     set('ftfcRun', fresh.ftfcRun);
     // The rule that produced the reading. Without carrying this over, a
     // rebuild that DID re-measure would look exactly like one that had
@@ -6538,8 +6600,8 @@ function refreshTradeFacts(saved, fresh){
   if(fresh.replayData && !saved.replayData){ saved.replayData = fresh.replayData; changed = true; }
 
   // A setup or play only where he has not chosen one himself.
-  if(!saved.strat && fresh.strat){ saved.strat = fresh.strat; saved.stratConfidence = fresh.stratConfidence || null; changed = true; }
-  if(!saved.play && fresh.play){ saved.play = fresh.play; saved.playConfidence = fresh.playConfidence || null; changed = true; }
+  if(!saved.strat && !his(saved, 'strat') && fresh.strat){ saved.strat = fresh.strat; saved.stratConfidence = fresh.stratConfidence || null; changed = true; }
+  if(!saved.play && !his(saved, 'play') && fresh.play){ saved.play = fresh.play; saved.playConfidence = fresh.playConfidence || null; changed = true; }
   if(!saved.stratNotation && fresh.stratNotation){
     saved.stratNotation = fresh.stratNotation;
     saved.stratNotationDirection = fresh.stratNotationDirection || null; changed = true;
@@ -6551,7 +6613,7 @@ function refreshTradeFacts(saved, fresh){
   }
 
   // A worked-out stop, never one he typed in himself.
-  if(saved.stop == null && fresh.stop != null){
+  if(saved.stop == null && !his(saved, 'stop') && fresh.stop != null){
     saved.stop = fresh.stop; saved.stopAuto = fresh.stopAuto; saved.stopReason = fresh.stopReason; changed = true;
   }
 

@@ -698,6 +698,24 @@ Uses **The Strat**. Key concepts the code implements:
   the queue — the constant updating he reported. `tradeIsStale` now
   returns false once `settled` is set, which `refreshTradeFacts` sets
   after its one pass. Money is never a reason to queue a rebuild.
+- **What he set by hand is HIS, and nothing may write over it**
+  (his instruction, 2026-09-06: *"Please protect my hand corrections. The
+  journal should not be able to override my entries."*). Proven necessary,
+  not assumed: a trade he corrected to "no FTFC" came back as "FTFC, run
+  of 6" after a single catch-up pass. His notes, screenshots and his own
+  setup tag were already safe — the TIMEFRAMES and the STOCK PRICES were
+  not, because those had only ever been machine-written and nobody had
+  asked what happens once he can edit them. When a field gains a second
+  author, every "may I write this?" test written for one author is now
+  wrong. `markUserSet` records what he actually CHANGED at the moment he
+  saves, `his()` guards every write in `refreshTradeFacts`, and the
+  thirteen timeframes lock as one group because tapping one changes the
+  run, the direction and the list together.
+- **Clearing a field to blank must not claim it.** The edit screen shows
+  every box, so a field he never looked at would otherwise be recorded as
+  a deliberate blank and locked empty for ever. Only a VALUE claims a
+  field. Getting this wrong in one direction shows him a figure he did not
+  need; in the other it means a figure that can never appear at all.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and
