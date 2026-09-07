@@ -716,6 +716,16 @@ Uses **The Strat**. Key concepts the code implements:
   a deliberate blank and locked empty for ever. Only a VALUE claims a
   field. Getting this wrong in one direction shows him a figure he did not
   need; in the other it means a figure that can never appear at all.
+- **One colour, one meaning.** The FTFC badge was coloured entirely by
+  the JUDGEMENT — green when he traded with the timeframes, amber when
+  against — so the word BEARISH came out GREEN every time he was on the
+  right side of a falling market. He reported it as confusing and he was
+  right: two meanings were fighting over one colour and the direction lost.
+  Now each piece of text is coloured by what that text says — the
+  direction word red when bearish and green when bullish, the "you went
+  Short — with it" line green or amber, the box itself neutral. A word
+  that names a direction is coloured by that direction, never by whether
+  it was good news.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and
