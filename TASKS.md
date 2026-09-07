@@ -24,6 +24,29 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+77. **"Bearish is green" on the trade cards** (his report, 2026-09-06:
+    *"my most recent trades say FTFC bearish in green... it is confusing
+    to the eye because it currently says Bearish and it is green when
+    Bearish is actually red."*). **Status: FIXED AND TESTED (13 checks,
+    colours read back from the rendered page). Not seen on his phone.**
+
+    He was right, and the cause is worth keeping: the badge was coloured
+    entirely by the JUDGEMENT -- green when he traded with the timeframes,
+    amber when against. That was itself a fix he asked for, because he
+    could not tell those two apart. But it meant the colour said one thing
+    while the word said another, and a Short taken into a falling market
+    -- exactly right -- read as "BEARISH" in green.
+
+    Each piece of text is now coloured by what that text actually says:
+    the direction word red when bearish and green when bullish, the "you
+    went Short -- with it" line green or amber, the box itself neutral so
+    no block of colour contradicts either. The tick and warning marks stay,
+    so which side he took is still visible at a glance.
+
+    Checked by reading the colours back off the rendered page in all four
+    cases -- bearish with, bullish with, bearish against, bullish against
+    -- so the word's colour can never again depend on whether he was right.
+
 76. **Recording whether FTFC HELD to the exit.** **Status: PARKED at his
     request (2026-09-06: "No, maybe we can come back to that idea later").
     Do not raise again unless he brings it up.**

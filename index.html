@@ -3429,23 +3429,34 @@ function renderJournal(){
           : `<span class="badge setup">${escapeHtml(t.strat)}${t.stratUsedScreenshot ? ' 📷' : ''}</span>`)
       : `<span class="badge" style="background:var(--panel); color:var(--amber); border:1px solid var(--amber);">⚠ Needs Setup</span>`;
     // Says which WAY the timeframes agreed, and what that meant for the
-    // trade he actually took. The direction is spelled out in words with
-    // an arrow rather than left to colour alone, so it reads the same to
-    // anyone and in any light. Colour then carries the judgement: green
-    // when he traded with the agreement, amber when against it.
+    // trade he actually took.
+    //
+    // ONE COLOUR, ONE MEANING (his report, 2026-09-06): "my most recent
+    // trades say FTFC bearish in green... it is confusing to the eye
+    // because it currently says Bearish and it is green when Bearish is
+    // actually red." He is right. The whole badge used to be coloured by
+    // the JUDGEMENT -- green when he traded with the timeframes, amber
+    // when against -- so the word BEARISH came out green every time he was
+    // on the right side of a falling market. Two different meanings
+    // fighting over one colour, and the direction lost.
+    //
+    // Now each piece of text is coloured by what that text actually says:
+    // the direction word is red when bearish and green when bullish, the
+    // line about which way he traded carries the judgement, and the box
+    // itself is neutral so no large block of colour contradicts either.
     const ftfcWord = ftfcDirectionWord(t);
     const stance = alignmentOf(t);
     let ftfcBadge;
     if(t.ftfcConfirmed && ftfcWord){
       const arrow = t.ftfcDirection === 'bull' ? '▲' : '▼';
-      const colour = stance === 'against' ? 'var(--amber)' : 'var(--bull)';
+      const dirColour = t.ftfcDirection === 'bull' ? 'var(--bull)' : 'var(--bear)';
+      const stanceColour = stance === 'against' ? 'var(--amber)' : 'var(--bull)';
       const mark   = stance === 'against' ? '⚠' : '✅';
       const note = stance === 'none' ? ''
-        : (stance === 'with'
-            ? `<br>you went ${escapeHtml(t.dir)} — <b>with it</b>`
-            : `<br>you went ${escapeHtml(t.dir)} — <b>against it</b>`);
-      ftfcBadge = `<span class="badge" style="background:var(--panel); color:${colour}; border:1px solid ${colour};">`
-        + `${mark} FTFC ${arrow} ${ftfcWord}${note}`
+        : `<br><span style="color:${stanceColour};">you went ${escapeHtml(t.dir)} — <b>${stance === 'with' ? 'with it' : 'against it'}</b></span>`;
+      ftfcBadge = `<span class="badge" style="background:var(--panel); color:var(--text-dim); border:1px solid var(--border);">`
+        + `<span style="color:${stanceColour};">${mark}</span> FTFC `
+        + `<span style="color:${dirColour}; font-weight:700;">${arrow} ${ftfcWord}</span>${note}`
         + `<br><span style="opacity:.75;">${(t.ftfcTimeframesInRun||[]).join('→')}</span></span>`;
     } else if(t.ftfcConfirmed){
       // Agreement was measured but the direction was not recorded — older
