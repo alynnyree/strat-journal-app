@@ -24,6 +24,22 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+76. **Recording whether FTFC HELD to the exit.** **Status: PARKED at his
+    request (2026-09-06: "No, maybe we can come back to that idea later").
+    Do not raise again unless he brings it up.**
+
+    Today the timeframes are measured once, at the entry, and never again
+    -- so a trade that was in FTFC when he entered stays marked that way
+    even if it flipped straight afterwards. He knows this now and is fine
+    with it for the moment.
+
+    If he ever wants it: it is a SECOND measurement at the exit timestamp,
+    stored beside the entry one, never over it. The reading itself is the
+    easy part -- `getFtfcForTrade` already takes any moment. The real
+    questions are what it would put on his screen (which needs asking
+    first) and that a flip mid-trade would be invisible to it anyway,
+    since it would only compare two moments and not what happened between.
+
 75. **"The journal should not be able to override my entries"** (his
     instruction, 2026-09-06, after asking how FTFC is decided so he could
     correct it). **Status: DONE AND TESTED (29 checks, including the real
