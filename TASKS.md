@@ -24,6 +24,32 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+75. **"The journal should not be able to override my entries"** (his
+    instruction, 2026-09-06, after asking how FTFC is decided so he could
+    correct it). **Status: DONE AND TESTED (29 checks, including the real
+    edit screen end to end). Not yet seen on his phone.**
+
+    He asked how the journal decides FTFC so that he could correct it when
+    it is wrong. Checking whether that correction would actually SURVIVE
+    turned up that it would not: a trade corrected by hand to "no FTFC"
+    came back as "FTFC, run of 6" after a single catch-up pass. Proven by
+    running it, not reasoned about.
+
+    His notes, screenshots and his own setup tag were already protected.
+    The timeframes and the stock prices were not -- they had only ever
+    been machine-written, and nobody had asked what happens once he can
+    edit them too.
+
+    Now: the moment he saves an edit, whatever he actually CHANGED is
+    marked as his, and nothing writes over it again. Covers the thirteen
+    timeframes (locked as one group, since tapping one changes the run,
+    the direction and the list together), both stock prices, the stop, the
+    setup, the play, and every money figure. Editing only a note claims
+    nothing else, and a field he leaves blank is not claimed at all --
+    otherwise a box he never looked at would be locked empty for ever.
+
+    A trade he has never edited behaves exactly as before.
+
 74. **The card he did not ask for** (2026-09-06: *"I dont need the has
     anything changed your numbers button. Everytime we update the app, you
     tend to add more buttons that are unnecessary. Let me know before you
