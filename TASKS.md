@@ -24,6 +24,33 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+78. **"These percentages don't add up to 100%"** (his report,
+    2026-09-06, on the FTFC & Play Performance card). **Status: FIXED AND
+    TESTED (14 checks built on his own figures). Not seen on his phone.**
+
+    45% trading with FTFC, 48% against, 49% no FTFC. Nothing was wrong
+    with the arithmetic -- each is that group's OWN win rate, how many of
+    THOSE trades won, and three separate rates have no reason to sum to
+    anything. But three bare percentages stacked down a card read as a
+    breakdown of a whole, and he read them that way. The presentation was
+    the fault, not the number.
+
+    Every grouped row now reads **"won 9 of 20 (45%)"** instead of "20
+    trades - 45% win", which cannot be misread as a share. Swept through
+    all five places the line appears -- the four FTFC rows, the per-play
+    rows and the per-setup rows -- because the same line written five ways
+    is how three cards asking one question happened. The note under the
+    card now says outright that the lines are not shares and do not add to
+    100%.
+
+    **Rule kept: when he misreads a figure, check the presentation before
+    defending the number.**
+
+    **Worth him knowing, separately:** if those are his real figures, then
+    trading WITH FTFC currently has his LOWEST win rate of the three. That
+    is a finding, not a fault, and the card's verdict line compares money
+    per trade rather than win rate, so the two can point different ways.
+
 77. **"Bearish is green" on the trade cards** (his report, 2026-09-06:
     *"my most recent trades say FTFC bearish in green... it is confusing
     to the eye because it currently says Bearish and it is green when

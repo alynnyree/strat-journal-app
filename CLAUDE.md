@@ -726,6 +726,16 @@ Uses **The Strat**. Key concepts the code implements:
   Short — with it" line green or amber, the box itself neutral. A word
   that names a direction is coloured by that direction, never by whether
   it was good news.
+- **Percentages stacked in a list read as shares of a whole.** Three win
+  rates — 45% with FTFC, 48% against, 49% no FTFC — and he reasonably
+  asked why they do not add to 100%. They are three separate rates, each
+  measured inside its own group, and nothing was wrong with them. But
+  three bare percentages down a card look like a breakdown, so the
+  presentation was the fault, not the arithmetic. Every grouped row now
+  says **"won 9 of 20 (45%)"**, which cannot be read as a share, and the
+  note under the card says outright that the lines do not add to 100% and
+  why. When he misreads a figure, check the presentation before defending
+  the number.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and
