@@ -3040,7 +3040,7 @@ function renderDashboard(){
     const money = v => `<span class="num ${v>=0?'pos':'neg'}">${fmtMoney(v)}</span>`;
     const sub = (label, b) => !b.count ? '' :
       `<div style="display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--text-dim); margin-top:3px;">
-        <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
+        <span>${label} — won ${b.wins} of ${b.count} (${Math.round(b.wins/b.count*100)}%)</span>
         <span>${money(b.pnl)}</span>
       </div>`;
     sb.innerHTML = keys.sort((a,b)=>bySetup[b].all.pnl-bySetup[a].all.pnl).map(k=>{
@@ -3050,7 +3050,7 @@ function renderDashboard(){
       const worthSplitting = s.aligned.count > 0 && s.against.count > 0;
       return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
         <div style="display:flex; justify-content:space-between; gap:10px;">
-          <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s.all.count} trades · ${Math.round(s.all.wins/s.all.count*100)}% win</div></div>
+          <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">won ${s.all.wins} of ${s.all.count} (${Math.round(s.all.wins/s.all.count*100)}%)</div></div>
           <div class="num ${s.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.all.pnl)}</div>
         </div>
         ${worthSplitting ? sub('✅ ' + FTFC_STANCE_SHORT.with, s.aligned) + sub('✕ ' + FTFC_STANCE_SHORT.against, s.against) : ''}
@@ -3082,7 +3082,7 @@ function renderDashboard(){
       const money = v => `<span class="num ${v>=0?'pos':'neg'}">${fmtMoney(v)}</span>`;
       const sub = (label, b) => !b.count ? '' :
         `<div style="display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--text-dim); margin-top:3px;">
-          <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
+          <span>${label} — won ${b.wins} of ${b.count} (${Math.round(b.wins/b.count*100)}%)</span>
           <span>${money(b.pnl)}</span>
         </div>`;
       pb.innerHTML = pkeys.sort((a,b)=>byPlay[b].all.pnl-byPlay[a].all.pnl).map(k=>{
@@ -3090,7 +3090,7 @@ function renderDashboard(){
         const worthSplitting = s2.aligned.count > 0 && s2.against.count > 0;
         return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
           <div style="display:flex; justify-content:space-between; gap:10px;">
-            <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${s2.all.count} trades · ${Math.round(s2.all.wins/s2.all.count*100)}% win</div></div>
+            <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">won ${s2.all.wins} of ${s2.all.count} (${Math.round(s2.all.wins/s2.all.count*100)}%)</div></div>
             <div class="num ${s2.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s2.all.pnl)}</div>
           </div>
           ${worthSplitting ? sub('✅ ' + FTFC_STANCE_SHORT.with, s2.aligned) + sub('✕ ' + FTFC_STANCE_SHORT.against, s2.against) : ''}
@@ -3142,19 +3142,19 @@ function renderDashboard(){
             : `Your trades taken <b>in the direction of FTFC</b> are doing <b>${fmtMoney(-gap)}</b> per trade <b>worse</b> than the rest — worth a hard look before you keep waiting for it.`);
       const rowOf = (label, b, colour) => !b.count ? '' : `
         <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; margin-top:4px; color:${colour};">
-          <span>${label} — ${b.count} trade${b.count===1?'':'s'} · ${Math.round(b.wins/b.count*100)}% win</span>
+          <span>${label} — won ${b.wins} of ${b.count} (${Math.round(b.wins/b.count*100)}%)</span>
           <span><b>${fmtMoney(b.pnl)}</b> · ${fmtMoney(b.pnl/b.count)}/trade</span>
         </div>`;
       av.innerHTML = `
         <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; color:var(--bull);">
-          <span>✅ ${FTFC_STANCE.with} — ${alignedAll.count} trade${alignedAll.count===1?'':'s'} · ${rateA}% win</span>
+          <span>✅ ${FTFC_STANCE.with} — won ${alignedAll.wins} of ${alignedAll.count} (${rateA}%)</span>
           <span><b>${fmtMoney(alignedAll.pnl)}</b> · ${fmtMoney(perAligned)}/trade</span>
         </div>
         ${rowOf('⚠ ' + FTFC_STANCE.against, wrongWayAll, 'var(--amber)')}
         ${rowOf('✕ ' + FTFC_STANCE.none, noneAll, 'var(--text-dim)')}
         ${rowOf('· ' + FTFC_STANCE.unknown, unknownAll, 'var(--text-dim)')}
         <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12.5px; color:${gap>0?'var(--bull)':(Math.abs(gap)<1?'var(--text-dim)':'var(--bear)')};">${verdict}</div>
-        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Compared per trade, not as totals — you may have taken far more of one than the other. Counted on ${judged.length} of your ${trades.length} trade${trades.length===1?'':'s'}${notSettled ? ` — ${notSettled} left out because ${notSettled===1?'it has':'they have'} no result yet` : ''}. Each timeframe is read at the minute you entered, from real price data.</div>`;
+        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Each line is its own group's win rate — how many of THOSE trades won — so they are not shares of anything and do not add up to 100%. Compared per trade, not as totals — you may have taken far more of one than the other. Counted on ${judged.length} of your ${trades.length} trade${trades.length===1?'':'s'}${notSettled ? ` — ${notSettled} left out because ${notSettled===1?'it has':'they have'} no result yet` : ''}. Each timeframe is read at the minute you entered, from real price data.</div>`;
     }
   }
 
