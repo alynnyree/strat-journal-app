@@ -3140,8 +3140,11 @@ function renderDashboard(){
   // would
   // add a trade to the count and nothing to the total, quietly dragging
   // that side's per-trade average toward zero. It is left out and said so.
-  const settled = t => t.pnlDollar != null || t.pnlNet != null;
-  const judged = trades.filter(settled);
+  // Only trades with a real AFTER-FEE figure can be compared here, since
+  // that is what every line on this card is measured in. A trade whose fee
+  // is not known yet is left out and counted, so the footnote matches what
+  // the rows actually contain rather than overstating it.
+  const judged = trades.filter(netKnown);
   const notSettled = trades.length - judged.length;
 
   const alignedAll = blank(), wrongWayAll = blank(), noneAll = blank(), unknownAll = blank();
@@ -3185,7 +3188,7 @@ function renderDashboard(){
         ${rowOf('✕ ' + FTFC_STANCE.none, noneAll, 'var(--text-dim)')}
         ${rowOf('· ' + FTFC_STANCE.unknown, unknownAll, 'var(--text-dim)')}
         <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12.5px; color:${gap>0?'var(--bull)':(Math.abs(gap)<1?'var(--text-dim)':'var(--bear)')};">${verdict}</div>
-        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Each line is its own group's win rate — how many of THOSE trades won — so they are not shares of anything and do not add up to 100%. Compared per trade, not as totals — you may have taken far more of one than the other. Counted on ${judged.length} of your ${trades.length} trade${trades.length===1?'':'s'}${notSettled ? ` — ${notSettled} left out because ${notSettled===1?'it has':'they have'} no result yet` : ''}. Each timeframe is read at the minute you entered, from real price data.</div>`;
+        <div style="margin-top:6px; font-size:11px; color:var(--text-dim);">Each line is its own group's win rate — how many of THOSE trades won — so they are not shares of anything and do not add up to 100%. Compared per trade, not as totals — you may have taken far more of one than the other. Counted on ${judged.length} of your ${trades.length} trade${trades.length===1?'':'s'}${notSettled ? ` — ${notSettled} left out because ${notSettled===1?'it has':'they have'} no after-fee figure yet` : ''}. Each timeframe is read at the minute you entered, from real price data.</div>`;
     }
   }
 
@@ -6005,12 +6008,35 @@ function awaitingFullTape(t){
   return Date.now() - newest >= FULL_TAPE_DELAY_MS;
 }
 
+// Something the server can still supply and this trade simply does not
+// have. Not a preference, not an improvement — a blank.
+function missingEssentials(t){
+  return t.fees == null || t.undEntrySource == null;
+}
+
+// How many times this trade has been through a catch-up. A blank that
+// cannot be filled — Schwab genuinely has no record — must not be chased
+// for ever, so this stops after a few goes and says so rather than
+// looping.
+const MAX_FILL_ATTEMPTS = 3;
+
 function tradeIsStale(t){
   if(t.optExit == null) return false;
   if(t.source !== 'schwab-auto') return false;   // his own typed entries are not the server's to fill
-  if(awaitingFullTape(t)) return true;           // the one thing worth reopening a finished trade for
-  if(t.settled === true) return false;           // it has had its one pass; leave it alone
-  if(t.fees == null || t.undEntrySource == null) return true;
+  if(awaitingFullTape(t)) return true;           // a provisional price waiting on the full tape
+  // A BLANK outranks "finished".
+  //
+  // This is what stranded four of his trades without a fee (2026-09-08).
+  // "Settled" was checked first, so a trade that had been through one
+  // pass and STILL had no fee was sealed without one, permanently — and
+  // it then sat outside the after-fee total for ever. Finished has to
+  // mean COMPLETE, not "we tried once".
+  //
+  // Safe to retry now in a way it was not before: a catch-up can only
+  // fill in a blank, never change a figure that is already known, so
+  // this cannot move anything he is looking at except by completing it.
+  if(missingEssentials(t) && (t.fillAttempts || 0) < MAX_FILL_ATTEMPTS) return true;
+  if(t.settled === true) return false;           // complete, and left alone
   // A stock price that has never been looked up with Alpaca available.
   //
   // This is the check that was missing. It asked only "is anything
@@ -6647,7 +6673,18 @@ function refreshTradeFacts(saved, fresh){
   // His reading of the timeframes outranks the app's. This is the one
   // that was actually overwriting him: a trade he had corrected to "no
   // FTFC" came back as "FTFC, run of 6" after a single catch-up.
-  if(fresh.ftfcRun != null && !his(saved, 'ftfc')){
+  //
+  // MEASURED ONCE, like the money (2026-09-08: "FTFC and play performance
+  // fluctuate as well"). The thirteen timeframes are read from the price
+  // at the moment he entered — a moment that is over and cannot change —
+  // so a second reading under the same rule has nothing new to say, and
+  // any difference it produces just moves the trade between buckets on
+  // the Dashboard and makes the card look unstable. So it is written only
+  // when there is NO reading yet, or the rule itself has been corrected
+  // since. A corrected rule is a real reason; running again is not.
+  const noReadingYet = saved.ftfcRun == null;
+  const ruleMovedOn = Number(saved.ftfcVersion || 1) < Number(fresh.ftfcVersion || 1);
+  if(fresh.ftfcRun != null && !his(saved, 'ftfc') && (noReadingYet || ruleMovedOn)){
     set('ftfcRun', fresh.ftfcRun);
     // The rule that produced the reading. Without carrying this over, a
     // rebuild that DID re-measure would look exactly like one that had
@@ -6685,12 +6722,14 @@ function refreshTradeFacts(saved, fresh){
     saved.stop = fresh.stop; saved.stopAuto = fresh.stopAuto; saved.stopReason = fresh.stopReason; changed = true;
   }
 
-  // That was its catch-up. This trade is finished and is never queued for
-  // another one, whatever the app learns to work out later. Deliberately
-  // does NOT count as a change: marking it finished is not news for him,
-  // and reporting "1 trade brought up to date" for a flag would be the
-  // same as saying nothing at all.
-  saved.settled = true;
+  // That was a catch-up. Counted, so a blank that can never be filled is
+  // not chased for ever.
+  saved.fillAttempts = (saved.fillAttempts || 0) + 1;
+  // "Finished" now means COMPLETE — or tried enough times that nothing
+  // more is coming. Marking a trade finished while it is still missing a
+  // fee is what left four of his outside the after-fee total with no way
+  // back in. Deliberately not counted as a change: a flag is not news.
+  saved.settled = !missingEssentials(saved) || saved.fillAttempts >= MAX_FILL_ATTEMPTS;
   return changed;
 }
 async function resetAndReimport(){
