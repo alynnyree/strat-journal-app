@@ -28,6 +28,13 @@ rather than passing quietly:
   card below the fold is left invisible now the scrolling has moved inside a
   box; and that Bar Replay still covers the whole screen.
 
+- **what-a-trade-is-worth.js** — the Home line giving average win, average
+  loss and what an average trade is worth. Built from the owner's own broker
+  fills through the real pairing code, so the bar is that it reproduces his
+  real total to the penny; plus hand-worked figures, a break-even trade
+  landing on the win side, all-wins, all-losses, a trade with no fee left
+  out, and an empty journal showing nothing rather than a zero.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set

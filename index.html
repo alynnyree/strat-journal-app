@@ -604,6 +604,11 @@
          lower tiles and cut the text off. Nothing sits on top of anything
          now: the figures end, then this begins. -->
     <div id="statFeeNote" class="fee-note"></div>
+    <!-- Asked for by name (2026-09-08): average win, average loss and what
+         an average trade is worth. Written as a SENTENCE rather than three
+         more tiles, because three bare numbers side by side is exactly the
+         shape he misread once before with the win rates. -->
+    <div id="statEdgeNote" class="fee-note"></div>
 
     <div class="card" style="margin-top:14px;" id="riskTrackingCard">
       <h3>Risk Rules</h3>
@@ -3104,6 +3109,41 @@ function renderDashboard(){
         + (feesKnown.length < count
             ? ` — recorded on ${feesKnown.length} of ${count} trades so far, so the two figures above will keep moving apart until the rest come in`
             : '');
+  }
+
+  // ---- What an average trade is worth ---------------------------------
+  //
+  // Counted on the same trades and the same win/loss rule as the win rate
+  // above -- break-even counts as a win, his choice (2026-09-08) -- so the
+  // two figures can never disagree with each other.
+  //
+  // This is the one line that explains a whole year: win rate times the
+  // average win, less the loss rate times the average loss. It always
+  // multiplies back up to the total exactly, because it is that total
+  // divided by the number of trades. Shown that way round because the
+  // multiplication is what makes it believable.
+  const edgeNote = document.getElementById('statEdgeNote');
+  if(edgeNote){
+    const won = netable.filter(t => netPnlOf(t) >= 0);
+    const lost = netable.filter(t => netPnlOf(t) < 0);
+    const total = a => a.reduce((s,t) => s + netPnlOf(t), 0);
+    if(!netable.length){
+      edgeNote.innerHTML = '';
+    } else {
+      const avgWin = won.length ? total(won) / won.length : null;
+      const avgLoss = lost.length ? Math.abs(total(lost)) / lost.length : null;
+      const per = total(netable) / netable.length;
+      const bits = [];
+      bits.push(avgWin == null ? 'No wins yet'
+        : `Average win <b style="color:var(--bull);">${fmtMoney(avgWin)}</b>`);
+      bits.push(avgLoss == null ? 'no losses yet'
+        : `average loss <b style="color:var(--bear);">${fmtMoney(avgLoss)}</b>`);
+      const perColour = per >= 0 ? 'var(--bull)' : 'var(--bear)';
+      bits.push(`an average trade is worth <b style="color:${perColour};">${fmtMoney(per)}</b>`);
+      edgeNote.innerHTML = bits.join(' · ')
+        + ` — across ${netable.length} trade${netable.length===1?'':'s'} that is `
+        + `<b style="color:${perColour};">${fmtMoney(per * netable.length)}</b>`;
+    }
   }
 
   const pnlAlt = document.getElementById('statPnlAlt');
