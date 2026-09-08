@@ -24,6 +24,54 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+81. **The net P&L was still moving — and freezing storage could never
+    have stopped it** (his report, 2026-09-08: *"The net P&L is still
+    fluctuating between app updates... I thought you fixed it before."*).
+    **Status: ONE PROVEN CAUSE FIXED (11 checks). Whether it was the ONLY
+    cause needs one figure from him, which the app now shows.**
+
+    He was right, and my earlier fix was aimed one layer too low. Task 73
+    settled the money at import and froze it, and that holds. But the
+    headline total was never read from storage alone -- it was assembled
+    as the page drew, and `realPnl` fell back to the BEFORE-fee profit for
+    any trade whose fee was not known. So a total labelled "after fees"
+    was a mixture of both, and every fee that later arrived moved it.
+
+    Measured, not reasoned about: ten trades with three fees outstanding
+    read **$290.76**, and **$286.80** once those fees landed. Nothing
+    stored had changed between the two.
+
+    Now: unknown stays unknown. A fee that IS known but whose after-fee
+    figure was never written is worked out from two known numbers, which
+    cannot drift. Everything else is excluded, and the screen says how
+    many were left out and why -- so the same question is answerable at a
+    glance instead of costing a round.
+
+    Swept the grouped cards too: a trade with no after-fee figure is no
+    longer counted into any setup, play or FTFC bucket carrying its
+    before-fee profit.
+
+    **What is NOT yet known:** whether he has any fee-less trades left at
+    all. New imports always carry a fee -- proven on all 480 of his real
+    fills in task 73 -- so the only candidates are old ones. The new line
+    on the Home tab answers this directly: if it says nothing was left
+    out, the cause is elsewhere and I look again.
+
+80. **Paid market data: declined.** (2026-09-07: *"I don't want to pay
+    for data from Alpaca."*) **Status: DECIDED. Do not raise again.**
+
+    Alpaca charges $99/month to remove the 15-minute delay on the full
+    consolidated tape. He has said no, and nothing depends on it -- every
+    piece of task 79 runs on the free plan.
+
+    What that means in practice, so it is not re-litigated later: a fresh
+    trade is priced from the real-time single-exchange feed (a genuine
+    print at the right second, from one venue), and improved once to the
+    all-venues price fifteen minutes later. The residual error is a cent
+    or two for those fifteen minutes, and nothing after that.
+
+    Any future work on price accuracy stays inside the free tier.
+
 79. **The real reason his newest trades read "approx."** (2026-09-07,
     after he asked how to be sure the market data always pulls exact
     data). **Status: BUILT AND TESTED (16 server checks, 15 app checks).
