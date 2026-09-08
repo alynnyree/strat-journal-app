@@ -2999,7 +2999,20 @@ function renderDashboard(){
     feeNote.innerHTML = !anyFees
       ? 'No fees recorded yet — every figure here is before Schwab\'s fees. Re-import your trades to bring them in.'
       : `Fees paid: <b style="color:var(--text);">${fmtMoney(feeTotal)}</b>`
-        + (netMissing ? ` · ${netMissing} trade${netMissing===1?'':'s'} left out of the after-fee total — their fee is not known yet` : '')
+        + (() => {
+            if(!netMissing) return '';
+            // Told apart, because they need completely different things
+            // from him: one is "wait", the other is "this is as far as it
+            // goes". Watching a number that will never move is the fault
+            // this whole line exists to prevent.
+            const stillTrying = trades.filter(t => t.pnlDollar != null && !netKnown(t)
+              && (t.fillAttempts || 0) < MAX_FILL_ATTEMPTS).length;
+            const gaveUp = netMissing - stillTrying;
+            const parts = [];
+            if(stillTrying) parts.push(`${stillTrying} still being worked out`);
+            if(gaveUp) parts.push(`${gaveUp} Schwab could not give a fee for, so ${gaveUp===1?'it stays':'they stay'} out for good`);
+            return ` · ${netMissing} trade${netMissing===1?'':'s'} left out of the after-fee total — ${parts.join(', ')}`;
+          })()
         + (feesKnown.length < count
             ? ` — recorded on ${feesKnown.length} of ${count} trades so far, so the two figures above will keep moving apart until the rest come in`
             : '');
@@ -6158,7 +6171,24 @@ async function maybeAutoRebuild(url){
   // gets one fresh attempt, immediately; after that the usual limits
   // apply again.
   const newReason = Number(hist.forVersion || 0) !== FTFC_RULE_VERSION;
-  if(!newReason){
+
+  // Trades with an actual blank the server can fill, that have not yet
+  // used up their own attempts. Counted here so the limits below can tell
+  // a certainty from a hunch.
+  const definite = loadTrades().filter(t =>
+    t.optExit != null && t.source === 'schwab-auto'
+    && missingEssentials(t) && (t.fillAttempts || 0) < MAX_FILL_ATTEMPTS).length;
+
+  // A definite gap gets past the attempt cap and the half-day wait -- but
+  // not past a rebuild started in the last few minutes, or it would ask
+  // again before the first answer had come back.
+  const RECENT_MS = 10 * 60 * 1000;
+  if(definite){
+    if(hist.lastAt && Date.now() - hist.lastAt < RECENT_MS){
+      noteDecline(`${definite} trade${definite===1?'':'s'} still to fill in — one was asked for a few minutes ago, waiting for it`);
+      return false;
+    }
+  } else if(!newReason){
     if((hist.attempts || 0) >= MAX_AUTO_REBUILDS){ noteDecline('it has already tried three times for this'); return false; }
     if(hist.lastAt && Date.now() - hist.lastAt < REBUILD_COOLDOWN_MS){
       const hrs = Math.round((REBUILD_COOLDOWN_MS - (Date.now() - hist.lastAt))/3600e3);
@@ -6172,7 +6202,30 @@ async function maybeAutoRebuild(url){
   const closed = trades.filter(t => t.optExit != null && t.source === 'schwab-auto');
   if(closed.length < 5){ noteDecline('fewer than five trades came from Schwab, so there is nothing worth rebuilding'); return false; }
   const stale = closed.filter(tradeIsStale).length;
-  if(stale / closed.length < REBUILD_SHARE){ noteDecline('the trades are already up to date'); return false; }
+  // A DEFINITE gap is not the same as a hunch, and the share threshold
+  // must not block it (2026-09-08). Four of his trades had no fee. That
+  // is four out of about three hundred -- barely one percent, far under
+  // the quarter this asks for -- so it declined every single time, and
+  // told him "the trades are already up to date" while four of them
+  // plainly were not. He watched that line sit at four and never move.
+  //
+  // The quarter-of-the-journal rule exists to stop a GUESS ("these look
+  // short of something") from looping. A countable list of trades with a
+  // blank where a figure should be is not a guess. It is already bounded
+  // by each trade's own three attempts, so it does not need this one too.
+  if(!definite && stale / closed.length < REBUILD_SHARE){
+    // Three different states, and they must not share one sentence.
+    // "Nothing is missing" and "something is missing but we have stopped
+    // asking" are opposite facts, and saying the first when the second is
+    // true is how he ended up watching a line that never moved.
+    const givenUp = closed.filter(t => missingEssentials(t)).length;
+    noteDecline(stale
+      ? `${stale} trade${stale===1?'':'s'} could be filled in, but that is too small a share of the journal to rebuild the lot`
+      : givenUp
+        ? `${givenUp} trade${givenUp===1?'':'s'} still short of a fee, but each has been asked for three times and nothing came back — they are not being chased any more`
+        : 'every trade already has everything the server can work out');
+    return false;
+  }
 
   // Never start one over the top of a rebuild GENUINELY running. A job
   // still marked "running" long after it began is not running — nothing
@@ -6249,7 +6302,22 @@ function noteRebuildOutcome(){
   const trades = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
   if(!trades.length) return;
   if(trades.filter(tradeIsStale).length / trades.length < REBUILD_SHARE){
-    localStorage.removeItem(AUTO_REBUILD_KEY);
+    // Clears the ATTEMPT COUNT only, never the timestamp.
+    //
+    // It used to wipe the whole record, which threw away WHEN the last
+    // rebuild was asked for — so the guard that stops a second request
+    // going out while the first is still working had nothing to check
+    // against, and the app could ask the server again every thirty
+    // seconds. Found while testing the four trades that would not fill
+    // in; it would have hammered his server as soon as they started to.
+    const hist = rebuildHistory();
+    if(hist.lastAt){
+      try{ localStorage.setItem(AUTO_REBUILD_KEY, JSON.stringify({
+        lastAt: hist.lastAt, attempts: 0, forVersion: hist.forVersion,
+      })); }catch(e){}
+    } else {
+      localStorage.removeItem(AUTO_REBUILD_KEY);
+    }
   }
 }
 

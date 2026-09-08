@@ -24,6 +24,40 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+83. **"It never counted down to nothing"** (2026-09-08). **Status: FIXED
+    AND TESTED (15 new checks, 3 outdated ones corrected).**
+
+    Task 82 made `tradeIsStale` correctly say those four trades were short
+    of a fee. **Nothing acted on it.** `maybeAutoRebuild` will not run
+    unless a QUARTER of the journal is short, and four out of about three
+    hundred is barely one percent — so it declined every time, and
+    declined with the words "the trades are already up to date" while four
+    of them plainly were not.
+
+    I fixed the condition and never followed the chain to the thing that
+    acts on it. That is the lesson, and it is now in CLAUDE.md.
+
+    A countable list of blanks is a certainty, not a hunch: it now gets
+    past the share threshold, the three-attempt cap and the half-day wait,
+    bounded instead by each trade's own three tries. It still will not ask
+    twice inside ten minutes, so a request cannot go out while the first
+    is still working.
+
+    **A second, worse bug found while testing this.**
+    `noteRebuildOutcome` cleared the whole rebuild record to reset the
+    attempt count — including the timestamp. That is what the ten-minute
+    guard checks against, so with it gone the app could have asked the
+    server for a full rebuild every thirty seconds as soon as those trades
+    began filling in. It only surfaced because a test kept refusing to
+    reproduce and I chased why instead of adjusting the test.
+
+    Every decline now says which of three states it is: too small a share
+    to rebuild the lot, asked three times with nothing coming back, or
+    genuinely complete. The fee line likewise separates "still being
+    worked out" from "Schwab could not give a fee, so it stays out for
+    good" — because watching a number that will never move is the exact
+    thing this line exists to prevent.
+
 82. **Four trades stranded without a fee, and the cards drifting**
     (2026-09-08: *"FTFC and play performance fluctuate as well... Fees
     paid: says 4 trades left out. How long does it take for those trades
