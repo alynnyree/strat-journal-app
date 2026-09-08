@@ -21,6 +21,12 @@ rather than passing quietly:
   used to be completely invisible, both to "Find Duplicate Trades" and to the
   import, so it was written down again on every pass.
 
+- **bottom-bar-stays-put.js** — stands the phone's two ideas of the screen
+  apart on purpose (pinched in, toolbar sliding, and the case he
+  photographed) and checks the bottom row of buttons lands on the edge he can
+  actually see, is left completely alone when the two agree, and refuses an
+  answer that cannot be true rather than pushing itself off the screen.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set

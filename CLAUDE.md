@@ -1037,6 +1037,28 @@ Uses **The Strat**. Key concepts the code implements:
   difference is real evidence and worth chasing, but it is not proof on its
   own, and stating it as proof is the same fault as inventing the number.
   The app's own day-by-day comparison is what settles it.
+- **A phone has TWO ideas of the screen, and `position: fixed` follows the
+  wrong one.** He photographed the bottom row of buttons floating in the
+  middle of the screen with the trade list carrying on above AND below it.
+  The bar is `position:fixed; bottom:0`, which pins it to the bottom of the
+  LAYOUT area — and on an iPhone that is not the edge he is looking at.
+  Pinching to zoom, and Safari's own toolbar sliding in and out as he
+  scrolls, move one without moving the other, and the bar is left stranded
+  part-way up. `window.visualViewport` is what says where the visible area
+  really is; the bar is nudged by the difference on every event that can
+  move either one. Ruled out first, by measuring rather than reasoning: no
+  transformed ancestor (it is a direct child of `<body>`), the reveal sweep
+  only touches `.card`/`.idx-row`, and the page has no horizontal overflow
+  at 430px, so shrink-to-fit is not in play. **Not confirmed on his actual
+  iPhone** — the numbers are reported behind Details so a bar still out of
+  place answers it in one round instead of three.
+- **A clamp worked out FROM the figure being doubted is not a clamp.** The
+  first version limited the nudge to `max(visibleHeight, pageHeight)`, so a
+  nonsense answer set its own ceiling and shoved the bar a whole screen down
+  — off the screen entirely, which is worse than the bug being fixed. An
+  implausible figure is now refused outright and the bar left exactly where
+  it was. Recoverable beats invisible; bound a suspect value against
+  something independent of it, or do nothing.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
