@@ -778,6 +778,24 @@ Uses **The Strat**. Key concepts the code implements:
   what assembles it on screen, not only what is written down.** Unknown
   now stays unknown, the after-fee total counts only trades that have one,
   and the screen says how many were left out and why.
+- **"Finished" must mean COMPLETE, not "we tried once".** `tradeIsStale`
+  checked `settled` BEFORE checking whether anything was actually missing,
+  so a trade that had its one catch-up and STILL had no fee was sealed
+  without one — permanently outside the after-fee total, with no way back
+  in. Four of his trades were stuck exactly there, and the honest answer
+  to "how long until they fill in?" was "never". A trade is finished when
+  it is complete, or when it has tried enough times that nothing more is
+  coming (three), and a blank always outranks the flag. Safe to retry now
+  in a way it was not before: a catch-up can only fill a blank, never
+  change a known figure.
+- **A measurement of a moment that is over should be taken ONCE.** The
+  thirteen timeframes are read from the price at his entry — a moment that
+  cannot change — so a second reading under the same rule has nothing new
+  to say, yet it was overwriting the first and moving trades between
+  buckets on the Dashboard. He reported the FTFC and play cards drifting.
+  Written now only when there is no reading yet, or `ftfcVersion` shows
+  the rule itself was corrected. A corrected rule is a real reason;
+  running again is not.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and

@@ -24,6 +24,34 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+82. **Four trades stranded without a fee, and the cards drifting**
+    (2026-09-08: *"FTFC and play performance fluctuate as well... Fees
+    paid: says 4 trades left out. How long does it take for those trades
+    to fill in?"*). **Status: BOTH FIXED AND TESTED (17 new checks).**
+
+    **The honest answer to his question was "never", and that was my
+    fault.** `tradeIsStale` checked `settled` BEFORE checking whether
+    anything was missing. So a trade that had its one catch-up and still
+    had no fee was sealed without one, permanently outside the after-fee
+    total. The "one pass and finished" rule from task 73 created this.
+
+    Finished now means COMPLETE: a blank outranks the flag, and a trade is
+    only marked finished once it has what it needs — or has tried three
+    times and nothing more is coming. Safe to retry in a way it was not
+    before, because a catch-up can now only fill a blank and never change
+    a figure already known.
+
+    **And the cards.** The thirteen timeframes are read from the price at
+    the moment he entered — a moment that is over and cannot change — so a
+    second reading under the same rule has nothing new to say. But it was
+    overwriting the first, which moved trades between buckets and made the
+    FTFC and play cards look unstable. Now written only when there is no
+    reading yet, or the rule version shows the rule itself was corrected.
+
+    Also made the card's footnote honest: it said "Counted on 4 of your 4"
+    while only 2 were in the rows, and said they were left out for having
+    "no result yet" when the real reason is no after-fee figure.
+
 81. **The net P&L was still moving — and freezing storage could never
     have stopped it** (his report, 2026-09-08: *"The net P&L is still
     fluctuating between app updates... I thought you fixed it before."*).
