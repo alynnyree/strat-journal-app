@@ -1,12 +1,17 @@
-// The bottom row of buttons floating in the middle of the screen.
+// The bottom row of buttons moving as he scrolls.
 //
-// He photographed it on 2026-09-08 with the trade list carrying on above AND
-// below it. The bar is pinned to the bottom of the page, and on an iPhone
-// that is not the same edge as the bottom of what he is looking at: pinching
-// to zoom, and Safari's toolbar sliding in and out, move one without the
-// other. These cases stand both apart on purpose and check the bar ends up
-// on the edge he can see -- and, just as importantly, that it is left
-// completely alone when the two agree.
+// He reported it twice. First floating in the middle of the screen with the
+// trade list carrying on above and below it; then, after a first attempt at
+// fixing it, still moving whenever he scrolled.
+//
+// The first attempt measured the gap between the phone's two ideas of where
+// the page ends and nudged the bar back. That left the bar chasing a moving
+// number, which is the moving he reported the second time. It is not pinned
+// to anything now: the app is one box exactly the height of the screen, the
+// trades scroll inside it, and the bar is simply its last row.
+//
+// So these check the property that actually matters -- the bar does not move,
+// while the trades underneath it do -- rather than any particular arithmetic.
 const { launch, serve } = require('./browser.js');
 
 (async () => {
@@ -17,138 +22,148 @@ const { launch, serve } = require('./browser.js');
   let pass = 0, fail = 0;
   const check = (l, c) => { if (c) { pass++; console.log('PASS:', l); } else { fail++; console.log('FAIL:', l); } };
 
-  // A phone whose visible area disagrees with the page's own idea of it.
-  // `seen` is what Safari says is actually on show; null means a browser
-  // that cannot answer at all.
-  async function phone(seen){
-    const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  const trade = (i) => ({
+    id: 'n'+i, ticker:'NIO', dir:'Short', occ:'NIO   260723P0000500'+(i%10),
+    entryDate:'2026-06-24', entryTime:'15:5'+(i%10), exitDate:'2026-07-23', exitTime:'12:32',
+    optEntry:0.49, optExit:0.53, contracts:2, undEntry:4.92, undExit:4.62,
+    fees:2.65, pnlDollar:8, pnlNet:5.35, pnlPercent:8.2, winLoss:'Win',
+    ftfc:{}, ftfcRun:4, ftfcConfirmed:true, ftfcDirection:'Bearish',
+    notes:'', source:'schwab-auto', settled:true, fillAttempts:1,
+  });
+
+  // A phone with enough trades on it that the list is far longer than the
+  // screen -- the only condition under which any of this can be seen.
+  async function phone(opts){
+    const o = opts || {};
+    const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+    const p = await ctx.newPage();
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
-    await p.addInitScript((s) => {
-      if(s === null){
-        Object.defineProperty(window, 'visualViewport', { value: undefined, configurable: true });
-        return;
-      }
-      const listeners = { resize: [], scroll: [] };
-      const fake = {
-        width: s.width, height: s.height, offsetLeft: s.offsetLeft, offsetTop: s.offsetTop, scale: s.scale,
-        addEventListener: (n, f) => { (listeners[n] || (listeners[n] = [])).push(f); },
-        removeEventListener: () => {},
-      };
-      // So a case can move the visible area afterwards and see the bar follow.
-      window.__moveVisible = (next) => {
-        Object.assign(fake, next);
-        (listeners.resize || []).forEach(f => f());
-      };
-      Object.defineProperty(window, 'visualViewport', { value: fake, configurable: true });
-    }, seen === null ? null : Object.assign({ width: 390, height: 844, offsetLeft: 0, offsetTop: 0, scale: 1 }, seen));
+    if(o.motion){
+      // With the fade-in effect ON, a card only appears once something says
+      // it is on screen. The page itself no longer scrolls, so this is the
+      // case that would leave the Journal blank if the effect were still
+      // listening in the wrong place.
+      await p.addInitScript(() => localStorage.setItem('strat_intro', JSON.stringify({on:false,motion:true})));
+    }
     await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
-    await p.route('**/api/trades/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
+    await p.route('**/api/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');
-    await p.evaluate(() => {
-      localStorage.setItem('strat_intro', JSON.stringify({on:false,motion:false}));
+    await p.evaluate(({ts, motion}) => {
+      localStorage.setItem('strat_intro', JSON.stringify({on:false, motion:!!motion}));
       localStorage.setItem('strat_backfilled','1');
-    });
-    await p.reload(); await p.waitForTimeout(900);
+      localStorage.setItem('strat_trades', JSON.stringify(ts));
+    }, { ts: Array.from({length: 40}, (_, i) => trade(i)), motion: !!o.motion });
+    await p.reload(); await p.waitForTimeout(1100);
     return { p, errors };
   }
 
-  // Where the bar's bottom edge actually lands, and where the page thinks
-  // its own bottom edge is.
-  const barBottom = (p) => p.evaluate(() => {
-    const bar = document.querySelector('.navbar');
-    return { bottom: Math.round(bar.getBoundingClientRect().bottom),
-             pageBottom: document.documentElement.clientHeight,
-             moved: bar.style.transform || '(not moved)' };
+  const where = (p) => p.evaluate(() => {
+    const bar = document.querySelector('.navbar').getBoundingClientRect();
+    const box = document.getElementById('appScroll');
+    const seen = document.documentElement.clientHeight;
+    return { top: Math.round(bar.top), bottom: Math.round(bar.bottom),
+             scrolled: Math.round(box.scrollTop), seen,
+             canScroll: box.scrollHeight - box.clientHeight };
   });
+  const scrollBy = (p, n) => p.evaluate((n) => {
+    document.getElementById('appScroll').scrollTop += n;
+  }, n);
 
   {
-    // The two agree. Nothing must be touched -- a fix that fidgets with a
-    // bar that is already right is a new bug.
-    const { p, errors } = await phone({ height: 844 });
-    const r = await barBottom(p);
-    check(`agreeing screen: the bar is left alone (${r.moved})`, r.moved === '(not moved)');
-    check(`agreeing screen: it sits on the bottom edge (${r.bottom} of ${r.pageBottom})`, r.bottom === r.pageBottom);
-    check('agreeing screen: nothing threw', errors.length === 0);
+    const { p, errors } = await phone();
+    await p.click('.navbar .item[data-view="journal"]'); await p.waitForTimeout(500);
+
+    const start = await where(p);
+    check(`there is more list than screen, so this can actually be seen (${start.canScroll}px of it)`, start.canScroll > 800);
+    check(`the bar ends on the bottom edge of the screen (${start.bottom} of ${start.seen})`, start.bottom === start.seen);
+
+    // Scroll the way he does, in stages, and watch the bar.
+    const seenAt = [start.bottom];
+    for(const step of [200, 400, 350, 900, -600]){
+      await scrollBy(p, step); await p.waitForTimeout(180);
+      seenAt.push((await where(p)).bottom);
+    }
+    const after = await where(p);
+    check(`the trades really did move underneath it (scrolled to ${after.scrolled})`, after.scrolled > 0);
+    check(`the bar never moved through any of it (${[...new Set(seenAt)].join(', ')})`,
+      new Set(seenAt).size === 1 && seenAt[0] === start.seen);
+    check('nothing on the page threw', errors.length === 0);
     await p.close();
   }
 
   {
-    // What he photographed: the page believes it has more room below than is
-    // really on show, so a bar on the page's bottom edge floats up the screen.
-    // Here the visible area is 180 TALLER than the page's own idea, which
-    // strands the bar 180 above where he can see.
-    const { p, errors } = await phone({ height: 1024 });
-    const r = await barBottom(p);
-    check(`stranded bar: it is moved back down (${r.moved})`, /translateY\(180px\)/.test(r.moved));
-    check(`stranded bar: it lands on the edge he can see (${r.bottom}, visible bottom 1024)`, r.bottom === 1024);
-    check('stranded bar: nothing threw', errors.length === 0);
+    // The page itself must not scroll at all -- if it does, the phone's
+    // toolbar starts sliding and the whole problem comes back.
+    const { p } = await phone();
+    const pageScrolls = await p.evaluate(() => {
+      const d = document.documentElement;
+      return { canScroll: d.scrollHeight - d.clientHeight, wide: d.scrollWidth - d.clientWidth };
+    });
+    check(`the page itself cannot scroll (${pageScrolls.canScroll}px)`, pageScrolls.canScroll <= 0);
+    check(`and nothing sticks out sideways (${pageScrolls.wide}px)`, pageScrolls.wide <= 0);
     await p.close();
   }
 
   {
-    // Safari's toolbar sliding in: less is on show than the page thinks, so
-    // the bar would otherwise hide underneath it.
-    const { p } = await phone({ height: 700 });
-    const r = await barBottom(p);
-    check(`toolbar showing: the bar is lifted above it (${r.moved})`, /translateY\(-144px\)/.test(r.moved));
-    check(`toolbar showing: it sits on the visible edge (${r.bottom})`, r.bottom === 700);
+    // Every tab, not just the one he happened to photograph.
+    const { p } = await phone();
+    for(const tab of ['journal','new','ai','checklist','dashboard']){
+      await p.click(`.navbar .item[data-view="${tab}"]`).catch(()=>{});
+      await p.waitForTimeout(300);
+      const r = await where(p);
+      check(`${tab}: the bar ends on the bottom edge (${r.bottom} of ${r.seen})`, r.bottom === r.seen);
+    }
     await p.close();
   }
 
   {
-    // Pinched in: the visible area is both smaller and offset down the page.
-    const { p } = await phone({ height: 500, offsetTop: 200, scale: 2 });
-    const r = await barBottom(p);
-    check(`pinched in: the bar follows to ${r.bottom} (visible bottom 700)`, r.bottom === 700);
+    // The fade-in effect used to be told about scrolling by the PAGE. With
+    // the page no longer scrolling, a card below the fold would have stayed
+    // invisible for ever -- this app has already shown him a blank Journal
+    // holding 233 trades once.
+    const { p, errors } = await phone({ motion: true });
+    await p.click('.navbar .item[data-view="journal"]'); await p.waitForTimeout(500);
+    await scrollBy(p, 3000); await p.waitForTimeout(900);
+    const shown = await p.evaluate(() => {
+      const seen = document.documentElement.clientHeight;
+      const onScreen = [...document.querySelectorAll('#view-journal .card')]
+        .filter(c => { const r = c.getBoundingClientRect(); return r.top < seen && r.bottom > 0; });
+      return { onScreen: onScreen.length,
+               // Released, not merely finished fading -- asking for the
+               // animation to be over measures the clock, not the app.
+               stranded: onScreen.filter(c => c.classList.contains('reveal') && !c.classList.contains('in')).length,
+               // But a card sitting at nothing IS the blank-Journal fault,
+               // whatever it is marked, so that is checked too.
+               invisible: onScreen.filter(c => Number(getComputedStyle(c).opacity) < 0.5).length };
+    });
+    check(`with the fade-in on, no card below the fold is stranded (${shown.onScreen} on screen, ${shown.stranded} stranded)`,
+      shown.onScreen > 0 && shown.stranded === 0);
+    check(`and none of them is sitting at nothing (${shown.invisible} invisible)`, shown.invisible === 0);
+    check('and nothing threw', errors.length === 0);
     await p.close();
   }
 
   {
-    // It has to keep following, not just be right once.
-    const { p } = await phone({ height: 1024 });
-    await p.evaluate(() => window.__moveVisible({ height: 620, offsetTop: 0 }));
-    await p.waitForTimeout(150);
-    const r = await barBottom(p);
-    check(`the bar follows when the visible area changes (${r.bottom})`, r.bottom === 620);
-    await p.close();
-  }
-
-  {
-    // A nonsense answer must never be able to throw the bar off the screen.
-    // Refused outright rather than clamped: a clamp worked out from the very
-    // figure being doubted lets a nonsense answer set its own limit.
-    const { p, errors } = await phone({ height: 999999 });
-    const r = await barBottom(p);
-    check(`a nonsense figure is refused, not acted on (${r.moved})`, r.moved === '(not moved)');
-    check(`and the bar stays on the page's bottom edge (${r.bottom})`, r.bottom === r.pageBottom);
-    check('a nonsense figure does not throw', errors.length === 0);
-    const why = await p.evaluate(() => techText().split('\n').find(l => /^screen:/.test(l)) || '');
-    check(`Details says why it was left alone (${why.slice(-60)})`, /left alone — the visible bottom came back as 999999/.test(why));
-    await p.close();
-  }
-
-  {
-    // A browser that cannot say. Leave everything exactly as it was.
-    const { p, errors } = await phone(null);
-    const r = await barBottom(p);
-    check(`a browser that cannot say: the bar is left alone (${r.moved})`, r.moved === '(not moved)');
-    check(`a browser that cannot say: it still sits on the bottom edge (${r.bottom})`, r.bottom === r.pageBottom);
-    check('a browser that cannot say: nothing threw', errors.length === 0);
-    await p.close();
-  }
-
-  {
-    // And the numbers reach me without reaching him: behind Details, never
-    // on the page itself.
-    const { p } = await phone({ height: 1024 });
-    const shown = await p.evaluate(() => document.body.innerText);
-    check('the screen figures are not on the page itself', !/visible 390x1024/.test(shown));
-    const details = await p.evaluate(() => typeof techText === 'function' ? techText() : '');
-    check(`Details reports what the screen said (${(details.split('\n').find(l=>/^screen:/.test(l))||'').slice(0,80)})`,
-      /^screen: page 390x844 · visible 390x1024/m.test(details));
-    check('Details says what was done about it', /bottom bar: moved 180px/.test(details));
+    // Bar Replay covers the whole screen. It must still do that from inside
+    // the scrolling box.
+    const { p, errors } = await phone();
+    await p.click('.navbar .item[data-view="journal"]'); await p.waitForTimeout(500);
+    const modal = await p.evaluate(() => {
+      const m = document.getElementById('replayModal');
+      if(!m) return null;
+      m.style.display = 'flex';
+      const r = m.getBoundingClientRect();
+      const out = { top: Math.round(r.top), left: Math.round(r.left),
+                    width: Math.round(r.width), height: Math.round(r.height),
+                    seenW: document.documentElement.clientWidth, seenH: document.documentElement.clientHeight };
+      m.style.display = 'none';
+      return out;
+    });
+    check(`Bar Replay still covers the whole screen (${modal && modal.width}x${modal && modal.height})`,
+      modal && modal.top === 0 && modal.left === 0 && modal.width === modal.seenW && modal.height === modal.seenH);
+    check('and nothing threw', errors.length === 0);
     await p.close();
   }
 
