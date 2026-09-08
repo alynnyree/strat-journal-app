@@ -2704,10 +2704,22 @@ function saveTrade(){
   const optExit = hasExit ? parseFloat(optExitRaw) : null;
   const contracts = parseFloat(document.getElementById('f_contracts').value)||1;
   const dir = document.getElementById('f_dir').value;
-  const rrPlanned = parseFloat(document.getElementById('f_rr').value)||0;
-  const undEntry = parseFloat(document.getElementById('f_undEntry').value)||0;
-  const undExit = parseFloat(document.getElementById('f_undExit').value)||0;
-  const stop = parseFloat(document.getElementById('f_stop').value)||0;
+  // An empty box means NOT KNOWN, and has to be stored as such. Storing zero
+  // instead said something untrue -- a stock price of $0.00 on the card, a
+  // stop at zero that the realized reward-to-risk quietly refused to use, and
+  // a stop the app could then never work out for him because a zero is not a
+  // blank. Every trade imported before these were worked out already carries
+  // "not known" here, so it is the shape the rest of the app expects.
+  const numberOrBlank = (id) => {
+    const raw = String(document.getElementById(id).value || '').trim();
+    if(raw === '') return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const rrPlanned = numberOrBlank('f_rr');
+  const undEntry = numberOrBlank('f_undEntry');
+  const undExit = numberOrBlank('f_undExit');
+  const stop = numberOrBlank('f_stop');
 
   // P&L only calculated once contracts have actually been sold (exit price
   // entered). No sign flip for Short — every position here is a BOUGHT
@@ -2757,10 +2769,37 @@ function saveTrade(){
   if(editingTradeId){
     const idx = trades.findIndex(t=>t.id===editingTradeId);
     if(idx>=0){
+      const before = trades[idx];
       // Whatever he just changed becomes his, and is never written over.
-      const mine = markUserSet(trades[idx], trade);
+      const mine = markUserSet(before, trade);
       if(mine) trade.userSet = mine;
-      trades[idx] = trade;
+      // The contract code is not erasable from here. Nothing on this screen
+      // needs it gone, and a trade without one cannot be checked against his
+      // broker's own file or recognised as a second copy of itself.
+      if(!String(trade.occ || '').trim() && String(before.occ || '').trim()) trade.occ = before.occ;
+      // MERGED onto the trade already on file, never put in its place.
+      //
+      // This screen builds a whole trade out of the boxes it shows, and
+      // putting that in place of the saved one threw away every fact the
+      // screen has no box for. Measured on one imported trade, adding a
+      // note destroyed thirteen of them: the fee Schwab charged, the
+      // after-fee figure, both halves of the fee, the exact instants of
+      // both fills, where each stock price came from, the mark saying the
+      // trade was finished with, the count of catch-up passes, the
+      // timeframe rule it was read under, the bar sequence the AI read,
+      // the AI's reading of the formation, and how many contracts were
+      // opened.
+      //
+      // The damage did not stop at losing them. A trade with no fee reads
+      // as one still waiting for facts, so it went straight back into the
+      // catch-up queue and its figures moved again -- which is exactly what
+      // he reported as "why do the trades constantly update?". Correcting a
+      // trade by hand was the thing that unsettled it.
+      //
+      // Every box on the screen is still applied, blank ones included, so
+      // clearing a field he can see still clears it. Merging only puts back
+      // what the screen never asked about.
+      trades[idx] = Object.assign({}, before, trade);
     } else trades.unshift(trade);
   } else {
     trades.unshift(trade);
@@ -6485,24 +6524,65 @@ async function pollBackendOnce(url, silent){
 // that button after backend changes. Two identical trades cannot happen
 // in reality: the same contract, entered at the same minute, exited at
 // the same minute, at the same two prices, is one trade seen twice.
-function tradeFingerprint(t){
+//
+// Identity comes in two strengths, and it has to. The strong one includes the
+// contract code. The weaker one leaves it out — needed because some saved
+// trades never recorded a code at all, and a codeless copy of a trade reads
+// as a COMPLETELY DIFFERENT trade from its twin that has one. That blind spot
+// is not theoretical: measured against his own 254 real trades with 50 second
+// copies added that carried no code, "Find Duplicate Trades" reported "no
+// duplicates — all 304 trades are distinct", and the same blindness in the
+// import below let every one of those copies be written down again on every
+// pass. That is how a journal ends up holding trades his broker never charged
+// him for.
+//
+// Checked against those same 254 real trades: leaving the code out of the
+// identity lumps NONE of them together, because two different contracts
+// bought in the same minute at the same price and sold in the same minute at
+// the same price does not happen — different strikes cost different money. A
+// weak match is still only accepted when one of the two records no code at
+// all, so two genuinely different contracts can never be merged into one.
+function tradeIdentity(t){
   const n = v => (v == null ? '' : Number(v).toFixed(4));
-  return [t.occ || t.ticker || '', t.entryDate || '', t.entryTime || '',
-          t.exitDate || '', t.exitTime || '', n(t.optEntry), n(t.optExit),
-          t.contracts ?? ''].join('|');
+  const rest = [t.entryDate || '', t.entryTime || '', t.exitDate || '', t.exitTime || '',
+                n(t.optEntry), n(t.optExit), t.contracts ?? ''].join('|');
+  const code = String(t.occ || '').trim();
+  return { code, rest,
+           loose: (t.ticker || '') + '|' + rest,
+           strict: (code || t.ticker || '') + '|' + rest };
 }
+function tradeFingerprint(t){ return tradeIdentity(t).strict; }
+// The two codes do not contradict each other: equal, or one of them missing.
+function codesAgree(a, b){ return !a || !b || a === b; }
 
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
-  // Keep the trade itself, not just its fingerprint — a repeat arrival is
+  // Keep the trade itself, not just its identity — a repeat arrival is
   // usually a REBUILD carrying facts the saved copy does not have, and
   // throwing it away loses them.
-  const byPrint = new Map();
-  for(const t of trades){
-    const k = tradeFingerprint(t);
-    if(!byPrint.has(k)) byPrint.set(k, t);
-  }
+  //
+  // Indexed on the WEAKER identity, so a saved copy that never recorded a
+  // contract code is still recognised as the same trade. Indexing on the
+  // strong one alone meant such a copy was re-imported on every single pass,
+  // for ever, each time adding a trade and its fee to his totals.
+  const byIdentity = new Map();
+  const remember = (t, claimed) => {
+    const id = tradeIdentity(t);
+    if(!byIdentity.has(id.loose)) byIdentity.set(id.loose, []);
+    byIdentity.get(id.loose).push({ trade: t, code: id.code, claimed: !!claimed });
+  };
+  for(const t of trades) remember(t, false);
+  // The saved trade this arrival is a second sighting of, or null. An exact
+  // code match is preferred; a missing code on either side is accepted.
+  const findSaved = (t) => {
+    const id = tradeIdentity(t);
+    const group = byIdentity.get(id.loose);
+    if(!group) return null;
+    return group.find(e => e.code && e.code === id.code)
+        || group.find(e => codesAgree(e.code, id.code))
+        || null;
+  };
   let imported = 0;
   let refreshed = 0;
   for(const t of pending){
@@ -6519,12 +6599,9 @@ async function autoImportPendingTrades(url, pending){
       try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
       continue;
     }
-    const print = tradeFingerprint(t);
-    // has(), not the value — a trade claimed earlier in THIS batch is
-    // stored as null, and testing truthiness let it through and imported
-    // it a second time.
-    if(byPrint.has(print)){
-      const already = byPrint.get(print);
+    const seen = findSaved(t);
+    if(seen){
+      const already = seen.claimed ? null : seen.trade;
       if(!already){
         // A second copy of a trade already claimed earlier in this same
         // batch. Skipping it was right; leaving it in the server's queue
@@ -6549,7 +6626,7 @@ async function autoImportPendingTrades(url, pending){
       try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* non-fatal */ }
       continue;
     }
-    byPrint.set(print, null); // claimed by this batch
+    remember(t, true); // claimed by this batch
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
@@ -6666,6 +6743,15 @@ function refreshTradeFacts(saved, fresh){
     if(saved[key] === value) return;
     saved[key] = value; changed = true;
   };
+
+  // The contract code, where the saved copy never recorded one. A blank makes
+  // the trade impossible to check against his broker's own file and
+  // impossible to recognise as a second copy of itself, so filling it in is a
+  // repair rather than a change of mind. A code already there is never
+  // touched.
+  if(!String(saved.occ || '').trim() && String(fresh.occ || '').trim()){
+    saved.occ = fresh.occ; changed = true;
+  }
 
   // ---- Money is settled once and never changed again ----------------
   //
@@ -7187,13 +7273,34 @@ function ownWorkScore(t){
 
 function findDuplicateTrades(){
   const trades = loadTrades();
-  const groups = new Map();
+  // Grouped on the identity WITHOUT the contract code, then split by code.
+  // Grouping on the code as well made a copy that never recorded one
+  // invisible: 50 such copies sitting in a journal of 254 real trades were
+  // reported as "no duplicates — all 304 trades are distinct".
+  //
+  // A blank code joins a group only when there is exactly one code in it. If
+  // two different contracts somehow share every other detail, a codeless copy
+  // cannot be assigned to either and is left exactly where it is — leaving a
+  // duplicate in is recoverable, deleting the wrong trade is not.
+  const byLoose = new Map();
   for(const t of trades){
-    const k = tradeFingerprint(t);
-    if(!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(t);
+    const id = tradeIdentity(t);
+    if(!byLoose.has(id.loose)) byLoose.set(id.loose, []);
+    byLoose.get(id.loose).push({ t, code: id.code });
   }
-  const dupeGroups = [...groups.values()].filter(g => g.length > 1);
+  const dupeGroups = [];
+  for(const group of byLoose.values()){
+    if(group.length < 2) continue;
+    const codes = [...new Set(group.filter(e => e.code).map(e => e.code))];
+    if(codes.length <= 1){
+      dupeGroups.push(group.map(e => e.t));
+      continue;
+    }
+    for(const c of codes){
+      const same = group.filter(e => e.code === c).map(e => e.t);
+      if(same.length > 1) dupeGroups.push(same);
+    }
+  }
   const out = document.getElementById('dupeOut');
   if(!dupeGroups.length){
     pendingDupeRemoval = null;
@@ -7204,7 +7311,11 @@ function findDuplicateTrades(){
   const keep = new Set();
   let removing = 0;
   for(const g of dupeGroups){
-    const best = g.slice().sort((a,b)=>ownWorkScore(b)-ownWorkScore(a))[0];
+    // His own work first; then, on a tie, the copy that actually records a
+    // contract code, because a codeless one cannot be checked against his
+    // broker's own file.
+    const hasCode = t => (String(t.occ || '').trim() ? 1 : 0);
+    const best = g.slice().sort((a,b)=>(ownWorkScore(b)-ownWorkScore(a)) || (hasCode(b)-hasCode(a)))[0];
     keep.add(best.id);
     removing += g.length - 1;
   }

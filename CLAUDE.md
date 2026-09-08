@@ -989,6 +989,54 @@ Uses **The Strat**. Key concepts the code implements:
   closed trades rather than requiring a new one. A reminder that needs a
   setting added before it works is a reminder that never arrives — and
   he would never know it had not.
+- **A screen that BUILDS a record must not be allowed to REPLACE one.**
+  The edit screen assembled a whole trade out of the boxes it shows and put
+  that in place of the saved one, so every fact the screen has no box for
+  was destroyed. Measured on one imported trade: adding a note wiped
+  thirteen of them — the fee Schwab charged, the after-fee figure, both
+  halves of the fee, the exact instants of both fills, where each stock
+  price came from, the "finished with" mark, the catch-up count, the
+  timeframe rule version, the bar sequence the AI read, its reading of the
+  formation, and how many contracts were opened. And the damage did not
+  stop at losing them: a trade with no fee reads as one still waiting for
+  facts, so it went straight back into the catch-up queue and its figures
+  moved again. **That is the answer to "why do the trades constantly
+  update?" — correcting a trade by hand was the thing that unsettled it,
+  which is the exact opposite of what he asked for.** Merged now, so every
+  box on the screen still applies (blank ones included) and only the fields
+  the screen never asked about are put back. Any editor over a record with
+  machine-written fields needs this.
+- **An empty box means NOT KNOWN, and `||0` says something untrue.** The
+  same screen stored the stop, the planned reward-to-risk and both stock
+  prices as zero when their box was empty — a stock price of $0.00 on the
+  card, a stop at zero that the realized reward-to-risk silently refused to
+  use, and a stop the server could then never work out for him, because
+  `saved.stop == null` is false for a zero. Every trade imported before
+  those were worked out already carries "not known" there, so null was
+  always the shape the rest of the app expected.
+- **An identity that includes a field some records lack has a blind spot
+  the size of that field.** A trade's identity led with its contract code,
+  and a saved copy that never recorded one reads as a COMPLETELY DIFFERENT
+  trade from its twin that has one. Measured: his own 254 real trades plus
+  50 second copies carrying no code, and "Find Duplicate Trades" answered
+  "no duplicates — all 304 trades are distinct." The same blindness in the
+  import meant each of those 50 was written down again on every pass, fee
+  and all — which is how a journal ends up holding trades his broker never
+  charged for. Identity now has two strengths: the code is compared when
+  both copies have one, and left out when either does not. Checked against
+  all 254 of his real trades — leaving it out lumps none of them together,
+  because two different contracts bought in the same minute at the same
+  price and sold in the same minute at the same price does not happen.
+  A missing piece of an identity is repaired on the next arrival rather
+  than left to recur.
+- **Never compare a figure against a set that is not the same set.** His
+  journal showed 304 trades and $473.46 of fees; his broker's own file
+  rebuilds to 254 and $404.73, and I called the difference "$68.73 of fees
+  he never paid". The file covers 2 January to 23 July and only closed
+  option trades, and the journal's 304 counts everything it holds. The
+  difference is real evidence and worth chasing, but it is not proof on its
+  own, and stating it as proof is the same fault as inventing the number.
+  The app's own day-by-day comparison is what settles it.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
