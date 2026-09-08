@@ -1254,6 +1254,7 @@ function showView(name){
   // that it is on screen, bind and reveal whatever is actually visible.
   revealScan();
   revealSweep();
+  pinNavbar();
 }
 
 // ---- Backtest --------------------------------------------------------
@@ -1618,6 +1619,78 @@ function saveIntroSettings(){
 }
 
 // ---- scroll transitions ----
+// ---- The bottom bar stays where he can actually see it ---------------
+//
+// He reported it "floating throughout the middle of the screen"
+// (2026-09-08), with the trade list carrying on above and below it.
+//
+// The bar is pinned to the bottom of the PAGE, and on an iPhone that is not
+// the same edge as the bottom of what he is looking at. Safari keeps two
+// ideas of the screen: the area the page is laid out in, and the smaller or
+// larger area actually on show. Pinching to zoom moves one without the
+// other, and so does Safari's own toolbar sliding in and out as he scrolls.
+// When they come apart, a bar pinned to the page's bottom edge is left
+// stranded part-way up the screen — which is exactly what he photographed.
+//
+// Safari will say where the visible area really is, so the bar is nudged by
+// the difference and sits on the edge he can see. Written to be harmless
+// when it is not needed: no nudge at all when the two agree, none at all in
+// a browser that cannot answer, and clamped so a wrong answer can never
+// push the bar off the screen entirely.
+let navDrift = 0;               // reported under Details, so a bar still out
+                                // of place tells me the numbers in one round
+let navPinReason = 'not measured yet';
+function pinNavbar(){
+  const bar = document.querySelector('.navbar');
+  if(!bar) return;
+  const vv = window.visualViewport;
+  if(!vv){
+    navDrift = 0; navPinReason = 'this browser cannot say what is visible';
+    bar.style.transform = '';
+    return;
+  }
+  const pageBottom = document.documentElement.clientHeight;
+  const seenBottom = vv.offsetTop + vv.height;
+  // Refuse an answer that cannot be true rather than acting on it. The
+  // visible area can be a good deal taller than the page's own idea of it --
+  // that is the whole point of this -- but not many times taller. Clamping
+  // instead of refusing was wrong, because the clamp was worked out FROM the
+  // figure being checked, so a nonsense answer set its own limit and shoved
+  // the bar a whole screen down, where he could not see it at all. A bar
+  // left where it was is recoverable; a bar pushed off the screen is not.
+  const believable = Number.isFinite(seenBottom) && seenBottom >= 0
+    && pageBottom > 0 && seenBottom <= pageBottom * 3;
+  if(!believable){
+    navDrift = 0;
+    navPinReason = `left alone — the visible bottom came back as ${Math.round(seenBottom)} against a page of ${pageBottom}`;
+    bar.style.transform = '';
+    return;
+  }
+  const drift = seenBottom - pageBottom;
+  navDrift = Math.round(drift);
+  if(Math.abs(drift) < 1){
+    navPinReason = 'the two agree, so nothing was moved';
+    bar.style.transform = '';
+  } else {
+    navPinReason = `moved ${navDrift}px to reach the edge he can see`;
+    bar.style.transform = `translateY(${drift}px)`;
+  }
+}
+
+// Every moment the two can come apart: a pinch, a toolbar sliding, the phone
+// turning, and an ordinary scroll.
+function watchNavbarPosition(){
+  pinNavbar();
+  const vv = window.visualViewport;
+  if(vv){
+    vv.addEventListener('resize', pinNavbar);
+    vv.addEventListener('scroll', pinNavbar);
+  }
+  window.addEventListener('resize', pinNavbar, { passive: true });
+  window.addEventListener('scroll', pinNavbar, { passive: true });
+  window.addEventListener('orientationchange', () => setTimeout(pinNavbar, 250));
+}
+
 let revealObserver = null;
 
 // Never hides anything that is already on screen.
@@ -4986,6 +5059,14 @@ function techText(){
     `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
     `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,
     (() => {
+      const vv = window.visualViewport;
+      const page = `${document.documentElement.clientWidth}x${document.documentElement.clientHeight}`;
+      if(!vv) return `screen: page ${page} · ${navPinReason}`;
+      return `screen: page ${page} · visible ${Math.round(vv.width)}x${Math.round(vv.height)}`
+        + ` at ${Math.round(vv.offsetLeft)},${Math.round(vv.offsetTop)} · zoom ${(vv.scale || 1).toFixed(2)}`
+        + ` · bottom bar: ${navPinReason}`;
+    })(),
+    (() => {
       const d = moneyDisagreements();
       return d.length
         ? `money refused ${d.length}: ` + d.slice(0, 8).map(x =>
@@ -6530,7 +6611,7 @@ async function pollBackendOnce(url, silent){
 // trades never recorded a code at all, and a codeless copy of a trade reads
 // as a COMPLETELY DIFFERENT trade from its twin that has one. That blind spot
 // is not theoretical: measured against his own 254 real trades with 50 second
-// copies added that carried no code, "Find Duplicate Trades" reported "no
+// copies added that carried no code, "Check for Duplicate Trades" reported "no
 // duplicates — all 304 trades are distinct", and the same blindness in the
 // import below let every one of those copies be written down again on every
 // pass. That is how a journal ends up holding trades his broker never charged
@@ -7375,6 +7456,11 @@ renderBacktestPickers();
 renderDashboard();
 autoCollectOnOpen();
 refreshAlpacaState();
+
+// The bottom bar keeps itself on the edge he can see. Its own attempt and
+// its own catch: it must not be able to stop anything else, and nothing
+// else failing may leave the bar stranded in the middle of his screen.
+try{ watchNavbarPosition(); }catch(e){ navPinReason = 'could not be set up: ' + (e && e.message); }
 
 // Presentation last, so a problem here can never stop the journal itself
 // from loading — the app is fully usable before any of this runs.
