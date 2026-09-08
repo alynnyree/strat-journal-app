@@ -121,6 +121,14 @@ enforced JSON), not Anthropic's API — chosen to avoid ongoing API cost.
 Browsers cannot call these APIs directly (CORS), so all AI calls are
 server-side.
 
+Market data comes from **Alpaca's free plan** (his instruction,
+2026-09-07: *"I don't want to pay for data from Alpaca"*). That plan gives
+IEX in REAL TIME and the full consolidated tape delayed by 15 minutes.
+Everything is built around those two facts: a fresh trade is priced from
+the real-time single-exchange feed, then improved once to the consolidated
+price when the delay passes. **Do not propose the paid plan again.** Any
+future work on price accuracy must stay inside the free tier.
+
 ## The trading methodology (needed to reason about features correctly)
 
 Uses **The Strat**. Key concepts the code implements:
