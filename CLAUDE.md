@@ -796,6 +796,30 @@ Uses **The Strat**. Key concepts the code implements:
   Written now only when there is no reading yet, or `ftfcVersion` shows
   the rule itself was corrected. A corrected rule is a real reason;
   running again is not.
+- **Saying a trade needs fixing is not the same as anything fixing it.**
+  `tradeIsStale` correctly said four of his trades were short of a fee.
+  Nothing acted on it: `maybeAutoRebuild` requires a QUARTER of the
+  journal to be short before it runs, and four out of three hundred is
+  barely one percent — so it declined every single time, and declined
+  saying "the trades are already up to date" while four of them plainly
+  were not. He watched that line sit at four and never move. **When he
+  reports something not happening, follow the whole chain — the condition,
+  the thing that acts on it, and the limits on that — not just the
+  condition.** A countable list of blanks is a certainty, not a hunch, and
+  is bounded by each trade's own attempts; the share threshold now applies
+  only to the guess it was written for.
+- **Clearing a record to reset one field threw away another.**
+  `noteRebuildOutcome` removed the whole rebuild history to reset the
+  attempt count — and took the TIMESTAMP with it, so the guard that stops
+  a second request while the first is still working had nothing to check
+  against. The app could have asked the server again every thirty seconds
+  as soon as those trades started filling in. Found only because a test
+  refused to reproduce. Reset the field, never the record.
+- **A harness that shares storage between cases tests the wrong thing.**
+  Playwright pages in one context share localStorage, so a previous case's
+  trades were still there when the next one first loaded and the app's own
+  startup fired against them. Two "failures" were the harness leaking, not
+  the app. A fresh context per case.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and
