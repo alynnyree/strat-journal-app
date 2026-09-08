@@ -759,6 +759,17 @@ Uses **The Strat**. Key concepts the code implements:
   `feedInUse` would have corrupted the learned answer and logged a
   downgrade that never happened — the same class of fault as #62. An
   `onlyFeeds` ask is excluded from learning, and that is tested.
+- **Freezing the stored number does not freeze the number he SEES.** He
+  reported the net P&L still moving after money was settled at import and
+  frozen — and he was right. The headline was never read from storage
+  alone: `realPnl` fell back to the BEFORE-fee profit whenever a fee was
+  unknown, so a total labelled "after fees" was a MIXTURE of the two, and
+  every fee that later arrived shifted it. Measured: ten trades with three
+  fees outstanding read $290.76, then $286.80 once they landed, with
+  nothing stored having changed. **When he reports a number moving, check
+  what assembles it on screen, not only what is written down.** Unknown
+  now stays unknown, the after-fee total counts only trades that have one,
+  and the screen says how many were left out and why.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and

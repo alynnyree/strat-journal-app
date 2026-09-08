@@ -2905,9 +2905,33 @@ function renderRiskTracking(trades){
 // What a trade actually made him: after fees where they are recorded,
 // before fees where they are not. A trade with no fee on file is not a
 // free trade, so its figure is used as-is rather than pretending.
-function realPnl(t){
-  return t.pnlNet != null ? t.pnlNet : (t.pnlDollar || 0);
+// The money that actually arrived, after Schwab took its cut.
+//
+// THIS IS WHY HIS TOTAL KEPT MOVING (reported 2026-09-08). It used to fall
+// back to the BEFORE-fee profit whenever the fee was not known, so a total
+// labelled "after fees" was silently a mixture of the two -- and every
+// time one of those missing fees was filled in, the headline shifted by
+// that fee. Measured: ten trades with three fees outstanding read $290.76,
+// and $286.80 once they arrived. Nothing stored had changed.
+//
+// Freezing the stored money, which is what was fixed before, could never
+// have fixed this: the number he was watching was never read from storage
+// alone, it was assembled at the moment the page drew.
+//
+// Now: unknown stays unknown. A fee that IS known but whose after-fee
+// figure was never written is worked out here, which is arithmetic on two
+// known numbers and cannot drift. Everything else returns null, and every
+// caller must decide what to do about that rather than being handed a
+// figure that quietly is not what it claims.
+function netPnlOf(t){
+  if(!t) return null;
+  if(t.pnlNet != null) return t.pnlNet;
+  if(t.pnlDollar != null && t.fees != null) return Math.round((t.pnlDollar - t.fees) * 100) / 100;
+  return null;
 }
+
+// True when the after-fee figure for this trade is genuinely known.
+function netKnown(t){ return netPnlOf(t) != null; }
 
 // How the FTFC stance is worded, in ONE place. It appears in three
 // spots on the Dashboard, and the same distinction phrased three ways on
@@ -2950,10 +2974,13 @@ function renderDashboard(){
   const count = trades.length;
   // Fees turn a small win into a small loss, so a win must be decided on
   // the money that actually arrived, not on the price move alone.
-  const wins = trades.filter(t => t.pnlDollar == null
-    ? t.winLoss === 'Win'
-    : realPnl(t) >= 0).length;
-  const netPnl = trades.reduce((s,t)=>s+realPnl(t),0);
+  // Only trades whose after-fee figure is actually known. A trade with no
+  // fee worked out is left out and SAID to be left out, rather than
+  // slipping in with its before-fee profit and making the headline drift.
+  const netable = trades.filter(netKnown);
+  const netMissing = trades.filter(t => t.pnlDollar != null && !netKnown(t)).length;
+  const wins = netable.filter(t => netPnlOf(t) >= 0).length;
+  const netPnl = netable.reduce((s,t)=>s+netPnlOf(t),0);
   const avgRR = count ? (trades.reduce((s,t)=>s+(t.rrPlanned||0),0)/count) : 0;
 
   // The same two figures worked out the other way: on the price move
@@ -2972,6 +2999,7 @@ function renderDashboard(){
     feeNote.innerHTML = !anyFees
       ? 'No fees recorded yet — every figure here is before Schwab\'s fees. Re-import your trades to bring them in.'
       : `Fees paid: <b style="color:var(--text);">${fmtMoney(feeTotal)}</b>`
+        + (netMissing ? ` · ${netMissing} trade${netMissing===1?'':'s'} left out of the after-fee total — their fee is not known yet` : '')
         + (feesKnown.length < count
             ? ` — recorded on ${feesKnown.length} of ${count} trades so far, so the two figures above will keep moving apart until the rest come in`
             : '');
@@ -3015,8 +3043,10 @@ function renderDashboard(){
   const isAligned = t => alignmentOf(t) === 'with';
   const blank = () => ({count:0, pnl:0, wins:0});
   const add = (bucket, t) => {
-    bucket.count++; bucket.pnl += realPnl(t);
-    if(t.pnlDollar == null ? t.winLoss === 'Win' : realPnl(t) >= 0) bucket.wins++;
+    const net = netPnlOf(t);
+    if(net == null) return;          // no after-fee figure: cannot be counted either way
+    bucket.count++; bucket.pnl += net;
+    if(net >= 0) bucket.wins++;
   };
 
   const bySetup = {};
@@ -3106,7 +3136,8 @@ function renderDashboard(){
   // the edge he is asking about. Trading INTO full agreement the wrong
   // way is its own thing, and worth seeing on its own.
   // Only trades with a RESULT can be compared. A position still open has
-  // no money figure, so `realPnl` gives it a flat zero — counting it would
+  // no money figure, so it has no after-fee figure either — counting it
+  // would
   // add a trade to the count and nothing to the total, quietly dragging
   // that side's per-trade average toward zero. It is left out and said so.
   const settled = t => t.pnlDollar != null || t.pnlNet != null;
