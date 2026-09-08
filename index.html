@@ -80,7 +80,38 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;}
-  body{padding-bottom:70px;}
+
+  /* ---- Why the bottom row of buttons is built this way ---------------
+     He reported it floating in the middle of the screen, and then still
+     moving as he scrolled after a first attempt at fixing it.
+
+     It used to be pinned to the bottom of the PAGE. A phone keeps two
+     ideas of where the page ends -- the area it is laid out in, and the
+     area actually on show -- and Safari's toolbar sliding in and out as he
+     scrolls pulls them apart. Anything pinned to one of them drifts
+     against the other. Trying to measure the gap and nudge the bar back
+     was the wrong answer: it left the bar chasing a moving number, which
+     is exactly the moving he reported the second time.
+
+     So the bar is not pinned to anything any more. The whole app is one
+     box exactly the height of the screen; the trades scroll INSIDE that
+     box, and the bar is simply its last row. There is no gap to measure
+     and nothing for it to drift against -- it cannot move, because it is
+     not being positioned at all.
+
+     dvh is the height that already accounts for the toolbar; the plain
+     percentage above it is the answer for anything that does not know
+     that word yet.                                                     */
+  html,body{height:100%;}
+  body{overflow:hidden;}
+  .app{display:flex; flex-direction:column; height:100%; height:100dvh;}
+  #appScroll{
+    flex:1 1 auto; min-height:0;          /* min-height:0 or the box refuses to shrink and the bar is pushed off */
+    overflow-y:auto; overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;      /* keeps the flick-and-glide feel he is used to */
+    overscroll-behavior-y:contain;         /* stops a scroll running past the end and dragging the page itself */
+    padding-bottom:8px;
+  }
   h1,h2{font-family:var(--display); font-weight:400; margin:0 0 8px 0; text-transform:uppercase; letter-spacing:0.5px; line-height:1.02;}
   h3{font-family:var(--sans); font-weight:700; margin:0 0 8px 0;}
   .num{font-family:var(--mono);}
@@ -222,9 +253,10 @@
   }
   button.ghost{background:none; border:none; color:var(--amber); font-family:var(--sans); font-size:12px; font-weight:700; padding:6px;}
 
+  /* Not positioned. The last row of the box above, and nothing more. */
   .navbar{
-    position:fixed; bottom:0; left:0; right:0; background:#0B0F0C; border-top:1px solid var(--border);
-    display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom)) 4px; z-index:30;
+    flex:0 0 auto; background:#0B0F0C; border-top:1px solid var(--border);
+    display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom)) 4px;
   }
   .navbar .item{flex:1; text-align:center; padding:6px 0; color:var(--text-dim); font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; cursor:pointer;}
   .navbar .item.active{color:var(--bull);}
@@ -526,6 +558,8 @@
   })();
 </script>
 
+<div class="app">
+<div class="scroll" id="appScroll">
 <div class="header">
   <div class="brand">
     <div class="mark">S</div>
@@ -1221,6 +1255,8 @@
     </div>
   </div>
 
+</div><!-- /#appScroll: everything above this scrolls, the bar below does not -->
+
 <div class="navbar">
   <div class="item active" data-view="dashboard" onclick="showView('dashboard')"><span class="ic">◆</span>Home</div>
   <div class="item" data-view="journal" onclick="showView('journal')"><span class="ic">▤</span>Journal</div>
@@ -1228,6 +1264,7 @@
   <div class="item" data-view="ai" onclick="showView('ai')"><span class="ic">✦</span>AI</div>
   <div class="item" data-view="checklist" onclick="showView('checklist')"><span class="ic">☑</span>Checks</div>
 </div>
+</div><!-- /.app -->
 
 <script src="lightweight-charts.standalone.production.js"></script>
 <script>
@@ -1254,7 +1291,6 @@ function showView(name){
   // that it is on screen, bind and reveal whatever is actually visible.
   revealScan();
   revealSweep();
-  pinNavbar();
 }
 
 // ---- Backtest --------------------------------------------------------
@@ -1619,78 +1655,6 @@ function saveIntroSettings(){
 }
 
 // ---- scroll transitions ----
-// ---- The bottom bar stays where he can actually see it ---------------
-//
-// He reported it "floating throughout the middle of the screen"
-// (2026-09-08), with the trade list carrying on above and below it.
-//
-// The bar is pinned to the bottom of the PAGE, and on an iPhone that is not
-// the same edge as the bottom of what he is looking at. Safari keeps two
-// ideas of the screen: the area the page is laid out in, and the smaller or
-// larger area actually on show. Pinching to zoom moves one without the
-// other, and so does Safari's own toolbar sliding in and out as he scrolls.
-// When they come apart, a bar pinned to the page's bottom edge is left
-// stranded part-way up the screen — which is exactly what he photographed.
-//
-// Safari will say where the visible area really is, so the bar is nudged by
-// the difference and sits on the edge he can see. Written to be harmless
-// when it is not needed: no nudge at all when the two agree, none at all in
-// a browser that cannot answer, and clamped so a wrong answer can never
-// push the bar off the screen entirely.
-let navDrift = 0;               // reported under Details, so a bar still out
-                                // of place tells me the numbers in one round
-let navPinReason = 'not measured yet';
-function pinNavbar(){
-  const bar = document.querySelector('.navbar');
-  if(!bar) return;
-  const vv = window.visualViewport;
-  if(!vv){
-    navDrift = 0; navPinReason = 'this browser cannot say what is visible';
-    bar.style.transform = '';
-    return;
-  }
-  const pageBottom = document.documentElement.clientHeight;
-  const seenBottom = vv.offsetTop + vv.height;
-  // Refuse an answer that cannot be true rather than acting on it. The
-  // visible area can be a good deal taller than the page's own idea of it --
-  // that is the whole point of this -- but not many times taller. Clamping
-  // instead of refusing was wrong, because the clamp was worked out FROM the
-  // figure being checked, so a nonsense answer set its own limit and shoved
-  // the bar a whole screen down, where he could not see it at all. A bar
-  // left where it was is recoverable; a bar pushed off the screen is not.
-  const believable = Number.isFinite(seenBottom) && seenBottom >= 0
-    && pageBottom > 0 && seenBottom <= pageBottom * 3;
-  if(!believable){
-    navDrift = 0;
-    navPinReason = `left alone — the visible bottom came back as ${Math.round(seenBottom)} against a page of ${pageBottom}`;
-    bar.style.transform = '';
-    return;
-  }
-  const drift = seenBottom - pageBottom;
-  navDrift = Math.round(drift);
-  if(Math.abs(drift) < 1){
-    navPinReason = 'the two agree, so nothing was moved';
-    bar.style.transform = '';
-  } else {
-    navPinReason = `moved ${navDrift}px to reach the edge he can see`;
-    bar.style.transform = `translateY(${drift}px)`;
-  }
-}
-
-// Every moment the two can come apart: a pinch, a toolbar sliding, the phone
-// turning, and an ordinary scroll.
-function watchNavbarPosition(){
-  pinNavbar();
-  const vv = window.visualViewport;
-  if(vv){
-    vv.addEventListener('resize', pinNavbar);
-    vv.addEventListener('scroll', pinNavbar);
-  }
-  window.addEventListener('resize', pinNavbar, { passive: true });
-  window.addEventListener('scroll', pinNavbar, { passive: true });
-  window.addEventListener('orientationchange', () => setTimeout(pinNavbar, 250));
-}
-
 let revealObserver = null;
 
 // Never hides anything that is already on screen.
@@ -1769,6 +1733,12 @@ function applyMotionSetting(cfg){
   revealScan();
   // A second, independent path to becoming visible, so a missed
   // notification can never leave a section stuck invisible.
+  // The page itself no longer scrolls -- the box holding the trades does --
+  // so listening only on the page would have left every card below the fold
+  // hidden for ever. This app has shown him a blank Journal holding 233
+  // trades once already; both are listened to so neither can strand a card.
+  const scroller = document.getElementById('appScroll');
+  if(scroller) scroller.addEventListener('scroll', revealSweep, { passive: true });
   window.addEventListener('scroll', revealSweep, { passive: true });
   window.addEventListener('resize', revealSweep, { passive: true });
 }
@@ -5060,11 +5030,14 @@ function techText(){
     `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,
     (() => {
       const vv = window.visualViewport;
+      const bar = document.querySelector('.navbar');
+      const box = document.getElementById('appScroll');
       const page = `${document.documentElement.clientWidth}x${document.documentElement.clientHeight}`;
-      if(!vv) return `screen: page ${page} · ${navPinReason}`;
-      return `screen: page ${page} · visible ${Math.round(vv.width)}x${Math.round(vv.height)}`
-        + ` at ${Math.round(vv.offsetLeft)},${Math.round(vv.offsetTop)} · zoom ${(vv.scale || 1).toFixed(2)}`
-        + ` · bottom bar: ${navPinReason}`;
+      const barAt = bar ? Math.round(bar.getBoundingClientRect().bottom) : '?';
+      const seen = vv ? `${Math.round(vv.width)}x${Math.round(vv.height)} at ${Math.round(vv.offsetLeft)},${Math.round(vv.offsetTop)} · zoom ${(vv.scale || 1).toFixed(2)}`
+                      : 'not reported by this browser';
+      return `screen: page ${page} · visible ${seen} · bar ends at ${barAt}`
+        + ` · scrolled ${box ? Math.round(box.scrollTop) : '?'}`;
     })(),
     (() => {
       const d = moneyDisagreements();
@@ -7456,11 +7429,6 @@ renderBacktestPickers();
 renderDashboard();
 autoCollectOnOpen();
 refreshAlpacaState();
-
-// The bottom bar keeps itself on the edge he can see. Its own attempt and
-// its own catch: it must not be able to stop anything else, and nothing
-// else failing may leave the bar stranded in the middle of his screen.
-try{ watchNavbarPosition(); }catch(e){ navPinReason = 'could not be set up: ' + (e && e.message); }
 
 // Presentation last, so a problem here can never stop the journal itself
 // from loading — the app is fully usable before any of this runs.

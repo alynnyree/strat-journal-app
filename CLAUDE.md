@@ -1037,28 +1037,39 @@ Uses **The Strat**. Key concepts the code implements:
   difference is real evidence and worth chasing, but it is not proof on its
   own, and stating it as proof is the same fault as inventing the number.
   The app's own day-by-day comparison is what settles it.
-- **A phone has TWO ideas of the screen, and `position: fixed` follows the
-  wrong one.** He photographed the bottom row of buttons floating in the
-  middle of the screen with the trade list carrying on above AND below it.
-  The bar is `position:fixed; bottom:0`, which pins it to the bottom of the
-  LAYOUT area — and on an iPhone that is not the edge he is looking at.
-  Pinching to zoom, and Safari's own toolbar sliding in and out as he
-  scrolls, move one without moving the other, and the bar is left stranded
-  part-way up. `window.visualViewport` is what says where the visible area
-  really is; the bar is nudged by the difference on every event that can
-  move either one. Ruled out first, by measuring rather than reasoning: no
-  transformed ancestor (it is a direct child of `<body>`), the reveal sweep
-  only touches `.card`/`.idx-row`, and the page has no horizontal overflow
-  at 430px, so shrink-to-fit is not in play. **Not confirmed on his actual
-  iPhone** — the numbers are reported behind Details so a bar still out of
-  place answers it in one round instead of three.
-- **A clamp worked out FROM the figure being doubted is not a clamp.** The
-  first version limited the nudge to `max(visibleHeight, pageHeight)`, so a
-  nonsense answer set its own ceiling and shoved the bar a whole screen down
-  — off the screen entirely, which is worse than the bug being fixed. An
-  implausible figure is now refused outright and the bar left exactly where
-  it was. Recoverable beats invisible; bound a suspect value against
-  something independent of it, or do nothing.
+- **A bar that must not move should not be POSITIONED at all.** He reported
+  the bottom row of buttons floating in the middle of the screen, and then —
+  after my first fix — still moving as he scrolled. It was `position:fixed;
+  bottom:0`, which pins it to the bottom of the LAYOUT area, and a phone
+  keeps two ideas of where the page ends: the area it is laid out in, and
+  the area actually on show. Safari's toolbar sliding in and out as he
+  scrolls pulls them apart, so anything pinned to one drifts against the
+  other.
+  **My first fix measured that gap with `visualViewport` and nudged the bar
+  back on every scroll. That was the wrong answer and he was right to report
+  it again**: it left the bar chasing a number that moves throughout the
+  toolbar's animation, so the bar moved too — I had turned a bar in the
+  wrong place into a bar that jitters. Reaching for a correction is the tell
+  that the design is wrong.
+  There is nothing to correct now. The app is one box exactly the height of
+  the screen (`100dvh`, with `height:100%` behind it for anything that does
+  not know that word), the trades scroll INSIDE that box, and the bar is
+  simply its last row in normal flow. It cannot move, because nothing is
+  positioning it. The scrolling box needs `min-height:0` or flex refuses to
+  shrink it and pushes the bar off the bottom.
+- **Moving the scroll INTO a box breaks everything listening to the page.**
+  The fade-in effect was told about scrolling by `window`, which no longer
+  scrolls — so every card below the fold would have stayed invisible for
+  ever, and this app has already shown him a blank Journal holding 233
+  trades once. Both the box and the page are listened to now. When the thing
+  that scrolls changes, sweep every listener, and check with the effect
+  turned ON — with it off the fault is invisible.
+- **A test that waits for an animation to finish is measuring the clock.**
+  The above was caught by asserting `opacity === '1'`, which failed at 0.987
+  while the fade was still running — a real check, reported as a real
+  failure, for something that was working. Assert the card was RELEASED
+  (it carries the mark that lets it appear), and separately that it is not
+  sitting at nothing, which is the actual fault.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

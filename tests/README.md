@@ -21,11 +21,12 @@ rather than passing quietly:
   used to be completely invisible, both to "Check for Duplicate Trades" and to the
   import, so it was written down again on every pass.
 
-- **bottom-bar-stays-put.js** — stands the phone's two ideas of the screen
-  apart on purpose (pinched in, toolbar sliding, and the case he
-  photographed) and checks the bottom row of buttons lands on the edge he can
-  actually see, is left completely alone when the two agree, and refuses an
-  answer that cannot be true rather than pushing itself off the screen.
+- **bottom-bar-stays-put.js** — scrolls a long trade list the way he does
+  and checks the bottom row of buttons does not move a single pixel through
+  any of it, on every tab; that the page itself cannot scroll (which is what
+  starts the phone's toolbar sliding and brought the problem back); that no
+  card below the fold is left invisible now the scrolling has moved inside a
+  box; and that Bar Replay still covers the whole screen.
 
 Two things they need, and say so when they are missing:
 
