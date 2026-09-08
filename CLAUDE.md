@@ -1052,11 +1052,21 @@ Uses **The Strat**. Key concepts the code implements:
   wrong place into a bar that jitters. Reaching for a correction is the tell
   that the design is wrong.
   There is nothing to correct now. The app is one box exactly the height of
-  the screen (`100dvh`, with `height:100%` behind it for anything that does
-  not know that word), the trades scroll INSIDE that box, and the bar is
-  simply its last row in normal flow. It cannot move, because nothing is
-  positioning it. The scrolling box needs `min-height:0` or flex refuses to
-  shrink it and pushes the bar off the bottom.
+  the screen, the trades scroll INSIDE that box, and the bar is simply its
+  last row in normal flow. It cannot move, because nothing is positioning
+  it. The scrolling box needs `min-height:0` or flex refuses to shrink it
+  and pushes the bar off the bottom.
+- **`dvh` is the wrong unit for an app shell, and it cost him another
+  round.** Sized at `100dvh`, the box ran on UNDERNEATH Safari's toolbar and
+  cut the bottom off the bar — he photographed that too. `dvh` is the
+  DYNAMIC height, and on a page that cannot scroll iPhone Safari settles it
+  on the toolbar-HIDDEN size, which is taller than what is on show. **`svh`
+  is the unit**: the height with the browser's own bars at their biggest,
+  which is the smallest the screen ever gets, so nothing can end up beneath
+  them. The full-screen replay had the same wrong unit and was fixed with
+  it. Sitting at the bottom is not the same as being all there, so the check
+  measures the BOTTOM OF THE LABELS, which is the part that disappears
+  first.
 - **Moving the scroll INTO a box breaks everything listening to the page.**
   The fade-in effect was told about scrolling by `window`, which no longer
   scrolls — so every card below the fold would have stayed invisible for

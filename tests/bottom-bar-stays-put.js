@@ -60,10 +60,16 @@ const { launch, serve } = require('./browser.js');
   }
 
   const where = (p) => p.evaluate(() => {
-    const bar = document.querySelector('.navbar').getBoundingClientRect();
+    const el = document.querySelector('.navbar');
+    const bar = el.getBoundingClientRect();
     const box = document.getElementById('appScroll');
     const seen = document.documentElement.clientHeight;
     return { top: Math.round(bar.top), bottom: Math.round(bar.bottom),
+             height: Math.round(bar.height), needs: el.scrollHeight,
+             // The labels under the icons are the part that gets cut off
+             // first, so their own bottom edge is what is checked.
+             labelBottom: Math.round(Math.max(...[...el.querySelectorAll('.item')]
+               .map(i => i.getBoundingClientRect().bottom))),
              scrolled: Math.round(box.scrollTop), seen,
              canScroll: box.scrollHeight - box.clientHeight };
   });
@@ -78,6 +84,13 @@ const { launch, serve } = require('./browser.js');
     const start = await where(p);
     check(`there is more list than screen, so this can actually be seen (${start.canScroll}px of it)`, start.canScroll > 800);
     check(`the bar ends on the bottom edge of the screen (${start.bottom} of ${start.seen})`, start.bottom === start.seen);
+    // It was cut off once by a height unit that settled on the wrong size:
+    // the box ran on under the phone's own toolbar and took the labels with
+    // it. Sitting at the bottom is not the same as being all there.
+    check(`the whole bar is on screen, labels and all (labels end at ${start.labelBottom}, screen ${start.seen})`,
+      start.labelBottom <= start.seen);
+    check(`and nothing about it is squashed (${start.height}px tall, needs ${start.needs}px)`,
+      start.height >= start.needs);
 
     // Scroll the way he does, in stages, and watch the bar.
     const seenAt = [start.bottom];
@@ -114,6 +127,7 @@ const { launch, serve } = require('./browser.js');
       await p.waitForTimeout(300);
       const r = await where(p);
       check(`${tab}: the bar ends on the bottom edge (${r.bottom} of ${r.seen})`, r.bottom === r.seen);
+      check(`${tab}: with its labels on screen too (${r.labelBottom})`, r.labelBottom <= r.seen);
     }
     await p.close();
   }
