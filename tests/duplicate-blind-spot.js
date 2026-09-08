@@ -1,7 +1,7 @@
 // His journal has more trades and more fees in it than his broker ever
 // charged. This asks the one question that decides whether he can find them
 // himself: with a second copy of a trade sitting in the journal, does the
-// "Find Duplicate Trades" answer see it?
+// "Check for Duplicate Trades" answer see it?
 //
 // Built from HIS OWN 480 broker fills, through the real pairing code, so the
 // journal under test is the one his phone actually holds.

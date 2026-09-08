@@ -18,7 +18,7 @@ rather than passing quietly:
 - **duplicate-blind-spot.js** — builds the journal from the owner's own
   broker export through the real pairing code, adds second copies of fifty
   trades, and checks they are found. A copy that recorded no contract code
-  used to be completely invisible, both to "Find Duplicate Trades" and to the
+  used to be completely invisible, both to "Check for Duplicate Trades" and to the
   import, so it was written down again on every pass.
 
 - **bottom-bar-stays-put.js** — stands the phone's two ideas of the screen

@@ -6611,7 +6611,7 @@ async function pollBackendOnce(url, silent){
 // trades never recorded a code at all, and a codeless copy of a trade reads
 // as a COMPLETELY DIFFERENT trade from its twin that has one. That blind spot
 // is not theoretical: measured against his own 254 real trades with 50 second
-// copies added that carried no code, "Find Duplicate Trades" reported "no
+// copies added that carried no code, "Check for Duplicate Trades" reported "no
 // duplicates — all 304 trades are distinct", and the same blindness in the
 // import below let every one of those copies be written down again on every
 // pass. That is how a journal ends up holding trades his broker never charged

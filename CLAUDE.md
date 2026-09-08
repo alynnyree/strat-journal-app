@@ -1018,7 +1018,7 @@ Uses **The Strat**. Key concepts the code implements:
   the size of that field.** A trade's identity led with its contract code,
   and a saved copy that never recorded one reads as a COMPLETELY DIFFERENT
   trade from its twin that has one. Measured: his own 254 real trades plus
-  50 second copies carrying no code, and "Find Duplicate Trades" answered
+  50 second copies carrying no code, and "Check for Duplicate Trades" answered
   "no duplicates — all 304 trades are distinct." The same blindness in the
   import meant each of those 50 was written down again on every pass, fee
   and all — which is how a journal ends up holding trades his broker never
