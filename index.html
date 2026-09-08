@@ -99,12 +99,18 @@
      and nothing for it to drift against -- it cannot move, because it is
      not being positioned at all.
 
-     dvh is the height that already accounts for the toolbar; the plain
-     percentage above it is the answer for anything that does not know
-     that word yet.                                                     */
+     The UNIT matters and I got it wrong once. dvh is the "dynamic" height,
+     and on a page that cannot scroll iPhone Safari settles it on the
+     toolbar-HIDDEN size — so the box ran on underneath the toolbar and the
+     bottom of the bar was cut off. He photographed that too.
+
+     svh is the height with the browser's own bars at their BIGGEST, which
+     is the smallest the screen ever gets. Sized to that, the bar can never
+     end up underneath anything. The plain percentage before it is the
+     answer for anything that does not know that word yet.               */
   html,body{height:100%;}
   body{overflow:hidden;}
-  .app{display:flex; flex-direction:column; height:100%; height:100dvh;}
+  .app{display:flex; flex-direction:column; height:100%; height:100svh;}
   #appScroll{
     flex:1 1 auto; min-height:0;          /* min-height:0 or the box refuses to shrink and the bar is pushed off */
     overflow-y:auto; overflow-x:hidden;
@@ -396,7 +402,7 @@
   .modal-close{background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim); border-radius:50%; width:28px; height:28px; text-align:center; line-height:26px; cursor:pointer; font-size:14px;}
   .replay-canvas-wrap{background:#060806; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-top:6px; position:relative;}
   .modal-box.fs{
-    max-width:100vw; width:100vw; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh;
+    max-width:100vw; width:100vw; height:100vh; height:100svh; max-height:100vh; max-height:100svh;
     border-radius:0; display:flex; flex-direction:column; padding:10px 10px calc(10px + env(safe-area-inset-bottom));
     overflow:hidden;
   }
@@ -5036,7 +5042,16 @@ function techText(){
       const barAt = bar ? Math.round(bar.getBoundingClientRect().bottom) : '?';
       const seen = vv ? `${Math.round(vv.width)}x${Math.round(vv.height)} at ${Math.round(vv.offsetLeft)},${Math.round(vv.offsetTop)} · zoom ${(vv.scale || 1).toFixed(2)}`
                       : 'not reported by this browser';
-      return `screen: page ${page} · visible ${seen} · bar ends at ${barAt}`
+      // Whether any of the bottom bar is off the bottom of the screen, said
+      // outright rather than left for me to work out from two numbers. It
+      // was cut off once already, by a height unit that settled on the wrong
+      // size, and "bar ends at 900 in an 870 screen" is not something to
+      // have to notice.
+      const seenH = document.documentElement.clientHeight;
+      const cut = bar ? Math.round(bar.getBoundingClientRect().bottom) - seenH : 0;
+      const barState = !bar ? 'no bar found'
+        : cut > 1 ? `BAR CUT OFF by ${cut}px` : `bar fully on screen (ends at ${barAt})`;
+      return `screen: page ${page} · visible ${seen} · ${barState}`
         + ` · scrolled ${box ? Math.round(box.scrollTop) : '?'}`;
     })(),
     (() => {
