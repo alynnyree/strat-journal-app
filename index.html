@@ -5959,9 +5959,25 @@ let alpacaConnected = false;
 //    when the trade is paired, and they are now settled once and frozen.
 //    A missing FEE is the one exception -- an absent figure is not a
 //    settled one, and it is filled in rather than changed.
+// A stock price taken from the real-time single-exchange feed, waiting on
+// the all-venues one. This is the ONE thing allowed past "settled", and
+// only once: the consolidated tape arrives 15 minutes after the fill and
+// is a better answer for the same second. Asked for by him on 2026-09-07,
+// knowing it means the chart price can tick by a cent or two after import.
+// It is not money and can never touch a money figure.
+const FULL_TAPE_DELAY_MS = 15 * 60 * 1000;
+function awaitingFullTape(t){
+  if(!t.undEntryUpgradable && !t.undExitUpgradable) return false;
+  // Nothing to gain until the delay has actually passed.
+  const newest = Math.max(t.entryTimestamp || 0, t.exitTimestamp || 0);
+  if(!newest) return false;
+  return Date.now() - newest >= FULL_TAPE_DELAY_MS;
+}
+
 function tradeIsStale(t){
   if(t.optExit == null) return false;
   if(t.source !== 'schwab-auto') return false;   // his own typed entries are not the server's to fill
+  if(awaitingFullTape(t)) return true;           // the one thing worth reopening a finished trade for
   if(t.settled === true) return false;           // it has had its one pass; leave it alone
   if(t.fees == null || t.undEntrySource == null) return true;
   // A stock price that has never been looked up with Alpaca available.
@@ -6439,6 +6455,7 @@ async function autoImportPendingTrades(url, pending){
       // never shown as though it were a record.
       undEntrySource: t.undEntrySource ?? null, undExitSource: t.undExitSource ?? null,
       undEntryExact: t.undEntryExact ?? null, undExitExact: t.undExitExact ?? null,
+      undEntryUpgradable: t.undEntryUpgradable ?? false, undExitUpgradable: t.undExitUpgradable ?? false,
       entryFees: t.entryFees ?? null, exitFees: t.exitFees ?? null,
       fees: t.fees ?? null,
       pnlNet: t.pnlNet ?? (t.fees != null && pnlDollar != null
@@ -6575,7 +6592,13 @@ function refreshTradeFacts(saved, fresh){
 
   // The underlying price, and how it was obtained. A rebuild that has an
   // exact print replaces a candle close; one that does not, does not.
-  if(fresh.undEntry != null && !his(saved, 'undEntry')){ set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact); }
+  if(fresh.undEntry != null && !his(saved, 'undEntry')){
+    set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact);
+    // Whether it is STILL waiting on the all-venues price. Cleared once a
+    // reply comes back that is not itself provisional, so a trade cannot
+    // sit asking to be improved for ever.
+    saved.undEntryUpgradable = !!fresh.undEntryUpgradable;
+  }
   // Whether Alpaca was available when the server worked this price out.
   // Without carrying this over, a rebuild that DID use Alpaca would look
   // exactly like one that never tried, and the trade would be rebuilt for
@@ -6583,7 +6606,10 @@ function refreshTradeFacts(saved, fresh){
   if(fresh.undPricedWithAlpaca === true && saved.undPricedWithAlpaca !== true){
     saved.undPricedWithAlpaca = true; changed = true;
   }
-  if(fresh.undExit  != null && !his(saved, 'undExit')){ set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact); }
+  if(fresh.undExit  != null && !his(saved, 'undExit')){
+    set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact);
+    saved.undExitUpgradable = !!fresh.undExitUpgradable;
+  }
 
   // Timeframe alignment. Only taken when the rebuild actually measured
   // something — an empty answer must not wipe a good one.

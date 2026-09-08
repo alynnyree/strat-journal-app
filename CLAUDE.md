@@ -736,6 +736,29 @@ Uses **The Strat**. Key concepts the code implements:
   note under the card says outright that the lines do not add to 100% and
   why. When he misreads a figure, check the presentation before defending
   the number.
+- **A note in the code is not a source.** `tooRecentForFreePlan` refused
+  EVERY Alpaca request under 15 minutes old, on the strength of a comment
+  in that same file saying the free plan serves nothing that recent.
+  Checked against Alpaca's published terms: the delay applies to the FULL
+  tape (SIP); the free plan serves IEX in REAL TIME. So the app was
+  throwing away real-time data his key already had, and a trade closing
+  five minutes ago — most of his — fell back to a Schwab candle up to a
+  minute stale. **The dominant cause of "approx." was never a broken
+  connection; it was this.** Before building monitoring for a thing,
+  check what actually causes it.
+- **"Live at the fill" is FASTER, not more accurate.** I proposed
+  capturing the price the moment the fill notification arrives and called
+  it the strongest option. It is not: that gives the price a second or two
+  AFTER the fill, whereas the after-the-fact lookup finds the actual print
+  at the right second. The most accurate answer is the historical one; the
+  only question is how long it has to wait. Do not confuse immediacy with
+  precision.
+- **A restricted ask must not teach a cache what it did not test.**
+  Asking IEX on purpose, because the full tape cannot answer for a recent
+  moment, says NOTHING about which feed the key has. Letting it write to
+  `feedInUse` would have corrupted the learned answer and logged a
+  downgrade that never happened — the same class of fault as #62. An
+  `onlyFeeds` ask is excluded from learning, and that is tested.
 - **A fee belongs to a FILL, not to a contract.** Splitting one across
   several closes as a rounded proportion does not add back up: $1.00 over
   three contracts closed one at a time paid out 33+33+33 = 99 cents, and
