@@ -24,6 +24,48 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+79. **The real reason his newest trades read "approx."** (2026-09-07,
+    after he asked how to be sure the market data always pulls exact
+    data). **Status: BUILT AND TESTED (16 server checks, 15 app checks).
+    Not yet confirmed against his live key.**
+
+    He asked how to make sure the connection never silently stops
+    answering. I offered three monitoring options. He pushed back and
+    asked whether those were the only ones -- and he was right to, because
+    monitoring was aimed at the wrong cause.
+
+    **What was actually wrong:** every Alpaca request for a moment under
+    15 minutes old was refused outright, on the strength of a comment in
+    that same file. Checked against Alpaca's published terms instead: the
+    15-minute delay applies to the FULL market tape. The free plan serves
+    IEX in REAL TIME. So a trade closing five minutes ago -- most of his
+    -- fell back to a Schwab candle up to a minute stale, while a genuine
+    print at the right second sat there unused.
+
+    **And a correction I had to make to myself.** I had called "capture
+    the price live at the fill" the strongest option. It is not. Live
+    capture gives the price a second or two AFTER the fill; the
+    after-the-fact lookup finds the actual print at the right second. The
+    historical answer is the more accurate one -- immediacy is not
+    precision. Live capture was dropped from the plan entirely.
+
+    **Built (his choice of 1 and 2):**
+    1. A moment inside the delay window is asked of the real-time feed
+       specifically, rather than refused. A restricted ask is excluded
+       from teaching the cache which feed the key has, or it would corrupt
+       the learned answer exactly as in task 68.
+    2. Such a price is marked, and replaced ONCE by the all-venues price
+       when the 15 minutes have passed. This is the only thing allowed to
+       reopen a trade marked finished, it happens exactly once, and it can
+       never touch a money figure -- tested by offering different money on
+       the same pass and confirming every figure held.
+
+    A stock price he set by hand still outranks the upgrade.
+
+    **Left undone, and his to decide:** Alpaca charges $99/month to remove
+    the delay entirely. My view is it is not worth it -- the free route
+    gets within a cent or two -- but it is his money.
+
 78. **"These percentages don't add up to 100%"** (his report,
     2026-09-06, on the FTFC & Play Performance card). **Status: FIXED AND
     TESTED (14 checks built on his own figures). Not seen on his phone.**
