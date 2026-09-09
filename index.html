@@ -7810,9 +7810,16 @@ function csvReadSchwabFile(text){
   // purchases ahead of sales within a day. A made-up clock time is used ONLY
   // to keep that order for the pairing; it is never stored on a trade.
   rows.sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.isBuy === b.isBuy ? 0 : (a.isBuy ? -1 : 1)));
+  // How many times this exact row has already been seen. Two identical rows
+  // in one file are two real fills and must stay apart, but the count has to
+  // be scoped to the ROW ITSELF -- see the note on the reference below.
+  const seenSoFar = new Map();
   let n = 0;
   const fills = rows.map(r => {
     const order = n++;
+    const rowKey = [r.date, r.occ, r.isBuy ? 'B' : 'S', r.qty, r.price].join('|');
+    const nth = (seenSoFar.get(rowKey) || 0) + 1;
+    seenSoFar.set(rowKey, nth);
     return {
       occ: r.occ, ticker: r.symbol.split(' ')[0],
       putCall: r.symbol.trim().endsWith('P') ? 'PUT' : 'CALL',
@@ -7820,10 +7827,24 @@ function csvReadSchwabFile(text){
       quantity: r.qty, price: r.price, fees: r.fees,
       date: r.date, time: null,
       timestamp: Date.parse(r.date + 'T14:30:00Z') + order * 60000,
-      // No reference numbers in the file, so one is built from what the row
-      // actually says. The same file read twice gives the same references,
-      // which is what stops a second import writing everything down again.
-      transactionId: 'csv|' + [r.date, r.occ, r.isBuy ? 'B' : 'S', r.qty, r.price, order].join('|'),
+      // No reference numbers in the file, so one is built from what the ROW
+      // ITSELF says -- and from nothing about the file it arrived in.
+      //
+      // It used to end in the row's POSITION, and that was wrong in a way
+      // that tripled his loss. He has two exports: one covering January to
+      // July and a shorter one covering March to July. The same trade sits
+      // at a different position in each, so it got a different reference in
+      // each, and the check that refuses a trade already on file never saw
+      // them as the same. Importing both gave 459 trades, $739.46 of fees
+      // and -$2,704.46 against a real -$1,100.73.
+      //
+      // The date, the contract, the side, the size and the price describe
+      // the fill wherever it is read from. Two identical rows in one file
+      // are two real fills, so the count of how many identical ones came
+      // before is kept -- and because that key contains the DATE, and any
+      // export contains whole days, the third identical row on 9 June is the
+      // third one in every file that covers 9 June.
+      transactionId: 'csv|' + rowKey + '|#' + nth,
     };
   });
   return { fills, reason: null, nonTrade, unreadableSymbol };

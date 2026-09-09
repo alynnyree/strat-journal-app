@@ -119,6 +119,32 @@ const { FULL, HAVE_HIS_FILLS } = require('./real-journal.js');
         a.length === c.length && a.every((x,i) => x === c[i]));
       await p2.close();
     }
+    // HE IMPORTED BOTH OF HIS EXPORTS (2026-09-09) and his journal went to
+    // 459 trades and -$2,704.46 against a real -$1,100.73 -- his loss nearly
+    // tripled. He has a January-to-July export and a shorter March-to-July
+    // one, and the reference built for each row ended in the row's POSITION,
+    // which differs between the two. So the same fill got a different
+    // reference in each file and the check never saw them as the same trade.
+    //
+    // Either order, both files, must land on his broker's own figures.
+    const SHORT = path.join(path.dirname(FULL), 'b4dfe218-Schwab_.csv');
+    if(fs.existsSync(SHORT)){
+      const shortText = fs.readFileSync(SHORT, 'utf8');
+      for(const [label, order] of [['the long file then the short one', [text, shortText]],
+                                   ['the short file then the long one', [shortText, text]]]){
+        const { p: p3 } = await phone([]);
+        let last;
+        for(const t of order) last = await importFile(p3, t);
+        check(`${label}: 254 trades, not one more (${last.trades.length})`, last.trades.length === 254);
+        check(`${label}: 306 contracts (${last.trades.reduce((s,t)=>s+t.contracts,0)})`,
+          last.trades.reduce((s,t)=>s+t.contracts,0) === 306);
+        check(`${label}: $404.73 of fees ($${total(last.trades,t=>t.fees).toFixed(2)})`,
+          total(last.trades, t=>t.fees) === 404.73);
+        check(`${label}: -$1100.73 after fees ($${total(last.trades,t=>t.pnlNet).toFixed(2)})`,
+          total(last.trades, t=>t.pnlNet) === -1100.73);
+        await p3.close();
+      }
+    }
   } else {
     console.log('SKIPPED the real-data checks: his broker export is not on this machine.');
   }
