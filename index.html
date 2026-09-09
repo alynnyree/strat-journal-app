@@ -3656,7 +3656,10 @@ function renderJournal(){
     const playBadge = t.play
       ? `<span class="badge" style="background:var(--panel); color:var(--gold-lite); border:1px solid var(--gold-deep);">▶ ${escapeHtml(t.play)}</span>`
       : '';
-    const sourceBadge = (t.source && t.source !== 'schwab-auto')
+    // Only a trade he actually typed in. A trade read out of his broker's
+    // file is not one he added by hand, and saying so on 205 cards would be
+    // a plainly wrong label.
+    const sourceBadge = (t.source && !fromBroker(t))
       ? `<span class="badge" style="background:var(--panel); color:var(--text-dim); border:1px solid var(--line);">✍ Added by hand</span>`
       : '';
     return `
@@ -4456,7 +4459,7 @@ async function renderAppStatus(){
   }
 
   await gatherTech(url);
-  const auto = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const auto = loadTrades().filter(t => t.optExit != null && fromBroker(t));
   const catchingUp = auto.filter(tradeIsStale).length;
   const unread = loadTrades().filter(classifyWaiting).length;
   const problem = readProblem('classify') || readProblem('rebuild');
@@ -5066,7 +5069,7 @@ async function renderChecklist(){
 // The technical text, for sending to me. Never on screen unless asked for.
 function techText(){
   const all = loadTrades();
-  const auto = all.filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const auto = all.filter(t => t.optExit != null && fromBroker(t));
   const srv = techNotes.server || {};
   const cp = readProblem('classify'), rp = readProblem('rebuild'), dec = readDecline(), ask = readRebuildAsk();
   const when = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
@@ -6283,9 +6286,31 @@ function missingEssentials(t){
 // looping.
 const MAX_FILL_ATTEMPTS = 3;
 
+// Came from his broker, rather than being typed in by hand -- either through
+// the live connection or read out of his broker's own file. Both are the
+// journal's to fill in; only what HE typed is not.
+//
+// This exists because "came from the broker" used to mean exactly one thing,
+// and eight separate places tested for that one thing by name. Reading his
+// broker's file became a second way in, and every one of those tests then
+// quietly answered "typed in by hand" for 205 of his trades -- which would
+// have labelled them so on the card, left them out of the count of what is
+// still filling in, and let a duplicate check prefer them over the real
+// thing. The same fault as every other "a second answer is invisible to a
+// check written for the first" on the record.
+function fromBroker(t){
+  return !!t && (t.source === 'schwab-auto' || t.source === 'schwab-csv');
+}
+
 function tradeIsStale(t){
   if(t.optExit == null) return false;
-  if(t.source !== 'schwab-auto') return false;   // his own typed entries are not the server's to fill
+  // His own typed entries are not the server's to fill in. A trade read out
+  // of his broker's FILE is: it arrives knowing the money and nothing else --
+  // no minutes, no stock prices, no timeframes, no Bar Replay -- and the only
+  // place the rest of it exists is the live connection. Without this the app
+  // would never ASK for them, and the honest answer to "will my times fill in
+  // automatically?" would be "only if you happen to tap the button".
+  if(!fromBroker(t)) return false;
   if(awaitingFullTape(t)) return true;           // a provisional price waiting on the full tape
   // A BLANK outranks "finished".
   //
@@ -6362,7 +6387,7 @@ async function showRebuildState(url){
   const el = document.getElementById('rebuildState');
   if(!el) return;
   if(!url){ el.textContent = ''; return; }
-  const trades = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const trades = loadTrades().filter(t => t.optExit != null && fromBroker(t));
   if(!trades.length){ el.textContent = ''; return; }
   const short = trades.filter(tradeIsStale).length;
   el.innerHTML = short === 0
@@ -6426,7 +6451,7 @@ async function maybeAutoRebuild(url){
   // used up their own attempts. Counted here so the limits below can tell
   // a certainty from a hunch.
   const definite = loadTrades().filter(t =>
-    t.optExit != null && t.source === 'schwab-auto'
+    t.optExit != null && fromBroker(t)
     && missingEssentials(t) && (t.fillAttempts || 0) < MAX_FILL_ATTEMPTS).length;
 
   // A definite gap gets past the attempt cap and the half-day wait -- but
@@ -6449,7 +6474,7 @@ async function maybeAutoRebuild(url){
 
   if(serverBehind()){ noteDecline('the other half is still updating, so measuring again now would give the same answer'); return false; }
   const trades = loadTrades();
-  const closed = trades.filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const closed = trades.filter(t => t.optExit != null && fromBroker(t));
   if(closed.length < 5){ noteDecline('fewer than five trades came from Schwab, so there is nothing worth rebuilding'); return false; }
   const stale = closed.filter(tradeIsStale).length;
   // A DEFINITE gap is not the same as a hunch, and the share threshold
@@ -6549,7 +6574,7 @@ async function forceRemeasure(){
 // Once a rebuild has actually filled the gaps, the attempt count is
 // cleared so a future improvement gets a fresh set of tries.
 function noteRebuildOutcome(){
-  const trades = loadTrades().filter(t => t.optExit != null && t.source === 'schwab-auto');
+  const trades = loadTrades().filter(t => t.optExit != null && fromBroker(t));
   if(!trades.length) return;
   if(trades.filter(tradeIsStale).length / trades.length < REBUILD_SHARE){
     // Clears the ATTEMPT COUNT only, never the timestamp.
@@ -6766,6 +6791,77 @@ function tradeFingerprint(t){ return tradeIdentity(t).strict; }
 // The two codes do not contradict each other: equal, or one of them missing.
 function codesAgree(a, b){ return !a || !b || a === b; }
 
+// ---- The same trade, one copy of which has no clock times --------------
+//
+// HIS QUESTION (2026-09-09), after importing his broker's own file: "It also
+// says that it doesn't have time so the minute I entered and exited is left
+// blank. Will the journal automatically upload my times for entries and
+// exits?"
+//
+// The answer had to be worse than no. His broker's file has no time columns
+// at all, so a trade read out of it leaves both blank on purpose -- a made-up
+// minute would flow into the timeframe reading, the stock price and Bar
+// Replay looking exactly as solid as a real one. The SAME trade arriving
+// from the live connection carries real minutes and his broker's own
+// reference numbers for its two fills. Neither check that stops a trade
+// being written down twice could recognise the pair:
+//   * the reference check compares the two fills, and the file had to invent
+//     its own references, which the real ones do not match;
+//   * the shape check includes both TIMES, and one copy has none.
+// So all 254 of his trades would have been written down a second time -- fee
+// and all -- the moment the connection came back. That is the same shape of
+// fault as the one that tripled his loss a day earlier, and it was sitting
+// there waiting.
+//
+// The rule is already on the record: an identity must never be asked about a
+// field deliberately left blank. So when one copy came out of the file and
+// has never met the live connection, the two are compared on everything
+// ELSE, and the minutes are filled IN rather than a second trade added.
+//
+// The dangerous half, and the reason this is not simply "ignore the times":
+// three separate trades on one contract, on one day, at the same two prices,
+// for the same size differ ONLY in the minute. Ignoring the minute for
+// everyone collapses those three into one, which is exactly the fault that
+// threw away 24 of his trades. So this is narrow on both sides -- only a
+// trade that came from the FILE may be matched this way, and each arrival
+// claims a DIFFERENT saved copy, one for one, so three stay three.
+function timelessIdentity(t){
+  const n = v => (v == null ? '' : Number(v).toFixed(4));
+  const rest = [t.entryDate || '', t.exitDate || '',
+                n(t.optEntry), n(t.optExit), t.contracts ?? ''].join('|');
+  return { code: String(t.occ || '').trim(), loose: (t.ticker || '') + '|' + rest };
+}
+// Came out of his broker's file and has never been met by the live
+// connection. Not "has no times": if he typed a minute in himself that is
+// his answer and stands, but the trade is still the one the file left
+// incomplete, and it must still be recognised rather than duplicated.
+function awaitingSchwabTimes(t){
+  return !!t && t.source === 'schwab-csv' && t.entryTimestamp == null;
+}
+function timelessIndex(trades, eligible){
+  const m = new Map();
+  for(const t of trades || []){
+    if(eligible && !eligible(t)) continue;
+    const id = timelessIdentity(t);
+    if(!m.has(id.loose)) m.set(id.loose, []);
+    m.get(id.loose).push({ trade: t, code: id.code, claimed: false });
+  }
+  return m;
+}
+// The one saved copy this arrival belongs to, TAKEN OUT of the running so a
+// second arrival cannot claim the same one. That is what keeps three trades
+// that differ only in the minute as three trades.
+function claimTimeless(index, t){
+  const id = timelessIdentity(t);
+  const group = index.get(id.loose);
+  if(!group) return null;
+  const open = group.filter(e => !e.claimed && codesAgree(e.code, id.code));
+  if(!open.length) return null;
+  const pick = open.find(e => e.code && e.code === id.code) || open[0];
+  pick.claimed = true;
+  return pick;
+}
+
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
@@ -6822,6 +6918,10 @@ async function autoImportPendingTrades(url, pending){
   };
   const claimedPairs = new Set();
   for(const t of trades){ const k = fillPair(t); if(k) claimedPairs.add(k); }
+
+  // The trades his broker's FILE left without minutes, each claimable once.
+  // See timelessIdentity above for why this is kept separate from the shape.
+  const awaitingTimes = timelessIndex(trades, awaitingSchwabTimes);
   const alreadySpokenFor = (t) => {
     const k = fillPair(t);
     if(!k) return null;                  // older trades carry none; fall through to the shape check
@@ -6888,6 +6988,31 @@ async function autoImportPendingTrades(url, pending){
       }
       try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* non-fatal */ }
       continue;
+    }
+    // Not on file by its references and not by its shape. Before treating it
+    // as brand new: is it a trade he imported from his broker's FILE, which
+    // could not tell him the minute? If so this arrival is the same trade
+    // with the minutes attached, and the answer is to fill them in.
+    //
+    // Only ever asked of an arrival that actually HAS minutes -- there is
+    // nothing to fill in from one that does not, and letting a second
+    // timeless copy claim a timeless saved one would report a repeat as a
+    // repair.
+    if(t.entryTime){
+      const blank = claimTimeless(awaitingTimes, t);
+      if(blank){
+        if(refreshTradeFacts(blank.trade, t) && !pollTally.seen.has(blank.trade.id)){
+          pollTally.seen.add(blank.trade.id);
+          refreshed++;
+        }
+        // Re-filed under the shape it now has, and its new references
+        // remembered, so a second arrival of the same trade is caught by
+        // the ordinary checks above rather than reaching this one again.
+        remember(blank.trade, true);
+        { const k = fillPair(blank.trade); if(k) claimedPairs.add(k); }
+        try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+        continue;
+      }
     }
     remember(t, true); // claimed by this batch
     { const k = fillPair(t); if(k) claimedPairs.add(k); }
@@ -6967,6 +7092,12 @@ async function autoImportPendingTrades(url, pending){
 // as his, and nothing may write over it again. Only what he changed --
 // editing a note does not freeze the rest of the trade.
 const SERVER_ALSO_WRITES = [
+  // The two minutes. They only ever had one author until his broker's file
+  // became an import path: a trade out of that file has no minute, so the
+  // live connection now fills one in, and the moment a field gains a second
+  // author every "may I write this?" test written for the first one is
+  // wrong. If he typed a minute himself, it is his.
+  'entryTime', 'exitTime',
   'undEntry', 'undExit', 'stop', 'strat', 'play',
   'optEntry', 'optExit', 'contracts', 'pnlDollar', 'pnlPercent',
   'fees', 'entryFees', 'exitFees', 'pnlNet', 'winLoss',
@@ -7019,6 +7150,48 @@ function refreshTradeFacts(saved, fresh){
   // touched.
   if(!String(saved.occ || '').trim() && String(fresh.occ || '').trim()){
     saved.occ = fresh.occ; changed = true;
+  }
+
+  // ---- The minute he entered and the minute he left -------------------
+  //
+  // His broker's file has no time columns, so a trade read out of it has
+  // both left blank on purpose. This is the one thing that can fill them:
+  // the same trade arriving from the live connection, which does know them.
+  // A minute already on file is never touched, and one he typed in himself
+  // is his.
+  //
+  // The minute and the exact instant are ONE answer and move together. Split
+  // apart, a trade could show 09:00 on the card while Bar Replay and the
+  // timeframe reading used 09:31 -- the same class of fault as a badge whose
+  // colour disagreed with its own words.
+  if(!saved.entryTime && !his(saved, 'entryTime') && fresh.entryTime){
+    saved.entryTime = fresh.entryTime;
+    if(fresh.entryTimestamp != null) saved.entryTimestamp = fresh.entryTimestamp;
+    changed = true;
+  }
+  if(!saved.exitTime && !his(saved, 'exitTime') && fresh.exitTime){
+    saved.exitTime = fresh.exitTime;
+    if(fresh.exitTimestamp != null) saved.exitTimestamp = fresh.exitTimestamp;
+    changed = true;
+  }
+  // His broker's own reference numbers for the two fills, replacing the ones
+  // the file had to invent for itself. The invented pair is what stops the
+  // same file being read twice; the real pair is what stops this trade being
+  // written down twice from here on, and it is the one thing about a trade
+  // that a different pairing cannot change. Only ever replaced where the
+  // saved references came from the file, or where there are none at all.
+  {
+    const savedFills = Array.isArray(saved.fills) ? saved.fills : [];
+    const invented = savedFills.length > 0 && savedFills.every(f => String(f).startsWith('csv|'));
+    if((invented || savedFills.length === 0) && Array.isArray(fresh.fills) && fresh.fills.length){
+      saved.fills = fresh.fills.slice(); changed = true;
+    }
+  }
+  // From here on it is indistinguishable from a trade that came from the
+  // live connection in the first place, so the ordinary catch-up carries on
+  // filling in the stock prices, the timeframes and Bar Replay.
+  if(saved.source === 'schwab-csv' && (saved.entryTimestamp != null || saved.entryTime)){
+    saved.source = 'schwab-auto'; changed = true;
   }
 
   // ---- Money is settled once and never changed again ----------------
@@ -7921,6 +8094,20 @@ function handleCsv(input){
     for(const t of existing){ const k = pairOf(t); if(k) claimed.add(k); }
     const byPrint = new Set(existing.map(tradeFingerprint));
 
+    // AND THE OTHER WAY ROUND, which was just as bad and was live. Once the
+    // connection is working again his trades arrive from the broker with real
+    // minutes and the broker's own reference numbers -- so a trade read out
+    // of the file afterwards matches neither: its invented references are
+    // claimed by nobody, and the shape is not even asked because it HAS
+    // references. Every trade in the file would have been added on top of the
+    // ones already there.
+    //
+    // So a trade from the file is also compared on everything except the
+    // minutes, one for one, and skipped where the journal already has it.
+    // Claiming each saved copy once is what keeps three trades that differ
+    // only in the minute as three.
+    const alreadyByShape = timelessIndex(existing);
+
     const added = [];
     let alreadyHad = 0;
     for(const p of paired){
@@ -7941,7 +8128,10 @@ function handleCsv(input){
       // them were thrown away as copies of the first. An identity must never
       // be asked about a field that has deliberately been left blank.
       const looksSame = !hasRefs && byPrint.has(tradeFingerprint(trade));
-      if(clash || looksSame){ alreadyHad++; continue; }
+      // Only asked once the references and the shape have both come back
+      // with nothing, so a repeat of the same file never consumes anything.
+      const gotItAlready = (clash || looksSame) ? null : claimTimeless(alreadyByShape, trade);
+      if(clash || looksSame || gotItAlready){ alreadyHad++; continue; }
       if(pair) claimed.add(pair);
       byPrint.add(tradeFingerprint(trade));
       added.push(trade);
@@ -8025,8 +8215,9 @@ function ownWorkScore(t){
   if(t.replayData) n += 1;
   if((t.ftfcTimeframesInRun||[]).length) n += 1;
   // A trade he typed in himself outranks one the broker feed produced,
-  // so a tie never throws away his own entry.
-  if(t.source !== 'schwab-auto') n += 5;
+  // so a tie never throws away his own entry. A trade read out of his
+  // broker's FILE is not one he typed in, and must not win on this.
+  if(!fromBroker(t)) n += 5;
   return n;
 }
 
