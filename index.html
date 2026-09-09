@@ -6682,6 +6682,34 @@ async function autoImportPendingTrades(url, pending){
     byIdentity.get(id.loose).push({ trade: t, code: id.code, claimed: !!claimed });
   };
   for(const t of trades) remember(t, false);
+
+  // ---- Fills already spoken for ---------------------------------------
+  //
+  // MEASURED ON HIS REAL JOURNAL (2026-09-09). Four of its trades do not
+  // exist. Two of them read:
+  //     09:31 -> 09:36   1 contract    1.11 -> 1.22   fee $1.33
+  //     09:31 -> 09:36   2 contracts   1.11 -> 1.22   fee none
+  // Same purchase, same sale, same two prices — a different SIZE. They are
+  // one real trade, paired twice, because the same fills went through the
+  // matcher again and came out matched up differently.
+  //
+  // Everything above this identifies a trade by its SHAPE, and a different
+  // pairing has a different shape, so the phantom read as brand new and was
+  // written down. It arrived with no fee, because the fee had already gone
+  // to the real trade — which is why four trades sat "waiting for a fee"
+  // that was never coming. Contracts he never bought, in his totals.
+  //
+  // A purchase is a purchase whichever sale it is matched to. So a trade
+  // that cites a fill another trade already cites is a second version of
+  // something already on file, whatever shape it arrived in.
+  const claimedFills = new Set();
+  for(const t of trades){ for(const f of (t.fills || [])) claimedFills.add(String(f)); }
+  const alreadySpokenFor = (t) => {
+    const f = Array.isArray(t.fills) ? t.fills : [];
+    if(!f.length) return null;           // older trades carry none; fall through to the shape check
+    const clash = f.find(x => claimedFills.has(String(x)));
+    return clash == null ? null : clash;
+  };
   // The saved trade this arrival is a second sighting of, or null. An exact
   // code match is preferred; a missing code on either side is accepted.
   const findSaved = (t) => {
@@ -6706,6 +6734,15 @@ async function autoImportPendingTrades(url, pending){
       // Every way out of this loop now clears the server's copy, because
       // the trade is accounted for however it got here.
       try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+      continue;
+    }
+    // Checked BEFORE the shape, because the shape is exactly what a
+    // re-pairing changes. Counted as a duplicate and cleared from the
+    // queue: it is not new, and leaving it there would have it re-sent for
+    // ever.
+    const clash = alreadySpokenFor(t);
+    if(clash){
+      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next check will try again */ }
       continue;
     }
     const seen = findSaved(t);
@@ -6736,6 +6773,7 @@ async function autoImportPendingTrades(url, pending){
       continue;
     }
     remember(t, true); // claimed by this batch
+    for(const f of (t.fills || [])) claimedFills.add(String(f));
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
@@ -6747,6 +6785,10 @@ async function autoImportPendingTrades(url, pending){
       entryDate: t.entryDate, entryTime: t.entryTime,
       exitDate: t.exitDate, exitTime: t.exitTime,
       occ: t.occ || '',
+      // Which of Schwab's own fills this trade was built from. This is the
+      // only thing about a trade that a re-pairing cannot change, and it is
+      // what stops a phantom getting in. See claimedFills below.
+      fills: Array.isArray(t.fills) ? t.fills.slice() : [],
       // The raw instants Schwab gave, kept so a trade can be put back
       // through the machine later exactly as it first arrived. These were
       // never stored before, which left every trade on file unable to be
