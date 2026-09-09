@@ -1208,6 +1208,24 @@ Uses **The Strat**. Key concepts the code implements:
   they disagree by a single trade or a single cent: 254 / $404.73 /
   −$1,100.73 / 306, and it reaches out to nothing. **A fallback that has
   never been exercised is not a fallback.**
+- **A reference built from WHERE a row sits is not a reference to the row.**
+  He has two Schwab exports: one covering January to July and a shorter one
+  covering March to July. The file-import path had no broker reference
+  numbers to work with, so it built one per row — and ended it with the
+  row's POSITION in the file. The same fill sits at a different position in
+  a shorter export, so it got a different reference in each, and the check
+  that refuses a trade already on file never saw the two as the same.
+  He imported both. Measured: **459 trades, 559 contracts, $739.46 of fees
+  and −$2,704.46 against a real −$1,100.73 — his loss nearly tripled.**
+  The reference now describes the ROW and nothing about the file it arrived
+  in: date, contract, side, size, price, plus how many identical rows came
+  before it. That count is stable because the key contains the DATE and any
+  export contains whole days, so the third identical row on 9 June is the
+  third one in every file that covers 9 June. Both orders of both files now
+  land on 254 / 306 / $404.73 / −$1,100.73, and that is a permanent check.
+  **Any identity invented for a record must be derivable from the record
+  alone.** Position, arrival order and batch number are properties of the
+  reading, not of the thing read.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
