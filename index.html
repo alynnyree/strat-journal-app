@@ -5737,6 +5737,25 @@ async function getMyTrades(afterClearingMemory){
     // "force it" must actually force it.
     btn.textContent = 'Asking Schwab…';
     showStatus('info', 'Asking Schwab for your full trade history — this can take a minute.');
+    // ---- Which run's answer are we reading? ---------------------------
+    //
+    // THIS is why tapping the button imported nothing, over and over.
+    //
+    // The server keeps a record of the LAST import — how far Schwab went
+    // back, whether it finished — and hands that same record out until a
+    // new run replaces it. Asking for a new import answers instantly and
+    // starts the work a moment later, so the very first look afterwards
+    // gets the PREVIOUS run's record, marked finished. The loop below
+    // stops the moment it sees "finished", so it stopped straight away,
+    // having collected nothing, and reported the old run's conclusion as
+    // though it were this one's.
+    //
+    // The record from before we asked is noted here so it can be told
+    // apart from ours. No clocks are compared: the phone's time and the
+    // server's are not the same, and a record is simply this run's once it
+    // is no longer the one that was sitting there a second ago.
+    const runBefore = await fetchBackfillStatus(url);
+    const previousRunStartedAt = (runBefore && runBefore.startedAt) || null;
     await runBackfillNow(true);
     localStorage.setItem(BACKFILL_DONE_KEY, '1');
 
@@ -5762,6 +5781,13 @@ async function getMyTrades(afterClearingMemory){
     // If the server is too old to report progress, fall back to a short
     // bounded wait rather than pretending to know it has finished.
     const BLIND_WAIT_MS = 15 * 1000;
+    // How long to let the server get around to writing this run's record
+    // before giving up on ever telling the two apart. It writes that record
+    // as the very first thing it does once the request lands, so this only
+    // has to cover the round trip -- and it is spent TWICE when an empty
+    // journal is being rebuilt, so a generous-looking number here is double
+    // that in front of him, watching a button say "Collecting".
+    const STARTUP_GRACE_MS = 20 * 1000;
     let status = null;
     let quietRounds = 0;
     while(true){
@@ -5769,7 +5795,15 @@ async function getMyTrades(afterClearingMemory){
       const gained = (loadTrades().length - before) - found;
       found = loadTrades().length - before;
       renderJournal(); renderDashboard();
-      status = await fetchBackfillStatus(url);
+      const reported = await fetchBackfillStatus(url);
+      // Still the old record: this run has not written its own yet. Treated
+      // as "no progress to follow" rather than as a finished import, which
+      // is the whole fault being fixed. An older server that reports no
+      // start time at all cannot be told apart, so it is taken at face
+      // value exactly as before.
+      const isOurs = !reported || !reported.startedAt || !previousRunStartedAt
+        || reported.startedAt !== previousRunStartedAt;
+      status = isOurs ? reported : null;
       btn.textContent = found > 0 ? `Collecting… ${found}` : 'Collecting…';
       showStatus('info', backfillProgressText(status, found));
       if(status){
@@ -5779,8 +5813,18 @@ async function getMyTrades(afterClearingMemory){
       } else {
         // No progress to follow. Behave as before: a few quick looks,
         // stopping once a round brings nothing.
-        quietRounds = gained === 0 ? quietRounds + 1 : 0;
-        if(quietRounds >= 2 || Date.now() - started > BLIND_WAIT_MS) break;
+        // Waiting for THIS run's record is not the same as a server that
+        // cannot report progress. Give the new record a fair chance to
+        // appear before falling back to the short blind wait, or the fault
+        // above just comes back wearing a different hat.
+        const waitingForOurRun = reported && previousRunStartedAt
+          && reported.startedAt === previousRunStartedAt;
+        if(waitingForOurRun){
+          if(Date.now() - started > STARTUP_GRACE_MS) break;
+        } else {
+          quietRounds = gained === 0 ? quietRounds + 1 : 0;
+          if(quietRounds >= 2 || Date.now() - started > BLIND_WAIT_MS) break;
+        }
       }
       await new Promise(r=>setTimeout(r, status ? 3000 : 1800));
     }
@@ -6156,6 +6200,14 @@ function backfillResultMessage(status, found, total){
   }
   if(status && status.fillsFound === 0){
     return ['ok', `Schwab answered every request but returned no trades at all for the last ${status.daysBack || 365} days. Still ${total} in your journal.`];
+  }
+  // The last resort, reached when the server said nothing this run could be
+  // told apart from the last one. On a journal with trades in it that is a
+  // fair "nothing new". On an EMPTY one it is not: an empty journal is
+  // never a good outcome, and calling it one is the same fault that had him
+  // tapping the button over and over.
+  if(total === 0){
+    return ['err', 'Your journal is empty, and the import did not report back on whether it finished. Nothing is lost at Schwab. Tap Get My Trades again in a minute.'];
   }
   return ['ok', `Nothing new to add — still ${total} trades.`];
 }

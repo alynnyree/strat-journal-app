@@ -1144,6 +1144,36 @@ Uses **The Strat**. Key concepts the code implements:
   first, exact ones last. Also: the backfill progress arrives nested inside
   a `backfill` wrapper — a stub that returns it flat makes the app behave
   as though there is no progress to follow at all.
+- **THE REAL REASON "GET MY TRADES" IMPORTED NOTHING, for weeks.** The
+  server keeps a record of the LAST import — how far Schwab reached,
+  whether it finished — and hands that same record out until a new run
+  replaces it. `POST /api/trades/backfill` answers `{started:true}` the
+  instant it lands and calls `runBackfill()` WITHOUT awaiting, so the
+  'running' record is written a moment later. The app's very first poll
+  after asking therefore gets the PREVIOUS run's record, marked
+  `status:'done'` — and the collect loop breaks on `status === 'done'`.
+  **So it stopped on its first look, having collected nothing, and reported
+  the previous run's conclusion as this run's.** Every "Nothing new" he
+  ever saw was the answer to the question before.
+  This hid behind three other real bugs I fixed first, each of which
+  produced the same symptom. The loop is now told which run's record was
+  sitting there BEFORE it asked, and treats an unchanged record as "not
+  started yet" rather than as a finished import. **No clocks are compared**
+  — the phone's time and the server's are not the same, and a record is
+  simply this run's once it is no longer the one that was there a second
+  ago. A server too old to report a start time is taken at face value, as
+  before.
+  **The general rule: a status endpoint that outlives the run it describes
+  must be read with "whose answer is this?", never just "what does it
+  say?".** Anything fire-and-forget behind an instant acknowledgement has
+  this shape.
+- **A grace period is spent TWICE when it sits inside a retry.** The wait
+  for this run's record was first written as 45 seconds — which is 90
+  seconds of him watching a button say "Collecting" whenever an empty
+  journal triggers the rebuild-and-try-again path. The record is written
+  the moment the request lands, so it only ever had to cover a round trip.
+  20 seconds. Count what a timeout costs on the worst path, not the
+  ordinary one.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
