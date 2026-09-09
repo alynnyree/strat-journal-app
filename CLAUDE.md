@@ -1174,6 +1174,40 @@ Uses **The Strat**. Key concepts the code implements:
   the moment the request lands, so it only ever had to cover a round trip.
   20 seconds. Count what a timeout costs on the worst path, not the
   ordinary one.
+- **A trade is named by the PAIR of fills, never by either one alone — and
+  I shipped "either one alone" and it silently destroyed 24 of his trades.**
+  The phantom fix that morning refused any arrival citing a fill another
+  trade already cites. But a position bought in one go and sold in three
+  pieces is THREE real trades that all cite the same purchase. Measured on
+  his own file: 254 trades became 230, 306 contracts became 281, $404.73 of
+  fees became $371.66 — and the rule was live on the REAL import path too,
+  so every partial close he had ever made was being thrown away.
+  It was caught only because the file-import check marked itself against his
+  broker's own arithmetic. **Its own test had asserted the bug** ("sharing
+  one purchase is enough to refuse it"), which is the third time on this
+  project a test has encoded the fault it was meant to prevent. The pair is
+  safe because the pairing produces exactly one trade per purchase-and-sale
+  combination, so no two real trades can share both.
+- **An identity must never be asked about a field deliberately left blank.**
+  The file-import path leaves both TIMES empty, because the file carries
+  none and a made-up minute would flow into the timeframe reading, the stock
+  price and the reward-to-risk figure looking exactly as solid as a real
+  one. Then the duplicate check asked for the SHAPE — contract, both dates,
+  both times, both prices, size — so three separate trades on one contract,
+  one day, same prices, same size, differing only in the minute, collapsed
+  into one and two were discarded. The shape is only asked now when there
+  are no fill references to go on.
+- **The "no backend needed" button did NOTHING for months.** "Import Schwab
+  CSV (fallback, no backend needed)" counted the rows, printed "Parsed 499
+  rows", and stopped. It sat on his Journal tab advertising itself as the
+  path that needs no server — and on 2026-09-09, when the service was
+  suspended for going over its free allowance and nothing could import at
+  all, it was the one thing that should have saved him. It now runs the
+  server's pairing code VERBATIM in the browser, renamed only so the two
+  cannot collide, and a check runs both over his real 480 fills and fails if
+  they disagree by a single trade or a single cent: 254 / $404.73 /
+  −$1,100.73 / 306, and it reaches out to nothing. **A fallback that has
+  never been exercised is not a fallback.**
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

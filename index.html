@@ -6804,13 +6804,28 @@ async function autoImportPendingTrades(url, pending){
   // A purchase is a purchase whichever sale it is matched to. So a trade
   // that cites a fill another trade already cites is a second version of
   // something already on file, whatever shape it arrived in.
-  const claimedFills = new Set();
-  for(const t of trades){ for(const f of (t.fills || [])) claimedFills.add(String(f)); }
-  const alreadySpokenFor = (t) => {
+  // A trade is named by the PAIR of fills it was built from -- the purchase
+  // AND the sale together -- never by either one alone.
+  //
+  // I shipped "either one alone" this morning and it was wrong. A position
+  // bought in one go and sold in three pieces is THREE real trades that all
+  // cite the same purchase. Rejecting on a shared purchase threw two of them
+  // away. Measured on his own file: 24 of his 254 trades silently vanished,
+  // and the same rule was live on this path, so his real imports were losing
+  // every partial close he had ever made.
+  //
+  // The pair is safe because the pairing produces exactly one trade for each
+  // purchase-and-sale combination, so no two real trades can share both.
+  const fillPair = (t) => {
     const f = Array.isArray(t.fills) ? t.fills : [];
-    if(!f.length) return null;           // older trades carry none; fall through to the shape check
-    const clash = f.find(x => claimedFills.has(String(x)));
-    return clash == null ? null : clash;
+    return f.length ? f.map(String).join('+') : null;
+  };
+  const claimedPairs = new Set();
+  for(const t of trades){ const k = fillPair(t); if(k) claimedPairs.add(k); }
+  const alreadySpokenFor = (t) => {
+    const k = fillPair(t);
+    if(!k) return null;                  // older trades carry none; fall through to the shape check
+    return claimedPairs.has(k) ? k : null;
   };
   // The saved trade this arrival is a second sighting of, or null. An exact
   // code match is preferred; a missing code on either side is accepted.
@@ -6875,7 +6890,7 @@ async function autoImportPendingTrades(url, pending){
       continue;
     }
     remember(t, true); // claimed by this batch
-    for(const f of (t.fills || [])) claimedFills.add(String(f));
+    { const k = fillPair(t); if(k) claimedPairs.add(k); }
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
@@ -7446,13 +7461,483 @@ async function matchPendingScreenshots(){
 }
 
 // ---- CSV import (Schwab transaction export) ----
+
+// ==== Importing straight from the Schwab file, with no server at all ====
+//
+// This exists because the button offering it did NOTHING. It counted the
+// rows in the file, printed "Parsed 499 rows", and stopped — while calling
+// itself "fallback, no backend needed" on his screen the whole time.
+//
+// It matters more than it looks. On 2026-09-09 the service the app talks to
+// was suspended for going over its free monthly allowance, which stops every
+// import, every price and every timeframe reading. The file Schwab gives him
+// needs none of that: it is on his phone, and everything below runs in the
+// browser.
+//
+// WHAT THIS CAN AND CANNOT GIVE HIM. The file carries Date, Action, Symbol,
+// Quantity, Price, Fees and Amount — so the money, the dates, the contracts
+// and the sizes are exact. It carries NO TIMES. So the minute he entered and
+// the minute he left are left EMPTY rather than invented, and everything
+// read off a chart at that minute — the thirteen timeframes, the stock
+// price, Bar Replay, the setup — cannot be worked out from this file and is
+// left empty too. Those fill themselves in from Schwab later.
+//
+// The pairing below is COPIED VERBATIM from the server's own, renamed only
+// so the two cannot collide. Two copies of anything drift, so a check runs
+// both of them over his real 480 fills and fails if they disagree by a
+// single trade or a single cent.
+
+// Pairs up opening and closing option fills (per OCC symbol) into
+// completed trades ready for Strat tagging. Schwab's transaction feed only
+// tells you WHAT filled and WHEN — not which Strat setup it was, whether
+// FTFC held, or where your stop was. Those stay manual on purpose.
+//
+// Direction (Long/Short) is based on CALL vs PUT, not buy vs sell — since
+// this trader only ever buys to open (never sells to open), a bought call
+// is a Long bet and a bought put is a Short bet, regardless of the specific
+// buy/sell instruction text Schwab reports.
+function csvDirFromPutCall(putCall) {
+  if (putCall === 'CALL') return 'Long';
+  if (putCall === 'PUT') return 'Short';
+  return null;
+}
+function csvIsOpen(instruction) {
+  return instruction === 'BUY_TO_OPEN' || instruction === 'SELL_TO_OPEN';
+}
+function csvIsClose(instruction) {
+  return instruction === 'BUY_TO_CLOSE' || instruction === 'SELL_TO_CLOSE';
+}
+
+const CSV_DAY_MS = 24 * 60 * 60 * 1000;
+// An open leg older than this is treated as dead and dropped rather than
+// left waiting for a close that is never coming.
+const CSV_MAX_LEG_AGE_DAYS = 45;
+
+// Pulls the expiration date out of an OCC symbol.
+// Format: 6-char padded ticker + YYMMDD + C/P + 8-digit strike.
+// e.g. "NIO   260918C00005000" expires 2026-09-18.
+// Returns null if the symbol doesn't parse, so callers fall back to the
+// age-based check instead of guessing.
+function csvExpirationFromOcc(occ) {
+  if (!occ || typeof occ !== 'string') return null;
+  const m = occ.replace(/\s+/g, ' ').trim().match(/(\d{6})[CP]\d{8}$/);
+  if (!m) return null;
+  const s = m[1];
+  const year = 2000 + parseInt(s.slice(0, 2), 10);
+  const month = parseInt(s.slice(2, 4), 10) - 1;
+  const day = parseInt(s.slice(4, 6), 10);
+  const d = new Date(Date.UTC(year, month, day, 23, 59, 59));
+  return isNaN(d.getTime()) ? null : d.getTime();
+}
+
+// True once a leg can no longer be legitimately closed: its contract has
+// expired, or it's simply been sitting unmatched too long.
+//
+// This is what prevents the mis-pairing this function was rewritten to fix.
+// An option that expires worthless never produces a closing fill, so its
+// open leg used to sit in the queue forever. Trading that SAME contract
+// again weeks later would then match the new close against the ancient
+// open — producing a "trade" with an entry and exit a month apart, and a
+// bar replay covering thousands of candles.
+function csvIsLegDead(leg, atTimestamp) {
+  const exp = csvExpirationFromOcc(leg.occ);
+  if (exp != null && atTimestamp > exp) return true;
+  if (leg.openTimestamp && atTimestamp - leg.openTimestamp > CSV_MAX_LEG_AGE_DAYS * CSV_DAY_MS) return true;
+  return false;
+}
+
+function csvSameTradingDay(aMs, bMs) {
+  if (!aMs || !bMs) return false;
+  return new Date(aMs).toDateString() === new Date(bMs).toDateString();
+}
+
+// Picks which open leg a closing fill should be matched against.
+//
+// Plain FIFO (always the oldest) is what caused the mis-pairing. This
+// trader scalps — opens and closes are almost always the same session — so
+// a same-day open is overwhelmingly the right match. Only when there's no
+// same-day candidate does it fall back to FIFO, and dead legs are never
+// eligible at all.
+function csvPickLegForClose(openLegs, fill) {
+  const eligible = openLegs
+    .map((leg, idx) => ({ leg, idx }))
+    .filter(({ leg }) =>
+      leg.occ === fill.occ &&
+      leg.remaining > 0 &&
+      leg.openTimestamp <= fill.timestamp && // a close can't precede its own open
+      !csvIsLegDead(leg, fill.timestamp)
+    );
+  if (!eligible.length) return -1;
+
+  const sameDay = eligible.filter(({ leg }) => csvSameTradingDay(leg.openTimestamp, fill.timestamp));
+  if (sameDay.length) {
+    // Newest same-day open first — matches how a scalper actually layers in
+    // and out within a session.
+    sameDay.sort((a, b) => b.leg.openTimestamp - a.leg.openTimestamp);
+    return sameDay[0].idx;
+  }
+  // No same-day open: fall back to oldest-first (standard FIFO).
+  eligible.sort((a, b) => a.leg.openTimestamp - b.leg.openTimestamp);
+  return eligible[0].idx;
+}
+
+// state: { openLegs: [...], pending: [...] }
+// fills: array of normalized fills, already sorted by time, not yet processed
+// (caller is responsible for not re-feeding already-processed transactionIds)
+function csvProcessFills(fills, state) {
+  const openLegs = [...state.openLegs];
+  const newPending = [];
+  const newlyOpenedLegs = []; // legs opened THIS call only — for a one-time "trade opened" notification, not a repeat on every leg still sitting open from before
+  let latestTimestamp = 0;
+
+  for (const fill of fills) {
+    if (fill.timestamp > latestTimestamp) latestTimestamp = fill.timestamp;
+
+    if (csvIsOpen(fill.instruction)) {
+      const leg = {
+        occ: fill.occ,
+        ticker: fill.ticker,
+        dir: csvDirFromPutCall(fill.putCall),
+        openPrice: fill.price,
+        openDate: fill.date,
+        openTime: fill.time,
+        openTimestamp: fill.timestamp,
+        totalQuantity: fill.quantity, // how many contracts were opened in total
+        remaining: fill.quantity,
+        openFees: fill.fees,          // fees for the WHOLE opening, split below when it closes in pieces
+        // The same fee in whole cents, drawn down as the position closes.
+        // Kept separately because a PROPORTION of a fee, rounded, does not
+        // add back up: $1.00 over three contracts closed one at a time
+        // paid out as 33+33+33 = 99 cents, and $2.00 as 67+67+67 = $2.01.
+        // A cent lost or invented on every position that closes in pieces.
+        openFeeCents: fill.fees == null ? null : Math.round(fill.fees * 100),
+        // Schwab's own reference for the purchase this leg came from. See
+        // the note on `fills` below: this is what makes a trade traceable
+        // back to the broker rather than identifiable only by its shape.
+        openFillId: fill.transactionId == null ? null : String(fill.transactionId),
+      };
+      openLegs.push(leg);
+      newlyOpenedLegs.push(leg);
+      continue;
+    }
+    if (csvIsClose(fill.instruction)) {
+      let qtyToClose = fill.quantity;
+      // What is left of THIS closing fill's fee, in whole cents, as it is
+      // spread across however many open legs it closes.
+      const closeFee = { cents: fill.fees == null ? null : Math.round(fill.fees * 100) };
+      while (qtyToClose > 0) {
+        const legIdx = csvPickLegForClose(openLegs, fill);
+        if (legIdx === -1) break; // close with no matching open on file — skip, can't reconcile
+        const leg = openLegs[legIdx];
+        const qtyMatched = Math.min(qtyToClose, leg.remaining);
+        // P&L is always (exit - entry) per contract — Long or Short, since
+        // this trader only buys options, a rising option price is always
+        // the winning direction regardless of which underlying direction
+        // the position itself is betting on.
+        const perContractDiff = (fill.price - leg.openPrice);
+        const pnlDollar = perContractDiff * 100 * qtyMatched;
+        // Each side's fees, allocated in whole cents out of what is LEFT
+        // of that fill's charge, with the final piece taking the exact
+        // remainder. A fee belongs to a FILL, not to a contract, so the
+        // pieces must add back to the penny Schwab charged -- rounding
+        // each piece independently did not, and lost or invented a cent
+        // on every position closed in more than one go.
+        //
+        // A leg saved before this existed carries only the dollar figure,
+        // so it is converted here rather than being treated as unknown.
+        if (leg.openFeeCents === undefined) {
+          leg.openFeeCents = leg.openFees == null ? null : Math.round(leg.openFees * 100);
+        }
+        const drawDown = (holder, key, part, whole) => {
+          if (holder[key] == null) return null;
+          if (!whole || part >= whole) { const all = holder[key]; holder[key] = 0; return all; }
+          const share = Math.round(holder[key] * (part / whole));
+          holder[key] -= share;
+          return share;
+        };
+        const entryFeeCents = drawDown(leg, 'openFeeCents', qtyMatched, leg.remaining);
+        const exitFeeCents = drawDown(closeFee, 'cents', qtyMatched, qtyToClose);
+        const entryFees = entryFeeCents == null ? null : entryFeeCents / 100;
+        const exitFees = exitFeeCents == null ? null : exitFeeCents / 100;
+        // Unknown on either side means the total is unknown. A missing fee
+        // must not quietly become a fee of nothing.
+        const fees = (entryFees == null || exitFees == null)
+          ? null
+          : Math.round((entryFees + exitFees) * 100) / 100;
+        const pnlPercent = leg.openPrice ? (perContractDiff / leg.openPrice) * 100 : 0;
+        const remainingAfterThis = leg.remaining - qtyMatched;
+        const heldMs = fill.timestamp - leg.openTimestamp;
+        newPending.push({
+          id: `${fill.occ}-${leg.openTime}-${fill.time}-${Math.random().toString(36).slice(2, 7)}`,
+          ticker: leg.ticker,
+          occ: leg.occ,
+          dir: leg.dir,
+          contracts: qtyMatched,
+          contractsOpened: leg.totalQuantity,
+          // 'Closed' once every contract from the original opening has been
+          // matched to a close (possibly across several closing fills);
+          // 'Partial Fill' if some of the original position is still open.
+          fillStatus: remainingAfterThis === 0 ? 'Closed' : 'Partial Fill',
+          entryDate: leg.openDate,
+          entryTime: leg.openTime,
+          entryTimestamp: leg.openTimestamp,
+          exitDate: fill.date,
+          exitTime: fill.time,
+          exitTimestamp: fill.timestamp,
+          optEntry: leg.openPrice,
+          optExit: fill.price,
+          undEntry: null, // filled in by cron.js after matching, via a separate underlying-price lookup
+          undExit: null,
+          pnlDollar: Math.round(pnlDollar * 100) / 100,
+          pnlPercent: Math.round(pnlPercent * 10) / 10,
+          entryFees, exitFees, fees,
+          // What actually reached the account. Null when the fees are not
+          // known, so nothing downstream can mistake "no fee recorded" for
+          // "this trade was free".
+          pnlNet: fees == null ? null : Math.round((pnlDollar - fees) * 100) / 100,
+          winLoss: pnlDollar >= 0 ? 'Win' : 'Loss',
+          // Flags a pairing that spans more than a day. These are scalps, so
+          // this should essentially never fire — if it does, the match is
+          // worth a look rather than being trusted silently.
+          suspectPairing: heldMs > CSV_DAY_MS,
+          heldMs, // used to decide video-vs-screenshot for the trade-capture pipeline — see pushcut.js
+          source: 'schwab-auto',
+          needsTagging: true,
+          // WHICH BROKER FILLS THIS TRADE IS MADE OF.
+          //
+          // Measured on his real journal (2026-09-09): four trades in it
+          // do not exist. Two of them read
+          //   09:31 -> 09:36  1 contract  1.11 -> 1.22  fee $1.33
+          //   09:31 -> 09:36  2 contracts 1.11 -> 1.22  fee none
+          // Same purchase, same sale, same two prices, different SIZE.
+          // They are one real trade, paired twice: the fills went through
+          // the matcher a second time and came out matched up differently.
+          //
+          // Nothing downstream could catch that, because a trade was
+          // identified by its SHAPE -- contract, both minutes, both prices,
+          // size -- and a different pairing has a different shape. So the
+          // phantom looked like a brand new trade and was written down. It
+          // arrives with no fee, because the fee had already been correctly
+          // handed to the real trade, which is why he had four trades
+          // "waiting for a fee" that could never get one.
+          //
+          // These references cannot be re-pairing-dependent: a purchase is
+          // a purchase whichever sale it is matched to. Two trades sharing
+          // a fill are two versions of the same thing, and the app refuses
+          // the second one on sight.
+          fills: [leg.openFillId, fill.transactionId == null ? null : String(fill.transactionId)]
+            .filter(Boolean),
+        });
+        leg.remaining = remainingAfterThis;
+        qtyToClose -= qtyMatched;
+      }
+    }
+  }
+
+  // Drop fully-closed legs, and also purge dead ones (expired contracts,
+  // or legs old enough that no close is coming) so they can't poison a
+  // future match the way the Jun/Jul NIO pairing did.
+  const asOf = latestTimestamp || Date.now();
+  const remainingOpenLegs = openLegs.filter(l => l.remaining > 0 && !csvIsLegDead(l, asOf));
+
+  return {
+    updatedState: {
+      openLegs: remainingOpenLegs,
+      pending: [...newPending, ...state.pending],
+    },
+    newPending,
+    newlyOpenedLegs,
+  };
+}
+
+
+// Reads the file Schwab hands him. Deliberately a separate step from the
+// pairing above, so the parsing can be checked on its own.
+function csvSplitLine(line){
+  const out = []; let cur = ''; let q = false;
+  for(let i = 0; i < line.length; i++){
+    const c = line[i];
+    if(q){ if(c === '"' && line[i+1] === '"'){ cur += '"'; i++; } else if(c === '"') q = false; else cur += c; }
+    else if(c === '"') q = true;
+    else if(c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur); return out.map(x => x.trim());
+}
+const csvMoney = v => { const t = String(v||'').replace(/[$,]/g,'').trim(); return t ? Number(t) : 0; };
+
+// "SPY 06/22/2026 745.00 P" -> the contract code the rest of the app speaks.
+function csvOccOf(sym){
+  const m = String(sym||'').match(/^([A-Z.]{1,6}) (\d{2})\/(\d{2})\/(\d{4}) ([\d.]+) ([CP])$/);
+  if(!m) return null;
+  return m[1].padEnd(6,' ') + m[4].slice(2) + m[2] + m[3] + m[6] + String(Math.round(Number(m[5])*1000)).padStart(8,'0');
+}
+
+// Turns the file into fills the pairing above understands.
+//
+// Returns its own reason when it cannot, rather than an empty list: a file
+// with no option trades in it and a file that could not be read at all need
+// completely different things from him.
+function csvReadSchwabFile(text){
+  const lines = String(text||'').split(/\r?\n/).filter(l => l.trim());
+  if(!lines.length) return { fills: [], reason: 'That file is empty.' };
+  const head = csvSplitLine(lines[0]).map(h => h.toLowerCase());
+  const at = n => head.findIndex(h => h === n || h.startsWith(n));
+  const iD = at('date'), iA = at('action'), iS = at('symbol'), iQ = at('quantity'),
+        iP = at('price'), iF = at('fees'), iAmt = at('amount');
+  if(iD < 0 || iA < 0 || iS < 0 || iQ < 0 || iP < 0){
+    return { fills: [], reason: 'That does not look like a Schwab transactions file — it has no Date, Action, Symbol, Quantity and Price columns.' };
+  }
+  const rows = [];
+  let nonTrade = 0, unreadableSymbol = 0;
+  for(let i = 1; i < lines.length; i++){
+    const f = csvSplitLine(lines[i]);
+    const action = f[iA];
+    if(action !== 'Buy to Open' && action !== 'Sell to Close'){ nonTrade++; continue; }
+    const m = String(f[iD]||'').match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if(!m){ nonTrade++; continue; }
+    const occ = csvOccOf(f[iS]);
+    if(!occ){ unreadableSymbol++; continue; }
+    rows.push({ date: `${m[3]}-${m[1]}-${m[2]}`, isBuy: action === 'Buy to Open',
+                symbol: f[iS], occ, qty: Number(f[iQ]), price: csvMoney(f[iP]),
+                fees: iF >= 0 ? csvMoney(f[iF]) : null, amount: iAmt >= 0 ? csvMoney(f[iAmt]) : null });
+  }
+  if(!rows.length){
+    return { fills: [], nonTrade, unreadableSymbol,
+             reason: `No option trades in that file — ${nonTrade} row${nonTrade===1?'':'s'} were transfers, interest or account fees.` };
+  }
+  // The file has no times, so the only ordering it supports is by date, with
+  // purchases ahead of sales within a day. A made-up clock time is used ONLY
+  // to keep that order for the pairing; it is never stored on a trade.
+  rows.sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.isBuy === b.isBuy ? 0 : (a.isBuy ? -1 : 1)));
+  let n = 0;
+  const fills = rows.map(r => {
+    const order = n++;
+    return {
+      occ: r.occ, ticker: r.symbol.split(' ')[0],
+      putCall: r.symbol.trim().endsWith('P') ? 'PUT' : 'CALL',
+      instruction: r.isBuy ? 'BUY_TO_OPEN' : 'SELL_TO_CLOSE',
+      quantity: r.qty, price: r.price, fees: r.fees,
+      date: r.date, time: null,
+      timestamp: Date.parse(r.date + 'T14:30:00Z') + order * 60000,
+      // No reference numbers in the file, so one is built from what the row
+      // actually says. The same file read twice gives the same references,
+      // which is what stops a second import writing everything down again.
+      transactionId: 'csv|' + [r.date, r.occ, r.isBuy ? 'B' : 'S', r.qty, r.price, order].join('|'),
+    };
+  });
+  return { fills, reason: null, nonTrade, unreadableSymbol };
+}
+
+// Turns the paired result into a trade the journal stores, in the SAME
+// shape the server path produces -- so everything downstream reads it
+// identically and no screen has to know where it came from.
+//
+// The two times are left NULL. The file does not carry them, and a made-up
+// minute would flow straight into the timeframe reading, the stock price,
+// Bar Replay and the reward-to-risk figure, where it would look exactly as
+// solid as a real one.
+function csvTradeFromPairing(t){
+  return {
+    id: t.id,
+    ticker: t.ticker, dir: t.dir, strat: null, play: null,
+    entryDate: t.entryDate, entryTime: null,
+    exitDate: t.exitDate, exitTime: null,
+    occ: t.occ || '',
+    entryTimestamp: null, exitTimestamp: null,
+    optEntry: t.optEntry ?? 0, optExit: t.optExit ?? null, contracts: t.contracts || 1,
+    undEntry: null, undExit: null, stop: null, rrPlanned: null, realizedRR: null,
+    ftfc: {}, ftfcRun: null, ftfcConfirmed: false, ftfcDirection: null, ftfcTimeframesInRun: [],
+    replayData: null,
+    pnlDollar: t.pnlDollar, pnlPercent: t.pnlPercent,
+    fees: t.fees, entryFees: t.entryFees, exitFees: t.exitFees, pnlNet: t.pnlNet,
+    winLoss: t.winLoss,
+    contractsOpened: t.contractsOpened, fillStatus: t.fillStatus,
+    notes: '',
+    // Says plainly where this came from, so nothing later mistakes a trade
+    // with no times for one whose times went missing.
+    source: 'schwab-csv',
+    fills: Array.isArray(t.fills) ? t.fills.slice() : [],
+    // Not finished: the times, prices and timeframes are still to come from
+    // Schwab whenever the connection is working again.
+    settled: false, fillAttempts: 0,
+  };
+}
+
+// Reads his Schwab file and puts the trades straight into the journal.
+// Nothing here talks to anything: the file is on the phone and so is all of
+// this.
 function handleCsv(input){
-  const file = input.files[0];
+  const file = input && input.files && input.files[0];
   if(!file) return;
+  input.value = '';                      // so the same file can be chosen twice
+  log('csvLog', 'Reading your file…');
   const reader = new FileReader();
-  reader.onload = e=>{
-    const lines = e.target.result.split('\n').filter(l=>l.trim());
-    log('csvLog', `Parsed ${lines.length-1} row(s). Review and tag Strat setup + FTFC in New Trade for each.`);
+  reader.onerror = () => log('csvLog', 'That file could not be read. Try downloading it from Schwab again.');
+  reader.onload = e => {
+    let read;
+    try{ read = csvReadSchwabFile(String(e.target.result || '')); }
+    catch(err){ log('csvLog', 'That file could not be understood: ' + (err && err.message)); return; }
+    if(!read.fills.length){ log('csvLog', read.reason || 'Nothing in that file could be read as a trade.'); return; }
+
+    let paired;
+    try{
+      paired = csvProcessFills(read.fills, { openLegs: [], pending: [] }).newPending;
+    }catch(err){ log('csvLog', 'Your trades could not be paired up: ' + (err && err.message)); return; }
+    if(!paired.length){
+      log('csvLog', `Found ${read.fills.length} option fills but none of them paired into a completed trade. Nothing was added.`);
+      return;
+    }
+
+    // The SAME protection the server path uses: a trade built from fills
+    // another trade already claims is refused. That is what makes importing
+    // the same file twice harmless.
+    const existing = loadTrades();
+    // The PAIR, for the same reason as the live path above: a position sold
+    // in pieces is several real trades sharing one purchase.
+    const pairOf = t => { const f = Array.isArray(t.fills) ? t.fills : []; return f.length ? f.map(String).join('+') : null; };
+    const claimed = new Set();
+    for(const t of existing){ const k = pairOf(t); if(k) claimed.add(k); }
+    const byPrint = new Set(existing.map(tradeFingerprint));
+
+    const added = [];
+    let alreadyHad = 0;
+    for(const p of paired){
+      const trade = csvTradeFromPairing(p);
+      const pair = pairOf(trade);
+      const hasRefs = !!pair;
+      // The two rows this trade came from. Identical every time the same
+      // file is read, so they settle it on their own.
+      const clash = hasRefs && claimed.has(pair);
+      // The SHAPE is only asked when there are no references to go on.
+      //
+      // It cannot be asked here otherwise, and getting that wrong cost 24 of
+      // his trades: the shape is contract, both DATES, both TIMES, both
+      // prices and size — and this file carries no times, which is exactly
+      // why they are left empty above. So three separate trades on the same
+      // contract, on the same day, at the same two prices, for the same size
+      // — different only in the minute — collapse into one shape, and two of
+      // them were thrown away as copies of the first. An identity must never
+      // be asked about a field that has deliberately been left blank.
+      const looksSame = !hasRefs && byPrint.has(tradeFingerprint(trade));
+      if(clash || looksSame){ alreadyHad++; continue; }
+      if(pair) claimed.add(pair);
+      byPrint.add(tradeFingerprint(trade));
+      added.push(trade);
+    }
+    if(added.length) saveTrades(added.concat(existing));
+    renderJournal(); renderDashboard();
+
+    const money = added.reduce((s,t) => s + Math.round((t.pnlNet ?? t.pnlDollar ?? 0) * 100), 0) / 100;
+    const contracts = added.reduce((s,t) => s + (t.contracts || 0), 0);
+    const parts = [];
+    parts.push(added.length
+      ? `Added ${added.length} trade${added.length===1?'':'s'} — ${contracts} contract${contracts===1?'':'s'}, ${fmtMoney(money)} after fees.`
+      : 'Nothing new — every trade in that file is already in your journal.');
+    if(alreadyHad && added.length) parts.push(`${alreadyHad} were already there.`);
+    parts.push(`You now have ${loadTrades().length} trades.`);
+    parts.push('This file carries no times, so the minute you entered and left is blank on these, and the timeframes, stock prices and Bar Replay are blank with it. Those fill in from Schwab once the connection is working again.');
+    log('csvLog', parts.join(' '));
   };
   reader.readAsText(file);
 }
