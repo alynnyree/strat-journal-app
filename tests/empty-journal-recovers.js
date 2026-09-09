@@ -47,7 +47,7 @@ const { launch, serve } = require('./browser.js');
     await p.route('**/api/trades/backfill/status', r => r.fulfill({status:200,contentType:'application/json',
       body: JSON.stringify({ backfill: { status:'done', windowsAsked:12, windowsOk:12, windowsFailed:0,
                              failures:[], oldestWindowWithData:'2025-10-14' } })}));
-    await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',
+    await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',
       body: JSON.stringify({ pending: queue() })}));
     await p.route('**/api/trades/pending/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.route('**/api/trades/reset', r => {
@@ -141,7 +141,7 @@ const { launch, serve } = require('./browser.js');
     let resetCalls = 0;
     await p2.route('**/api/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p2.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
-    await p2.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+    await p2.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
     await p2.route('**/api/trades/backfill/status', r => r.fulfill({status:200,contentType:'application/json',
       body: '{"backfill":{"status":"running","windowsAsked":12,"windowsOk":3,"windowsFailed":0,"failures":[],"oldestWindowWithData":"2025-10-14"}}'}));
     await p2.route('**/api/trades/reset', r => { resetCalls++; return r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}); });

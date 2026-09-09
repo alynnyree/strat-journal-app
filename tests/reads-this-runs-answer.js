@@ -58,7 +58,7 @@ const { launch, serve } = require('./browser.js');
       return r.fulfill({status:200,contentType:'application/json',body:'{"started":true}'}); });
     await p.route('**/api/trades/backfill/status', r => r.fulfill({status:200,contentType:'application/json',
       body: JSON.stringify({ backfill: strip(record()) })}));
-    await p.route('**/api/trades/pending', r => { const out = queue; queue = [];
+    await p.route('**/api/trades/pending*', r => { const out = queue; queue = [];
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({pending: out})}); });
     await p.route('**/api/trades/pending/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');

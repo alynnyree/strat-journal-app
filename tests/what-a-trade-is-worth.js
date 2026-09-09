@@ -19,7 +19,7 @@ const { buildJournal } = require('./real-journal.js');
     const p = await (await b.newContext({ viewport:{width:390,height:844} })).newPage();
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
-    await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+    await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
     await p.route('**/api/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');

@@ -81,6 +81,17 @@ rather than passing quietly:
   real 254 trades — 306 contracts, $404.73, −$1,100.73, every one of them
   gaining its minute.
 
+- **lighter-collection.js** — the two things he asked for on 2026-09-09
+  after his hosting was suspended for going over its free data allowance:
+  stop asking for a whole year of history, and cut down what the app
+  downloads. Checks that it asks back to his oldest trade rather than a flat
+  year (and still asks for the year on an empty journal, which is a
+  recovery), that chart bars are downloaded ONLY for trades it is going to
+  keep — none at all for the twelve it already has, exactly three for three
+  new ones — that a long queue is collected in pages in one check, that a
+  server which has not been updated still works unchanged, and that a trade
+  with no chart says WHY rather than being a blank.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set

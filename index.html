@@ -6528,7 +6528,7 @@ async function maybeAutoRebuild(url){
   try{
     await fetch(url+'/api/trades/reset', { method:'POST' });
     await fetch(url+'/api/trades/backfill', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365}),
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack: historyDaysToAsk()}),
     });
     return true;
   }catch(e){
@@ -6558,7 +6558,7 @@ async function forceRemeasure(){
   try{
     await fetch(url+'/api/trades/reset', { method:'POST' });
     await fetch(url+'/api/trades/backfill', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365}),
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack: historyDaysToAsk()}),
     });
     lastRebuildAsk = { at: Date.now(), stale: loadTrades().filter(tradeIsStale).length, forced: true };
     try{ localStorage.setItem('strat_last_rebuild_ask', JSON.stringify(lastRebuildAsk)); }catch(e){}
@@ -6681,6 +6681,41 @@ function setConnState(connected, text){
 // A running count of what the polls have done, so the button can report
 // a REBUILD — which adds nothing and updates everything, and so read as
 // "no new trades" while quietly doing the entire job.
+// ---- How far back to ask his broker for history ----------------------
+//
+// This was a flat 365, and before that a hardcoded 90 which silently cut
+// his journal off at mid-May while he had been trading since January -- four
+// months of real trades never asked for, with nothing anywhere saying so.
+// A fixed number is the wrong shape in BOTH directions: too small and
+// history disappears quietly, too large and it drags in trades he has
+// deliberately decided not to keep.
+//
+// His instruction (2026-09-09): "Let's keep the journal where it is as far
+// as trades imported. We don't need anything past March. Leave it where it
+// is." A flat year would have brought January and February back on its own
+// the first time the connection returned -- the app undoing his decision
+// while he watched.
+//
+// So the range is read from his own journal: back to the OLDEST trade he
+// actually holds, plus two days of margin. That covers everything that
+// could complete or fill in what he has, and nothing older. An empty
+// journal is the one exception -- there is nothing of his to protect and
+// that is a recovery, so it asks for the year.
+const HISTORY_MARGIN_DAYS = 2;
+const MAX_HISTORY_DAYS = 365;
+function historyDaysToAsk(trades){
+  const all = trades || loadTrades();
+  let oldest = null;
+  for(const t of all){
+    const d = Date.parse((t.entryDate || '') + 'T00:00:00');
+    if(isNaN(d)) continue;
+    if(oldest === null || d < oldest) oldest = d;
+  }
+  if(oldest === null) return MAX_HISTORY_DAYS;   // nothing to protect: a recovery
+  const span = Math.ceil((Date.now() - oldest) / 86400000) + HISTORY_MARGIN_DAYS;
+  return Math.max(1, Math.min(MAX_HISTORY_DAYS, span));
+}
+
 let pollTally = { imported: 0, refreshed: 0, seen: new Set() };
 
 // True while a check is actually in flight. Two checks overlapping both
@@ -6703,15 +6738,44 @@ async function pollBackend(silent=false){
   }
 }
 
+// How many waiting trades to collect in one go, and how many goes.
+//
+// The whole queue used to arrive in ONE answer, every thirty seconds the app
+// was open, with every trade's chart bars inside it. Measured on the real
+// route: 100 waiting trades is 3,022KB an answer. His hosting was suspended
+// on 2026-09-09 for going over its free 5GB allowance, and this is the
+// heaviest thing it serves.
+//
+// Now it takes a page at a time and comes straight back for the next one, so
+// the whole queue still empties in a single check -- it is the SIZE of each
+// answer that is capped, not the work done. The round limit is a floor under
+// a queue that refuses to shrink; without it a delete that never lands would
+// spin here for ever.
+const PENDING_BATCH = 25;
+const PENDING_MAX_ROUNDS = 60;
+
 async function pollBackendOnce(url, silent){
   if(!silent){ setBusy('btnRefresh', true); showStatus('info', 'Checking for new trades...'); }
   try{
-    const r = await fetch(url+'/api/trades/pending');
-    if(!r.ok) throw new Error('Server responded with status '+r.status);
-    const data = await r.json();
-    const pending = data.pending||[];
-    if(pending.length){
-      const { imported, refreshed } = await autoImportPendingTrades(url, pending);
+    let imported = 0, refreshed = 0, collected = 0;
+    for(let round = 0; round < PENDING_MAX_ROUNDS; round++){
+      // slim=1 leaves the chart bars out; they are asked for one trade at a
+      // time, and only for the trades this app is actually going to keep.
+      // A server too old to understand either of these ignores them and
+      // answers exactly as it always did, which still works.
+      const r = await fetch(url+'/api/trades/pending?slim=1&limit='+PENDING_BATCH);
+      if(!r.ok) throw new Error('Server responded with status '+r.status);
+      const data = await r.json();
+      const batch = data.pending||[];
+      if(!batch.length) break;
+      const got = await autoImportPendingTrades(url, batch);
+      imported += got.imported; refreshed += got.refreshed;
+      collected += batch.length;
+      // An older server hands back everything at once and ignores the page
+      // size, so there is nothing more to come round for.
+      if(batch.length < PENDING_BATCH) break;
+    }
+    if(collected){
       pollTally.imported += imported; pollTally.refreshed += refreshed;
       // Only speak up when something actually landed. "0 trade(s)
       // auto-imported" reads as a failure, and worse, it used to
@@ -6862,6 +6926,34 @@ function claimTimeless(index, t){
   return pick;
 }
 
+// The chart bars for ONE waiting trade, asked for only when this app has
+// decided to keep them.
+//
+// They used to arrive with the list -- every waiting trade's bars, in every
+// answer, every thirty seconds. Measured on the real route: 100 waiting
+// trades came to 3,022KB an answer, and during a re-import nearly every one
+// of them is already on file, so those bars were downloaded and thrown away.
+// His hosting was suspended for going over its free allowance the day this
+// was written.
+//
+// Answers with a REASON rather than an empty hand. "There are none for this
+// trade", "that trade has left the queue" and "I could not reach it" are
+// three different faults and must never share one answer -- Bar Replay has
+// already cost three rounds of guessing on exactly that.
+async function fetchPendingReplay(url, t){
+  if(t.replayData) return { data: t.replayData, reason: null };   // an older server sends them with the list
+  if(t.replayWaiting !== true) return { data: null, reason: 'The server said this trade has no chart bars.' };
+  try{
+    const r = await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id)+'/replay');
+    if(!r.ok) return { data: null, reason: 'The server would not hand over the chart bars (it answered ' + r.status + ').' };
+    const d = await r.json();
+    if(d && d.replayData) return { data: d.replayData, reason: null };
+    return { data: null, reason: (d && d.reason) || 'The server answered with no chart bars and gave no reason.' };
+  }catch(e){
+    return { data: null, reason: 'Could not reach the server for the chart bars: ' + (e && e.message ? e.message : 'connection failed') };
+  }
+}
+
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
@@ -6937,9 +7029,23 @@ async function autoImportPendingTrades(url, pending){
         || group.find(e => codesAgree(e.code, id.code))
         || null;
   };
+  // Fetches this trade's chart bars, but only where they are about to be
+  // kept. Every way out of this loop that DISCARDS a trade therefore costs
+  // nothing but the trade itself.
+  const withBars = async (t) => {
+    if(t.replayData) return t;
+    // Makes no request at all when the list already said there are none --
+    // but still comes back with the REASON, so a trade with no chart can
+    // say why instead of being a blank nobody can diagnose.
+    const got = await fetchPendingReplay(url, t);
+    return got.data
+      ? Object.assign({}, t, { replayData: got.data })
+      : Object.assign({}, t, { replayMissingReason: got.reason });
+  };
+
   let imported = 0;
   let refreshed = 0;
-  for(const t of pending){
+  for(let t of pending){
     if(existingIds.has(t.id)){
       // Already in his journal. This used to just move on -- which left
       // the trade sitting in the server's queue for ever, and that queue
@@ -6953,16 +7059,32 @@ async function autoImportPendingTrades(url, pending){
       try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
       continue;
     }
-    // Checked BEFORE the shape, because the shape is exactly what a
-    // re-pairing changes. Counted as a duplicate and cleared from the
-    // queue: it is not new, and leaving it there would have it re-sent for
-    // ever.
+    // Same broker fills as a trade already on file. Never a new trade --
+    // but WHICH kind of repeat it is decides what happens next, and getting
+    // that wrong silently stopped every catch-up this app does.
+    //
+    // MEASURED 2026-09-09. This used to discard the arrival on the spot,
+    // before the shape was looked at. But a REBUILD of an existing trade
+    // cites exactly the same two fills, because that is what a rebuild is --
+    // so from the day trades started carrying their broker's references,
+    // every catch-up was refused here. A trade with no fee stayed without
+    // one, a stock price never arrived, the timeframes were never measured
+    // and Bar Replay stayed empty, for ever, with nothing anywhere saying
+    // so. Proven directly: a trade missing its fee, handed back with the
+    // fee, came away still missing it.
+    //
+    // The two cases are told apart by the SHAPE, not by the fills:
+    //   * same fills, same shape  -> the same trade, arriving again with
+    //     more worked out about it. That is a catch-up and it must land.
+    //   * same fills, DIFFERENT shape -> the same broker fills paired up a
+    //     second time, which is the phantom that put contracts in his
+    //     journal he never bought. Refused, exactly as before.
     const clash = alreadySpokenFor(t);
-    if(clash){
+    const seen = findSaved(t);
+    if(clash && !seen){
       try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next check will try again */ }
       continue;
     }
-    const seen = findSaved(t);
     if(seen){
       const already = seen.claimed ? null : seen.trade;
       if(!already){
@@ -6982,6 +7104,7 @@ async function autoImportPendingTrades(url, pending){
       // completed and changed nothing.
       // Counted once per trade, however many times the queue serves it —
       // a delete that has not landed yet must not inflate the figure.
+      if(!already.replayData) t = await withBars(t);
       if(refreshTradeFacts(already, t) && !pollTally.seen.has(already.id)){
         pollTally.seen.add(already.id);
         refreshed++;
@@ -7001,6 +7124,7 @@ async function autoImportPendingTrades(url, pending){
     if(t.entryTime){
       const blank = claimTimeless(awaitingTimes, t);
       if(blank){
+        if(!blank.trade.replayData) t = await withBars(t);
         if(refreshTradeFacts(blank.trade, t) && !pollTally.seen.has(blank.trade.id)){
           pollTally.seen.add(blank.trade.id);
           refreshed++;
@@ -7014,6 +7138,8 @@ async function autoImportPendingTrades(url, pending){
         continue;
       }
     }
+    // Kept, so this is where the chart bars are worth their weight.
+    t = await withBars(t);
     remember(t, true); // claimed by this batch
     { const k = fillPair(t); if(k) claimedPairs.add(k); }
     const hasExit = t.optExit != null;
@@ -7042,6 +7168,9 @@ async function autoImportPendingTrades(url, pending){
       ftfc: t.ftfc || {}, ftfcRun: t.ftfcRun||0, ftfcConfirmed: !!t.ftfcConfirmed,
       ftfcDirection: t.ftfcDirection||null, ftfcTimeframesInRun: t.ftfcTimeframesInRun||[],
       replayData: t.replayData || null,
+      // Why there is no chart to replay, in the server's own words. A blank
+      // with no reason is the dead end that cost three rounds of guessing.
+      replayMissingReason: t.replayData ? null : (t.replayMissingReason || null),
       pnlDollar, pnlPercent,
       // Schwab's fees, as they actually came out of the account. Null on
       // a trade imported before fees were recorded — which must read as
@@ -7360,7 +7489,7 @@ async function runBackfillNow(quiet=false){
       // A full year, not 90 days. 90 days is why his journal started in
       // mid-May when his trading started on 2 January: four months of real
       // trades were simply never asked for, and nothing said so.
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack:365})
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({daysBack: historyDaysToAsk()})
     });
     if(!r.ok) throw new Error('Server responded with status '+r.status);
     // The backend responds as soon as the backfill STARTS, not once it's
