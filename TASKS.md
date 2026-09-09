@@ -24,6 +24,43 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+85. **Past history: CLOSED at his instruction** (2026-09-09, his own
+    words): *"Let's keep the journal where it is as far as trades
+    imported. We don't need anything past March. Leave it where it is.
+    This has been a headache importing trades from the past. As long as
+    the journal accurately imports my trades moving forward (every single
+    trade from entry to exit) then this is fine."*
+
+    **Status: DECIDED. Do not propose importing older history again.**
+    His journal holds the March-to-July file: 205 trades, 253 contracts,
+    −$1,603.73 after fees. The January file exists and would take it to
+    254 / 306 / −$1,100.73, and he has decided against it. That is his
+    call and the totals are correct for what he chose to hold.
+
+    Two consequences to keep in mind rather than act on:
+    - The March-onward trades have no minutes, so they have no timeframe
+      reading, no stock prices and no Bar Replay. Task 84 lets those fill
+      in from the live connection when it returns. That is filling in
+      blanks, not importing history, so it stays.
+    - **The automatic history import asks for a YEAR.** Left as it is, it
+      would bring January and February in by itself the moment the
+      connection is back — which is exactly what he asked not to happen.
+      Raised with him 2026-09-09; awaiting his answer on whether to limit
+      it to "from now on only".
+
+    Everything from here is about trades arriving correctly AS THEY
+    HAPPEN, entry to exit. That is now the only import that matters.
+
+86. **The laptop add-on is installed** (2026-09-09, his own note: *"I just
+    recently added the chrome browser extension to my laptop"*).
+    **Status: INSTALLED, NOT YET PROVEN.** Task 57 left it built, tested
+    against 26 checks, and never once run in a real browser. It now is.
+    What is still unknown: whether it can reach the server (which is
+    suspended for its data allowance), whether it has his app key, and
+    whether a picture it takes actually lands on a trade. Its own status
+    window has "Take a test picture now" and "Check for trades now" for
+    exactly this, and that test needs the service running first.
+
 84. **"Will the journal automatically upload my times for entries and
     exits?"** (2026-09-09, his own words). **Status: FIXED AND TESTED
     (64 checks, including his own 254 real trades in both orders).**
