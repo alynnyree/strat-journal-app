@@ -32,6 +32,67 @@ One thing deliberately not narrowed on the strength of this list: it says
 2026-08-29 he said in his own words that the plays are "in conjunction with
 the 9 strat combos. Nothing should be disregarded." Raised with him rather
 than assumed either way.
+### Where each bullet stands (2026-09-09, corrected)
+
+Kept HERE rather than in a message, so the check-ins read from a record
+instead of from memory. Correct it in place when something moves.
+
+1. **Time of entry & exit — DONE.** Automatic, exact to the second, from
+   the broker's own record of the fill. Blank on the 205 file-imported
+   trades until the connection returns (task 84 fills them). Never yet
+   seen arrive on a live trade since the recent fixes.
+2. **Contract price at entry & exit — DONE.** Automatic, and marked against
+   both of his real broker exports end to end, to the penny. The most
+   solid thing in the app.
+3. **Underlying price at the exact time — DONE.** Corrected 2026-09-09: he
+   asked whether this comes from Alpaca and is therefore exact, and he was
+   right. `priceWithProvenance` asks **Alpaca first** — the actual trade
+   PRINTS in the ten minutes up to that second, taking the last one at or
+   before the fill. That is exact, it is marked exact, and it reaches back
+   YEARS. Schwab candles (1m→5m→30m→daily) are only the fallback when
+   Alpaca is not ready, throws, or has nothing, and that is the only case
+   that reads "approx."
+   **I had described the Schwab fallback as what normally happens to older
+   trades, and blamed the wrong limit** — the ~30-day cutoff is Schwab's
+   and costs Bar Replay and the timeframes, not the stock price.
+4. **FTFC at entry — DONE.** Automatic. Thirteen timeframes, confirmed at
+   any 4+ consecutive agreeing, measured with nothing later than the fill,
+   and four answers (with / against / none / unknown). Needs minute data,
+   so only trades inside Schwab's ~30-35 days.
+5. **Which of the 3 plays — BUILT, NEVER CONFIRMED on his real trades.**
+   Read from the last fifteen one-minute candles before entry, and only
+   accepted when the model says high confidence — otherwise it leaves
+   "Needs Setup" for him. So "close to automatic" by design, not always.
+6. **Pictures and/or video — THE WEAKEST BULLET.** Phone pictures built,
+   never proven on a real trade, and inherently ONE TAP per trade because
+   Apple allows no less. The laptop add-on is installed (task 86) and has
+   never been run. **Video is not built at all** — it needs the native
+   iPhone app (task 13), which is the only way Apple permits it.
+7. **Notes — DONE.** His own writing, on the card, never overwritten.
+
+**Additional A — backtesting (bar replay, bar by bar): NOT DONE.** He
+reported 2026-09-09 that Bar Replay "is not showing properly"; which of
+the three possible faults is still unanswered (no button at all / a button
+that opens blank / a button that opens the wrong chart). Backtesting itself
+has never been started.
+
+**Additional B — AI analyst: PARTLY, and working from wrong figures.**
+`runPortfolioAnalysis` does ask the right questions (best and worst setups
+by money and win rate, whether alignment pays, late entries, exiting early,
+recommendations) but it hand-picks what it sends, and it was written before
+half of this existed. It is sent `pnlDollar` — profit BEFORE fees — and
+never `pnlNet`, on a journal where fees are $404.73 against −$696 before
+fees and −$1,100.73 after; so which setups look profitable to it can be
+plainly wrong. And it is never sent the PLAY, the realized reward-to-risk,
+or `ftfcDirection` — so the one question he most wants answered, which of
+the three plays works best, it cannot answer at all. Third appearance of
+the same fault: a hand-picked field list written before the data grew.
+
+**Score: five of seven core bullets done and automatic. One built but
+unproven. One half-missing (video). Both additional features short.** And
+the thing that overshadows all of it: nothing on this list has been proven
+on a single real live trade.
+
 
 # Task List
 
