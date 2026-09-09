@@ -1080,6 +1080,39 @@ Uses **The Strat**. Key concepts the code implements:
   failure, for something that was working. Assert the card was RELEASED
   (it carries the mark that lets it appear), and separately that it is not
   sitting at nothing, which is the actual fault.
+- **A trade identified by its SHAPE cannot survive being paired twice.** His
+  own journal export (2026-09-09) settled months of guessing in one pass.
+  Four of its trades do not exist. Two read:
+      09:31 -> 09:36   1 contract    1.11 -> 1.22   fee $1.33
+      09:31 -> 09:36   2 contracts   1.11 -> 1.22   fee none
+  Same purchase, same sale, same two prices, a different SIZE. One real
+  trade, paired twice, because the same fills went through the matcher again
+  and came out matched up differently. Every identity check the app had —
+  including the loosened one — asks about contract, both minutes, both
+  prices and size, and a different pairing changes the size. So the phantom
+  read as brand new and was written down. It arrived with NO FEE because the
+  fee had already been drawn down and handed to the real trade: **those four
+  are exactly the "4 trades waiting for a fee" he watched for days, and no
+  amount of catching up could ever have given them one.** Six contracts he
+  never bought, in his totals.
+  A purchase is a purchase whichever sale it is matched to. Every trade now
+  carries the broker's own transaction references for its opening and
+  closing fills, and an arrival citing a fill already spoken for is refused
+  BEFORE the shape is looked at. Identity for anything assembled out of
+  smaller records must be the records, never the assembly.
+- **Half the "missing" trades were never missing.** His journal holds 48
+  real trades from October to December 2025 — proper contract codes, real
+  minutes, $1.32 fees — that his year-to-date export simply does not cover.
+  I had called the 304-vs-254 gap "50 duplicates". It was 48 real 2025
+  trades, 4 phantoms, and about 10 contracts of genuinely missing trades,
+  pulling in opposite directions. The app said so on screen the whole time
+  ("48 trades sit outside those dates — that is not a fault") and I was
+  reading past it.
+- **Ask for the data before theorising about it.** Six rounds were spent on
+  the 304-vs-254 question: batch sizes, missing contract codes, near-copies.
+  His journal was one tap away behind a button he already had (Journal →
+  Settings, import & export → Export All Trades), and one look at it named
+  the cause exactly. When a fault is in HIS data, ask for his data first.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

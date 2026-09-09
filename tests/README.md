@@ -35,6 +35,14 @@ rather than passing quietly:
   landing on the win side, all-wins, all-losses, a trade with no fee left
   out, and an empty journal showing nothing rather than a zero.
 
+- **phantom-trades.js** — the four trades in his journal that do not exist,
+  each sharing its purchase and its sale with a real one but carrying a
+  different size, because the same broker fills were paired twice. Uses his
+  real 9 June figures: the phantom is refused, sharing a single fill is
+  enough, a genuinely new trade still gets in, two copies in one batch
+  import once, and older trades carrying no references neither block
+  anything nor become invisible.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set
