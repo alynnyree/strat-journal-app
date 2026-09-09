@@ -72,13 +72,34 @@ const { launch, serve } = require('./browser.js');
   }
 
   {
-    // Even sharing only ONE fill. A re-pairing can match his purchase to a
-    // different sale, so a single shared reference is already proof.
-    const real = T({ fills: ['buy-1', 'sell-2'] });
-    const repaired = T({ exitTime: '09:38', optExit: 1.43, fees: null, pnlNet: null, fills: ['buy-1', 'sell-3'] });
-    const { out, stored } = await importInto([real], [repaired]);
-    check(`sharing one purchase is enough to refuse it (${out.imported} imported)`, out.imported === 0);
-    check(`still one trade (${stored.length})`, stored.length === 1);
+    // CORRECTED 2026-09-09. This case used to assert that sharing ONE fill
+    // was enough to refuse a trade, and that was wrong -- it was asserting
+    // the bug, not the behaviour.
+    //
+    // A position bought in one go and sold in three pieces is THREE real
+    // trades, and all three cite the same purchase. Measured on his own
+    // file: the "share one fill" rule threw away 24 of his 254 trades, and
+    // it was live on the real import path too, so every partial close he
+    // had ever made was being lost.
+    //
+    // A trade is named by the PAIR -- purchase AND sale together.
+    const open = T({ exitTime: '09:36', optExit: 1.22, fills: ['buy-1', 'sell-1'] });
+    const secondPiece = T({ exitTime: '09:38', optExit: 1.43, fills: ['buy-1', 'sell-2'] });
+    const thirdPiece  = T({ exitTime: '09:41', optExit: 1.50, fills: ['buy-1', 'sell-3'] });
+    const { out, stored } = await importInto([open], [secondPiece, thirdPiece]);
+    check(`the other pieces of a part-sold position still get in (${out.imported} imported)`, out.imported === 2);
+    check(`leaving all three (${stored.length})`, stored.length === 3);
+    check('and each keeps its own sale', new Set(stored.map(t => (t.fills||[]).join('+'))).size === 3);
+  }
+
+  {
+    // The reverse: one sale closing two separate purchases. Two real trades
+    // sharing a sale, which must also both survive.
+    const first = T({ entryTime: '09:20', optEntry: 1.05, fills: ['buy-a', 'sell-9'] });
+    const second = T({ entryTime: '09:31', optEntry: 1.11, fills: ['buy-b', 'sell-9'] });
+    const { out, stored } = await importInto([first], [second]);
+    check(`two purchases closed by one sale both survive (${out.imported} imported)`, out.imported === 1);
+    check(`leaving two (${stored.length})`, stored.length === 2);
   }
 
   {

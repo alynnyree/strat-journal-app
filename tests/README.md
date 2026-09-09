@@ -61,6 +61,14 @@ rather than passing quietly:
   giving up rather than hanging, and an older server that reports no start
   time being taken at face value.
 
+- **import-from-the-file.js** — importing straight from the Schwab file with
+  no server at all, the path that matters when the service is suspended. The
+  bar is the broker's own arithmetic: 254 trades, $404.73 of fees,
+  −$1,100.73, 306 contracts, and the phone's pairing matching the server's
+  trade for trade. Also checks it reaches out to nothing, invents no times
+  or prices, says so on screen, and that importing the same file twice
+  changes not one cent.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set
