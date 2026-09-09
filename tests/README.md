@@ -52,6 +52,15 @@ rather than passing quietly:
   clears both sides at once; and that when the recovery itself fails it
   says which part refused instead of falling through to "nothing new".
 
+- **reads-this-runs-answer.js** — the reason the button imported nothing
+  over and over: the server hands out the PREVIOUS import's record until a
+  new run replaces it, so the first look after asking said "finished" and
+  the app stopped there. The stubbed server behaves exactly like the real
+  one — holding the old record for a beat, then writing its own — and the
+  checks cover a slow start being waited out, a record that never changes
+  giving up rather than hanging, and an older server that reports no start
+  time being taken at face value.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set
