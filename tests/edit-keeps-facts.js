@@ -41,7 +41,7 @@ const { launch, serve } = require('./browser.js');
   const errors = [];
   p.on('pageerror', e => errors.push(e.message));
   await p.route('**/api/trades/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
-  await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+  await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
   await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
   await p.goto(site.base + '/index.html');
   await p.evaluate((t) => {

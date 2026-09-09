@@ -38,7 +38,7 @@ const { launch, serve } = require('./browser.js');
     const cleared = [];
     p.on('pageerror', e => errors.push(e.message));
     await p.route('**/api/trades/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
-    await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+    await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
     await p.route('**/api/trades/pending/**', r => { cleared.push(r.request().url()); return r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}); });
     await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');
@@ -145,6 +145,34 @@ const { launch, serve } = require('./browser.js');
     const { out, stored } = await importInto([old1], [sameAgain]);
     check(`the shape check still catches a plain repeat (${out.imported} imported)`, out.imported === 0);
     check(`still one trade (${stored.length})`, stored.length === 1);
+  }
+
+  {
+    // AND THE OTHER HALF OF THE SAME RULE, found 2026-09-09 and proven
+    // before it was fixed.
+    //
+    // A REBUILD of a trade cites exactly the same two fills, because that is
+    // what a rebuild is. Refusing every arrival that shares a pair therefore
+    // refused every catch-up too -- so from the day trades started carrying
+    // their broker's references, a trade missing its fee stayed missing it,
+    // no stock price ever arrived, the timeframes were never measured and
+    // Bar Replay stayed empty. For ever, silently. Measured directly: a
+    // trade with no fee, handed back WITH the fee, came away still without
+    // one.
+    //
+    // Same fills and the same shape is the trade itself, arriving again.
+    // Same fills and a DIFFERENT shape is the phantom. The shape tells them
+    // apart; the fills alone cannot.
+    const short = T({ fills: ['b1','s1'], fees: null, pnlNet: null, undEntry: null,
+                      settled: false, fillAttempts: 0 });
+    const complete = T({ fills: ['b1','s1'], fees: 1.33, pnlNet: 9.67,
+                         undEntry: 601.2, undEntrySource: 'alpaca' });
+    const { out, stored } = await importInto([short], [complete]);
+    check(`a catch-up on a trade with broker references still lands (refreshed ${out.refreshed})`, out.refreshed === 1);
+    check(`without adding a trade (${out.imported} imported, ${stored.length} on file)`,
+      out.imported === 0 && stored.length === 1);
+    check(`and the fee actually arrives ($${stored[0].fees})`, stored[0].fees === 1.33);
+    check(`along with the stock price (${stored[0].undEntry})`, stored[0].undEntry === 601.2);
   }
 
   site.stop();

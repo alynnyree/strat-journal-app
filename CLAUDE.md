@@ -1262,6 +1262,51 @@ Uses **The Strat**. Key concepts the code implements:
   and the timeframes that gained a second author — it keeps recurring
   because the new path passes its own tests while silently changing the
   answer to questions asked elsewhere.
+- **THE PROTECTION AGAINST A DUPLICATE SILENTLY BLOCKED EVERY CATCH-UP.**
+  A rebuild of a trade cites exactly the same two broker fills as the trade
+  it rebuilds — that is what a rebuild IS. The phantom fix refused any
+  arrival sharing a fill pair, and refused it BEFORE looking at the shape.
+  So from the day trades started carrying their broker's references, every
+  catch-up was thrown away at that gate: a trade with no fee stayed without
+  one, no stock price ever arrived, the thirteen timeframes were never
+  measured, Bar Replay stayed empty, and "Reset & Re-import" did nothing at
+  all. Silently, with nothing anywhere saying so — and I had just told him
+  the missing details "follow on their own", which they could not.
+  **Proven before it was fixed**: a trade missing its fee, handed back with
+  the fee, came away still missing it. The two cases are told apart by the
+  SHAPE, never by the fills: same fills and the same shape is the trade
+  arriving again and must land; same fills and a DIFFERENT shape is the
+  same fills paired up twice, which is the phantom, still refused. A rule
+  that says "this is not new" has answered only half the question — the
+  other half is whether it is an UPDATE, and a discard answers it wrongly.
+  Found only by measuring what a queue actually costs; it was not what I
+  was looking for.
+- **A fixed number for "how far back" is wrong in both directions.** A
+  hardcoded 90 days silently cut his journal off at mid-May while he had
+  been trading since January. The fix was a flat 365 — and on 2026-09-09,
+  having decided to keep only his March-onward trades, that year would have
+  pulled January and February back in by itself the first time the
+  connection returned, the app undoing his decision while he watched. A
+  range must be derived from the data it is protecting: back to the oldest
+  trade he actually holds, and no further. An empty journal is the one
+  exception, because there is nothing of his to protect and that is a
+  recovery.
+- **What a poll COSTS has to be measured, not assumed.** The queue of
+  waiting trades was asked for every thirty seconds and the answer carried
+  every trade with its chart bars. Measured on the real route rather than
+  reasoned about: 100 waiting trades is **3,022KB an answer**, 43KB without
+  the bars, 11KB for a page of 25. During a re-import nearly every trade is
+  already on file, so every one of those bars was downloaded and thrown
+  away. His hosting was suspended for going over its free 5GB the same day.
+  Ask for what will be KEPT, cap the size of a single answer rather than
+  only the number of rounds, and keep both new requests optional on the
+  wire so a half-updated pair of sides still works.
+- **A stub written for a URL is dead the moment the URL gains a query.**
+  Adding `?slim=1&limit=25` made every `'**/api/trades/pending'` route in
+  the tests stop matching, so those requests fell through to the broad
+  catch-all, which answers `{"ok":true}` — no trades, no error, five checks
+  reading as real failures in three different files. Match the path with a
+  trailing `*` so a query cannot orphan it.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

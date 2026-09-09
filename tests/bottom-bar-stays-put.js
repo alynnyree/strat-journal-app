@@ -46,7 +46,7 @@ const { launch, serve } = require('./browser.js');
       // listening in the wrong place.
       await p.addInitScript(() => localStorage.setItem('strat_intro', JSON.stringify({on:false,motion:true})));
     }
-    await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+    await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
     await p.route('**/api/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');

@@ -24,6 +24,97 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+88. **WHEN THE SERVICE IS BACK — the list to work through** (asked for
+    2026-09-09: *"Let's make a list/notes of what needs to be fixed based
+    off of the list you gave me... for when Render is back up and
+    running."*). **Status: OPEN. This is the running list.**
+
+    Nothing on it can be done while the hosting is suspended. In order,
+    because each one depends on the one above it.
+
+    1. **Reconnect to Schwab.** Home tab, top of the screen. The sign-in
+       lasts seven days and will have lapsed. Until this is done every
+       other item below fails at the same point, and the failure looks
+       like something else.
+    2. **Confirm the app can reach the service at all.** Checks page. One
+       line: up to date, catching up, or stuck.
+    3. **Let the catch-up run on his 205 file-imported trades.** Every one
+       has no minutes, no stock prices, no timeframes and no Bar Replay.
+       Task 84 fills the minutes in from the live connection; the rest
+       follow once a trade has its minutes. Watch that the count actually
+       falls -- a number that will not move has been the symptom of five
+       separate faults on this project.
+       **Schwab keeps minute-by-minute candle data for only about 30-35
+       days**, so the trades from March to June can never get timeframes
+       or Bar Replay, however well everything works. Their minutes and
+       stock prices can still arrive. That is a limit of the data, not a
+       fault, and it must not be reported as one.
+    4. **Check the range it asks for.** Task 87 made it ask back to his
+       oldest trade rather than a flat year. Confirm January and February
+       do NOT appear.
+    5. **Watch the data allowance.** Task 87 also cut what the app
+       downloads. Measured before and after on the real routes: 100
+       waiting trades cost 3,022KB an answer, now 43KB, and a re-import
+       downloads no chart bars at all for a trade already on file. Worth
+       checking against his real usage, which I cannot see.
+    6. **Test the laptop add-on** (task 86). Its own window has "Take a
+       test picture now" and "Check for trades now". This has never been
+       run for real.
+    7. **Prove ONE REAL LIVE TRADE end to end** -- the fill arriving, the
+       pairing, the minutes, the fee, the stock prices, the thirteen
+       timeframes, Bar Replay, the setup and play read by the AI, and the
+       picture attached. This is the only item that actually answers his
+       question ("as long as the journal accurately imports my trades
+       moving forward"). Everything else is a rehearsal.
+    8. **Then the phone picture pipeline** (task 6) on that same trade.
+    9. **Mark the journal against his broker** once more (Checks page),
+       so the money is confirmed after all of the above has run.
+
+    Only after all nine: task 55 (one journal across every device), task 8
+    (backtesting), task 13 (the iPhone app). None of those should start
+    while the basics above are unproven.
+
+87. **"Stop the automatic catch-up asking for a full year and cut down how
+    much the app downloads"** (his instruction, 2026-09-09).
+    **Status: BUILT AND TESTED (32 browser checks, 22 on the real routes,
+    measured before and after). Cannot be confirmed against his live usage
+    while the service is suspended.**
+
+    **The year.** Three places asked for 365 days flat. That number was
+    itself a correction -- a hardcoded 90 had silently cut his journal off
+    at mid-May while he had been trading since January. But a fixed number
+    is wrong in BOTH directions, and a year would have pulled January and
+    February back in on its own the first time the connection returned,
+    undoing the decision he had just made in task 85. It now asks back to
+    the oldest trade he actually holds, plus two days. An EMPTY journal is
+    the one exception, because that is a recovery with nothing to protect.
+
+    **The download.** The phone asks for the waiting queue every thirty
+    seconds and the answer carried every trade WITH its chart bars.
+    Measured on the real route: 100 waiting trades is 3,022KB an answer.
+    Two changes, both optional on the wire so an app or a service that has
+    not been updated keeps working exactly as before:
+    - the list can be asked for WITHOUT the bars (43KB instead of
+      3,022KB), each trade saying whether bars exist for it, and the bars
+      fetched one trade at a time only where this app is going to KEEP
+      them. During a re-import nearly every trade is already on file, so
+      those bars were downloaded and thrown away -- that is now zero.
+    - the list can be asked for a page at a time (25), so no single answer
+      is large. It still empties the whole queue in one check.
+
+    **And it uncovered something far worse, live since trades started
+    carrying broker references.** A rebuild cites the same two fills as
+    the trade it rebuilds -- that is what a rebuild is -- and the phantom
+    protection refused any arrival sharing a pair BEFORE looking at the
+    shape. So every catch-up was refused: a trade with no fee stayed
+    without one, no stock price ever arrived, the timeframes were never
+    measured, Bar Replay stayed empty, and "Reset & Re-import" did nothing
+    at all. Silently. **Proven before it was fixed** -- a trade missing
+    its fee, handed back with the fee, came away still missing it.
+    Same fills and the same shape is the trade arriving again, which must
+    land. Same fills and a DIFFERENT shape is the phantom, still refused.
+    The shape tells them apart; the fills alone cannot.
+
 85. **Past history: CLOSED at his instruction** (2026-09-09, his own
     words): *"Let's keep the journal where it is as far as trades
     imported. We don't need anything past March. Leave it where it is.

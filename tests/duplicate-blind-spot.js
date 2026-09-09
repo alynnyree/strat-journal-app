@@ -37,7 +37,7 @@ const { buildJournal } = require('./real-journal.js');
     const p = await b.newPage({ viewport: { width: 390, height: 844 } });
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
-    await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+    await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
     await p.route('**/api/trades/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');
@@ -110,7 +110,7 @@ const { buildJournal } = require('./real-journal.js');
     const deleted = [];
     // Playwright checks the LAST-registered match first, so the narrow one goes last.
     await p.route('**/api/trades/**', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
-    await p.route('**/api/trades/pending', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
+    await p.route('**/api/trades/pending*', r => r.fulfill({status:200,contentType:'application/json',body:'{"pending":[]}'}));
     await p.route('**/api/trades/pending/**', r => { deleted.push(r.request().url()); return r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}); });
     await p.route(u => u.pathname === '/health', r => r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
     await p.goto(site.base + '/index.html');
