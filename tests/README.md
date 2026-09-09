@@ -43,6 +43,15 @@ rather than passing quietly:
   import once, and older trades carrying no references neither block
   anything nor become invisible.
 
+- **empty-journal-recovers.js** — the state that lost his whole journal:
+  the phone erased, the server still believing it had handed every trade
+  over, and "Get My Trades" reporting an all-clear over an empty journal.
+  Stands the two out of step on purpose and checks the trades come back on
+  ONE tap; that a journal which still has trades is never rebuilt
+  underneath him; that a run still going is never interrupted; that erasing
+  clears both sides at once; and that when the recovery itself fails it
+  says which part refused instead of falling through to "nothing new".
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set

@@ -1113,6 +1113,37 @@ Uses **The Strat**. Key concepts the code implements:
   His journal was one tap away behind a button he already had (Journal →
   Settings, import & export → Export All Trades), and one look at it named
   the cause exactly. When a fault is in HIS data, ask for his data first.
+- **Erasing his journal left it UNRECOVERABLE, and the app called that
+  fine.** I told him to erase and re-import. The server keeps its own list
+  of which Schwab fills it has already turned into trades
+  (`lastProcessedIds`), and erasing the phone never told it to forget that
+  list — so the backfill found no fresh fills, queued nothing, and "Get My
+  Trades" answered *"Nothing new. Schwab served history back to 2025-10-14
+  and every trade in it is already in your journal — still 0."* Every word
+  produced correctly; the whole sentence untrue. His entire journal was
+  gone with no way back except a button buried inside "Connection
+  settings" that he had no reason to know existed.
+  Three fixes, and the third is the one that matters: **an empty journal
+  and a server saying it already handed everything over cannot both be
+  right, so the button settles it itself** — clears the list once, asks
+  again, guarded so it can never loop and never fires while a run is still
+  going or on a journal that has trades in it. Erasing now clears that list
+  at the same time, and the message can no longer say "already in your
+  journal" of a journal with nothing in it.
+  **The general rule: any state the app can put itself into, it must be
+  able to get itself out of.** A recovery that depends on him knowing which
+  hidden button to press is not a recovery.
+- **A destructive instruction needs the recovery tested BEFORE it is
+  given.** I told him to erase 304 trades having never once checked that
+  they could come back. The check took twenty minutes to write afterwards
+  and would have caught it in one run. Never tell him to destroy something
+  until the path back has actually been exercised.
+- **Playwright checks the LAST-registered route first.** Registering a
+  broad `**/api/**` rule after the exact ones made every exact rule dead,
+  and cost a whole test run reading as four real failures. Broad rules
+  first, exact ones last. Also: the backfill progress arrives nested inside
+  a `backfill` wrapper — a stub that returns it flat makes the app behave
+  as though there is no progress to follow at all.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

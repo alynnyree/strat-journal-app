@@ -5698,7 +5698,25 @@ function toggleConnSettings(force){
   if(arrow) arrow.textContent = open ? '⌄' : '›';
 }
 
-async function getMyTrades(){
+// ---- Why this takes an argument -------------------------------------
+//
+// The server keeps its own list of which of Schwab's fills it has already
+// turned into trades, so a second look finds nothing new. That is right,
+// and it is what stops every sync writing his journal out again.
+//
+// But erasing the journal on the phone does NOT tell the server to forget
+// that list. On 2026-09-09 that left him with an empty journal and this
+// button answering "Nothing new. Schwab served history back to 2025-10-14
+// and every trade in it is already in your journal — still 0." Every word
+// of it was produced correctly and the whole sentence was untrue: nothing
+// was in his journal, and the only way out was a button buried two screens
+// down that he had no reason to know about.
+//
+// An empty journal and a server saying it already handed everything over
+// cannot both be right. The button now settles that itself: it clears the
+// server's list once and asks again. `afterClearingMemory` is what stops
+// that happening more than once, so it can never become a loop.
+async function getMyTrades(afterClearingMemory){
   const url = backendUrl();
   const btn = document.getElementById('btnGetTrades');
   if(!url){
@@ -5774,6 +5792,32 @@ async function getMyTrades(){
     // A rebuild brings nothing new and updates everything. Reporting only
     // arrivals would call that "nothing new" — which is exactly how the
     // last rebuild looked like it had failed.
+    // The contradiction, settled before anything is reported. Only when the
+    // server says it FINISHED and did serve history -- a run still going,
+    // or one that reached nothing, is a different thing entirely and must
+    // not have his journal rebuilt underneath it.
+    const emptyButServed = found === 0 && loadTrades().length === 0
+      && status && status.status === 'done' && status.oldestWindowWithData;
+    if(emptyButServed && !afterClearingMemory){
+      showStatus('info', 'Your journal is empty but Schwab has your history. Starting it again from scratch — this takes a few minutes and carries on by itself.');
+      log('syncLog', 'Empty journal with history served — clearing what the server has already handed over, and asking again.');
+      let cleared = false;
+      try{
+        const r = await fetch(url+'/api/trades/reset', { method:'POST' });
+        cleared = r.ok;
+        if(!r.ok) log('syncLog', 'Could not clear it: the server answered '+r.status);
+      }catch(e){ log('syncLog', 'Could not clear it: '+e.message); }
+      if(cleared){
+        btn.disabled = false;               // the second run manages the button itself
+        return await getMyTrades(true);
+      }
+      // Could not clear it. Say which part refused, and what that means,
+      // rather than falling through to a cheerful "nothing new".
+      showStatus('err', 'Your journal is empty and your trades could not be brought back — the app could not reach the part that starts a fresh import. Nothing is lost at Schwab. Try Get My Trades again in a minute.');
+      const t0 = loadTrades().length;
+      setConnState(true, `Connected · ${t0} trade${t0===1?'':'s'} in your journal`);
+      return;
+    }
     if(pollTally.refreshed > 0 && found === 0){
       showStatus('ok', `${pollTally.refreshed} trade${pollTally.refreshed===1?'':'s'} brought up to date with fees, stock prices and timeframe alignment. Nothing new to add — you already had them all.`);
     } else if(pollTally.refreshed > 0){
@@ -6102,6 +6146,12 @@ function backfillResultMessage(status, found, total){
     return ['err', `Schwab refused ${status.windowsFailed} of ${status.windowsAsked} requests for older history${f.from ? ` (for example ${f.from} to ${f.to})` : ''}. That is why older trades are missing — it is not that you have none. Reason given: ${f.why || 'none'}.`];
   }
   if(status && status.oldestWindowWithData){
+    // "Every trade is already in your journal" cannot be said of a journal
+    // with nothing in it. Said as the fault it is, with the one thing that
+    // fixes it, rather than as an all-clear.
+    if(total === 0){
+      return ['err', `Your journal is empty, but Schwab does have your history back to ${status.oldestWindowWithData}. Tap Get My Trades once more — it will start the import from scratch.`];
+    }
     return ['ok', `Nothing new. Schwab served history back to ${status.oldestWindowWithData} and every trade in it is already in your journal — still ${total}.`];
   }
   if(status && status.fillsFound === 0){
@@ -7513,10 +7563,25 @@ function removeDuplicateTrades(){
   showStatus('ok', `${dropped} duplicate trade(s) removed.`);
 }
 
-function wipeData(){
-  if(confirm('Erase all logged trades? This cannot be undone.')){
-    localStorage.removeItem('strat_trades');
-    renderDashboard(); renderJournal();
+async function wipeData(){
+  if(!confirm('Erase all logged trades? This cannot be undone. Your trades can be brought back from Schwab afterwards with Get My Trades.')) return;
+  localStorage.removeItem('strat_trades');
+  renderDashboard(); renderJournal();
+  // Erasing the phone used to leave the SERVER still believing it had
+  // handed every trade over, so "Get My Trades" honestly found nothing new
+  // and his journal could not be rebuilt at all. Cleared here so the very
+  // next collect starts from scratch. If it cannot be reached, that is
+  // said plainly -- the trades are still safe at Schwab, and Get My Trades
+  // now clears it itself as well.
+  const url = backendUrl();
+  if(!url) return;
+  try{
+    const r = await fetch(url+'/api/trades/reset', { method:'POST' });
+    if(!r.ok) throw new Error('answered ' + r.status);
+    showStatus('ok', 'Journal erased. Tap Get My Trades to bring your trades back from Schwab.');
+  }catch(e){
+    log('syncLog', 'Could not clear what the server has handed over: ' + e.message);
+    showStatus('info', 'Journal erased. Tap Get My Trades to bring your trades back from Schwab — it may take two taps.');
   }
 }
 
