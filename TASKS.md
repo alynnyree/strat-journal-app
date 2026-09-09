@@ -24,6 +24,35 @@ fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
 
+84. **"Will the journal automatically upload my times for entries and
+    exits?"** (2026-09-09, his own words). **Status: FIXED AND TESTED
+    (64 checks, including his own 254 real trades in both orders).**
+
+    His broker's file has no time columns, so a trade read out of it leaves
+    the minute he entered and the minute he left blank on purpose. He asked
+    whether they fill in by themselves. The answer had to be worse than no.
+
+    The same trade arriving from the live connection carries real minutes
+    and his broker's own reference numbers for its two fills. Neither check
+    that stops a trade being written down twice could recognise it as the
+    trade already on file — the reference check compares the fills, and the
+    file had to invent its own; the shape check includes both times, and one
+    copy has none. **All 254 of his trades would have been written down a
+    second time, fee and all, the moment the connection came back**, and the
+    same thing in reverse if he imported the file on top of live trades.
+
+    Now: a trade that came out of the file and has never met the live
+    connection is compared on everything EXCEPT the minutes, one arrival to
+    one saved copy, and the minutes are filled IN. Three trades that differ
+    only in the minute stay three. His own money is never touched — a fee
+    that disagrees is recorded, not applied.
+
+    Also fixed alongside it: eight places asked "did this come from the
+    broker?" by testing for the one source that existed before the file
+    became an import path, so 205 of his trades were labelled "Added by
+    hand", left out of the count of what is still filling in, and never
+    asked for. One named test answers it now.
+
 83. **"It never counted down to nothing"** (2026-09-08). **Status: FIXED
     AND TESTED (15 new checks, 3 outdated ones corrected).**
 

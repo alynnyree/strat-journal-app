@@ -69,6 +69,18 @@ rather than passing quietly:
   or prices, says so on screen, and that importing the same file twice
   changes not one cent.
 
+- **times-fill-in.js** — his question after importing his broker's file:
+  will the minute he entered and left fill in by itself? It could not, and
+  worse: the file's trades and the same trades arriving from the live
+  connection could not be recognised as the same, so his whole journal
+  would have been written down a second time the moment the connection came
+  back. Covers the plain case, three trades that differ only in the minute
+  staying three, only two of the three coming back, a genuinely new trade
+  still getting in, a repeat in one batch, a minute he typed himself
+  standing untouched, the money never moving, and both directions over his
+  real 254 trades — 306 contracts, $404.73, −$1,100.73, every one of them
+  gaining its minute.
+
 Two things they need, and say so when they are missing:
 
 - **Playwright and a Chromium.** Looked for in the usual places; set

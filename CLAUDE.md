@@ -1226,6 +1226,42 @@ Uses **The Strat**. Key concepts the code implements:
   **Any identity invented for a record must be derivable from the record
   alone.** Position, arrival order and batch number are properties of the
   reading, not of the thing read.
+- **A record with a field left deliberately blank cannot be recognised by
+  an identity that asks about that field.** His broker's file has no time
+  columns, so a trade read out of it leaves both minutes blank on purpose —
+  a made-up minute would flow into the timeframe reading, the stock price
+  and Bar Replay looking exactly as solid as a real one. The SAME trade
+  arriving from the live connection carries real minutes and the broker's
+  own reference numbers for its two fills. Neither check that stops a trade
+  being written down twice could see the two as one: the reference check
+  compares the fills, and the file had to invent its own; the shape check
+  includes both times, and one copy has none. **So all 254 of his trades
+  would have been written down a second time, fee and all, the moment the
+  connection came back** — the same shape of fault as the row-position
+  reference that tripled his loss the day before, found by asking what
+  happens when the OTHER path runs, not by anything failing.
+  The fix cannot be "ignore the times for everyone": three separate trades
+  on one contract, on one day, at the same two prices, for the same size
+  differ ONLY in the minute, and ignoring it collapses them into one, which
+  is the fault that threw away 24 of his trades. So it is narrow on both
+  sides — only a trade that came from the FILE and has never met the live
+  connection may be matched without its times, and each arrival claims a
+  DIFFERENT saved copy, one for one, so three stay three. Verified on his
+  own 254 real trades in both orders: 254 trades, 306 contracts, $404.73,
+  −$1,100.73, and every one of them gaining its minute.
+- **A second way IN is a second author, and every test written for the
+  first one is now wrong.** Reading his broker's file was a new source of
+  trades, and eight separate places asked "did this come from the broker?"
+  by testing for the one source that existed when they were written. All
+  eight quietly answered "he typed this in by hand" for 205 of his trades:
+  a plainly wrong label on the card, those trades left out of the count of
+  what is still filling in, nothing ever ASKING for their missing details,
+  and a duplicate check that would have preferred one of them over the real
+  thing. One named test (`fromBroker`) now answers that question in one
+  place. This is the same lesson as the play that could never be filled in
+  and the timeframes that gained a second author — it keeps recurring
+  because the new path passes its own tests while silently changing the
+  answer to questions asked elsewhere.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
