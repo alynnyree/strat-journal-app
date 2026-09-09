@@ -1,5 +1,40 @@
 # Task List
 
+## ⭐ THE GOAL — in his own words (2026-09-09)
+
+He wrote this out himself and said: *"What I pasted above should be the
+ultimate goal list and this is what we will achieve at the end of this
+project."* And: *"Everything should be automatic or close to it."*
+
+**Recording a trade — the core:**
+- Time of entry & exit
+- Price of contract at entry & exit
+- Underlying price of SPY or IWM at the exact time of entry & exit
+- Was there FTFC at the time of entry (or was there no FTFC)
+- What strategy did you use of the 3
+- Pictures and/or video recording of the trade
+- Notes
+
+**Additional features:**
+- Backtesting (bar replay, run through bar by bar)
+- AI analyzer recognising his patterns of errors, and his best patterns
+  or strategies
+
+**Every bullet is to be gone over again once the hosting is back.** This
+list outranks the numbered tasks below: anything not serving one of these
+bullets is not what he asked for. Note what the list does NOT say — it is
+about RECORDING a trade faithfully and then learning from it. The money
+figures, fees and win rates already built are kept because they are correct
+and verified, but they were never the point.
+
+One thing deliberately not narrowed on the strength of this list: it says
+"the 3", meaning the three PLAYS. The nine combos stay, because on
+2026-08-29 he said in his own words that the plays are "in conjunction with
+the 9 strat combos. Nothing should be disregarded." Raised with him rather
+than assumed either way.
+
+# Task List
+
 > ## ⚠️ HE ASKED TO BE REMINDED — RAISE THIS
 >
 > **One journal across all his devices.** Trades live in the browser, so
