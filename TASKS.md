@@ -32,6 +32,35 @@ One thing deliberately not narrowed on the strength of this list: it says
 2026-08-29 he said in his own words that the plays are "in conjunction with
 the 9 strat combos. Nothing should be disregarded." Raised with him rather
 than assumed either way.
+### HOW WE WORK THROUGH IT — his own instruction (2026-09-09)
+
+He set this out himself and asked me to repeat it back so he could check I
+had understood. It is not to be improvised on.
+
+1. **A check-in brings up the goal list.** Every one of the nine bullets,
+   with its honest status, read from THIS FILE and not from memory.
+2. **He decides whether to start.** If he says not now, that is the end of
+   that round — no pushing, no starting anyway.
+3. **When he says proceed, start at NUMBER 1** — the first unfinished item,
+   in order. No skipping ahead, no doing two at once.
+4. **Give the FULL description of that item**: what the feature is, exactly
+   how it works today, and where it honestly stands.
+5. **Then raise everything HE has already said** about that particular
+   feature — every complaint, request and correction on the record for it.
+6. **Then stop and ask. HE says what needs fixing.** I do not choose the
+   work, do not widen it, and do not start it before he has said so.
+7. **Do the work efficiently**, verify it with real checks, and report
+   plainly — including anything that could not be verified.
+8. **Then bring the goal list back up** and repeat from step 3 with the
+   next item.
+9. **Carry on to the end of the list.**
+
+Two things to say honestly when they come up rather than working around
+them: an item that cannot be finished while the hosting is suspended (he
+chooses whether to do the possible part now or move on), and an item where
+the answer is "this needs a real live trade to prove" — which is most of
+them.
+
 ### Where each bullet stands (2026-09-09, corrected)
 
 Kept HERE rather than in a message, so the check-ins read from a record
