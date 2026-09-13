@@ -416,8 +416,39 @@ via the `TASKS.md` commit log.
     it is approved, an update arrives on its own and his settings survive
     it — a published add-on keeps its identity, so nothing is wiped.
 
-    **Do not start any of this without him saying so.** It is his money,
-    his Google account, and a listing with his name on it.
+    **HE SAID PUBLISH, 2026-09-13. Everything that can be prepared from
+    here is prepared; the submission itself is his, because it needs his
+    Google account and his card, and Google's own pages are unreachable
+    from this session (403 from the proxy, tested).**
+
+    Ready to upload: `strat-journal-auto-capture-1.2.zip`,
+    `store-screenshot.png` (1280x800, rendered from the add-on's own
+    window), `privacy.html` on his own site, and `store-listing/LISTING.md`
+    with every field Google's form asks for written out to paste.
+
+    **THE PERMISSION WAS NARROWED AFTER ALL, and the reason is not the one
+    I first gave.** I had it as a nice-to-have that would speed review up.
+    Checking the actual policy changed that: enforcement began **1 August
+    2026** that data collected must be *strictly necessary* to the declared
+    single purpose, and that "requesting broader permissions than necessary
+    may cause the extension to be rejected". A single purpose of
+    "photograph my chart" against a permission for every website he has
+    ever visited is exactly that mismatch. So submitting as-is was not the
+    faster path he chose — it was the path that gets refused. Narrowed to
+    `https://*.tradingview.com/*` plus `activeTab`.
+
+    **It is a real behaviour change and it is an IMPROVEMENT, not just a
+    concession.** A trade closing while his email was on screen used to
+    file a picture of his email against that trade, stamped with the
+    trade's own time and looking entirely real — the same class of fault as
+    the capture-taken-late guard. Now it refuses and SAYS which tab to
+    open, rather than returning nothing.
+
+    Checked: `tests/only-photographs-the-chart.js`, 22 checks — what the
+    manifest asks for, which addresses count as his chart (including a
+    look-alike domain and the insecure address, both refused), and that a
+    refusal names the tab to open in plain words with nothing raw from
+    Chrome in it.
 
 93. **A rehearsal cannot yet rehearse a RECORDING** (noticed 2026-09-13
     while explaining "Run a test trade now" to him). **Status: RAISED,

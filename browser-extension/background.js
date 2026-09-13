@@ -89,9 +89,29 @@ async function setStatus(fields) {
 // what actually becomes the uploaded picture. Requires host_permissions
 // covering the tab's site (see manifest.json) since this runs from a timer,
 // not a user click.
+// The one site this add-on is allowed to photograph. It used to be allowed
+// EVERY site -- which meant a trade closing while his email was on screen
+// filed a picture of his email against that trade, looking entirely real.
+// It also meant Chrome warning him his own tool could "read and change all
+// your data on all websites", and, since 1 August 2026, a near-certain
+// rejection from the store: permissions must be the minimum the stated
+// purpose needs, and the stated purpose is photographing his chart.
+//
+// Kept as a test rather than only in the manifest, so the reason a picture
+// was not taken can be SAID. Chrome simply refuses the call otherwise, and
+// a refusal with no explanation is the dead end this project keeps hitting.
+const CHART_HOST = /^https:\/\/([a-z0-9-]+\.)*tradingview\.com\//i;
+
+function isChartTab(url) {
+  return CHART_HOST.test(String(url || ''));
+}
+
 async function captureActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab) throw new Error('No active tab found to capture.');
+  if (!tab) throw new Error('No tab was on screen, so there was nothing to photograph.');
+  if (!isChartTab(tab.url)) {
+    throw new Error('Your chart was not the tab on screen, so no picture was taken. This add-on can only photograph TradingView.');
+  }
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
   return dataUrl;
 }
@@ -160,6 +180,11 @@ async function toRecorder(msg) {
 async function startRecording() {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab) throw new Error('There is no tab on screen to record.');
+  // Said before Chrome refuses it, so he is told WHICH tab to open rather
+  // than handed whatever Chrome says when it turns the request down.
+  if (!isChartTab(tab.url)) {
+    throw new Error('Open your TradingView chart in this tab first — that is the only thing this add-on can record.');
+  }
   const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
   await ensureOffscreen();
   const res = await toRecorder({ type: 'start', streamId });
@@ -405,10 +430,13 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
   }).catch(() => {});
 }
 
-// Node-testable exports — chrome.* dependent functions are intentionally
-// left out, since those can only be exercised in a real browser.
+// Node-testable exports. The chrome.* dependent ones used to be left out on
+// the grounds that only a real browser can exercise them -- but with the
+// browser's own calls stood in for, what they REFUSE and what they SAY when
+// they refuse is testable here, and that is the part worth checking.
 if (typeof module !== 'undefined') {
   module.exports = { buildUploadUrl, buildEventsUrl, buildDeleteEventUrl, buildTestTradeUrl,
-    buildVideoUploadUrl, noteMomentsForRecording, OPEN_TRADE_HOLD_MS,
+    buildVideoUploadUrl, noteMomentsForRecording, OPEN_TRADE_HOLD_MS, isChartTab,
+    captureActiveTab, startRecording,
     isTooOldToCapture, isNotDueYet, MAX_EVENT_AGE_MS, EARLY_TOLERANCE_MS };
 }
