@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Strat Journal Auto-Capture</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0B0F0C; color: #E8EDE9; max-width: 720px; margin: 0 auto;
+    padding: 40px 20px 80px; line-height: 1.65; }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  h2 { font-size: 17px; margin-top: 34px; color: #C9A227; }
+  .sub { color: #8A968D; font-size: 14px; margin-bottom: 28px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  strong { color: #fff; }
+  code { background: #161C18; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .foot { margin-top: 44px; padding-top: 18px; border-top: 1px solid #222A24;
+    color: #8A968D; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<div class="sub">Strat Journal Auto-Capture (Chrome extension) &middot; last updated 13 September 2026</div>
+
+<p>This extension is a personal tool built for one trader to keep a record of their
+own trades. It is not a commercial product and it has no users other than the
+person who installs it.</p>
+
+<h2>What it is for</h2>
+<p>Its single purpose is to capture pictures and screen recordings of the
+installer's own TradingView chart at the moments their own trade opens, passes
+fifteen minutes, and closes, and send them to a server the installer runs, so
+those images can be attached to that trade in their own trading journal.</p>
+
+<h2>What it collects</h2>
+<ul>
+  <li><strong>Images of the TradingView tab.</strong> Still pictures at the three
+    moments above, and &mdash; only while the installer has explicitly pressed
+    &ldquo;Start recording my charts&rdquo; &mdash; a screen recording of that tab
+    covering each trade.</li>
+  <li><strong>The times those images were captured</strong>, so they can be matched
+    to the right trade.</li>
+</ul>
+<p>It captures <strong>only</strong> pages on <code>tradingview.com</code>. It cannot
+capture any other website: the extension does not hold permission for any other
+site, and it checks the page itself before capturing and refuses otherwise.</p>
+
+<h2>What it does not collect</h2>
+<ul>
+  <li>No browsing history, no page contents, no form data, no cookies.</li>
+  <li>No names, email addresses, passwords, payment details or financial account
+    credentials.</li>
+  <li>No location, no health data, no personal communications.</li>
+  <li>Nothing at all from any website other than TradingView.</li>
+</ul>
+
+<h2>Where it goes</h2>
+<p>Images are sent directly to a server operated by the installer, at an address the
+installer types into the extension's own settings. Nothing is sent anywhere else.
+There is no analytics, no advertising, no tracking, and no third-party service of
+any kind receives this data. The developer of this extension does not receive,
+store or have access to any of it.</p>
+
+<h2>How long it is kept</h2>
+<p>An image waiting to be matched to a trade is deleted from that server once it has
+been collected, and in any case automatically after 30 days. Images attached to a
+trade are kept in the installer's own journal until the installer deletes them.</p>
+
+<h2>Stored settings</h2>
+<p>The extension stores two things in Chrome's own local storage on the installer's
+computer: the address of their server, and the key used to authenticate to it.
+These never leave that computer except to reach that server.</p>
+
+<h2>Selling or sharing</h2>
+<p>None of this data is sold, transferred, or shared with anyone. It is not used for
+any purpose unrelated to the single purpose stated above, and it is not used to
+determine creditworthiness or for lending purposes.</p>
+
+<h2>Contact</h2>
+<p>Questions about this extension can be sent to the address listed on its Chrome Web
+Store listing.</p>
+
+<div class="foot">
+  Source code for this extension is public at
+  <a href="https://github.com/alynnyree/strat-journal-app" style="color:#C9A227;">github.com/alynnyree/strat-journal-app</a>,
+  under <code>browser-extension/</code>.
+</div>
+
+</body>
+</html>
