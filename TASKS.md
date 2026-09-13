@@ -393,13 +393,28 @@ via the `TASKS.md` commit log.
     - Needs a privacy policy and a written justification for each
       permission.
 
-    **RAISED, NOT DECIDED — narrowing the permissions would help twice.**
-    `<all_urls>` exists so it can photograph a tab without him clicking.
-    It does not need every website for that; it needs the site he charts
-    on. Narrowing it to that one site would cut the review scrutiny
-    sharply AND stop Chrome warning him it can "read and change all your
-    data on all websites", which is a frightening thing to be told about
-    your own tool. Needs one answer from him: which site he charts on.
+    **NARROWING THE PERMISSIONS — he has now answered.** `<all_urls>`
+    exists so it can photograph a tab without him clicking. It does not
+    need every website for that; it needs the site he charts on, and on
+    2026-09-13 he said which: **TradingView**. So the permission becomes
+    `https://*.tradingview.com/*` rather than everything. That cuts the
+    review scrutiny sharply AND stops Chrome warning him it can "read and
+    change all your data on all websites", which is a frightening thing to
+    be told about your own tool.
+
+    **The cost of narrowing, stated plainly:** a picture taken while any
+    OTHER site is on screen would stop working. That is the right trade
+    for him — he charts on TradingView and the picture is meant to be of
+    the chart — but it is a real behaviour change, not a free win, and the
+    add-on must say so rather than quietly returning nothing.
+
+    **THE ORDER MATTERS, because each hand-update costs him an afternoon.**
+    Switching from the hand-loaded copy to the published one is itself one
+    more remove-and-reinstall, and that wipes the address and key one last
+    time. So: every change we want should go in ONE version, he updates by
+    hand at most once more, and that version is the one submitted. After
+    it is approved, an update arrives on its own and his settings survive
+    it — a published add-on keeps its identity, so nothing is wiped.
 
     **Do not start any of this without him saying so.** It is his money,
     his Google account, and a listing with his name on it.
