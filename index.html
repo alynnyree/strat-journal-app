@@ -5185,6 +5185,9 @@ function techText(){
   const auto = all.filter(t => t.optExit != null && fromBroker(t));
   const srv = techNotes.server || {};
   const cp = readProblem('classify'), rp = readProblem('rebuild'), dec = readDecline(), ask = readRebuildAsk();
+  // Behind the Details tap, not on his screen. A reason that is recorded
+  // and never printed anywhere is the same dead end as no reason at all.
+  const sp = readProblem('shots'), vp = readProblem('videos');
   const when = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
   return [
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
@@ -5226,6 +5229,9 @@ function techText(){
     dec ? `rebuild declined: ${dec.text} (${when(dec)})` : 'rebuild not declined',
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
+    sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
+    vp ? `recording problem: ${vp.text} (${when(vp)})` : 'no recording problem',
+    `pictures ${all.filter(t => t.shotEntry || t.shotMid || t.shotExit).length} · recordings ${all.filter(t => t.video && t.video.r2Key).length}`,
   ].join('\n');
 }
 
