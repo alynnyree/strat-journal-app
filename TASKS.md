@@ -145,11 +145,42 @@ instead of from memory. Correct it in place when something moves.
    Read from the last fifteen one-minute candles before entry, and only
    accepted when the model says high confidence — otherwise it leaves
    "Needs Setup" for him. So "close to automatic" by design, not always.
-6. **Pictures and/or video — THE WEAKEST BULLET.** Phone pictures built,
-   never proven on a real trade, and inherently ONE TAP per trade because
-   Apple allows no less. The laptop add-on is installed (task 86) and has
-   never been run. **Video is not built at all** — it needs the native
-   iPhone app (task 13), which is the only way Apple permits it.
+6. **Pictures and/or video — BUILT END TO END ON THE LAPTOP, never proven
+   on a real trade.** Phone pictures built, never proven on a real trade,
+   and inherently ONE TAP per trade because Apple allows no less. The
+   laptop add-on is installed (task 86) and has never been run.
+
+   **Video is built now (2026-09-13), for the laptop.** Corrected: this
+   line said "not built at all", which was wrong twice over. The server
+   half — receive, store, hand back a temporary link — had existed since
+   task 12. What was genuinely missing was both ends, and both are now
+   done:
+   - **Nothing recorded.** The laptop add-on now records the chart tab
+     continuously into a rolling twenty-five minute buffer, and cuts each
+     trade's own stretch out of it by real timestamps when the server says
+     that trade closed. One press starts it and it covers every trade
+     until he stops it. Continuous rather than starting at the entry
+     signal, because that signal arrives up to a minute after the fill and
+     a recording starting a minute in has already missed the entry.
+   - **The app never asked for one.** It now claims a waiting recording and
+     files it against the right trade by time, exactly as a picture is
+     claimed, and a "▶ Recording" button plays it.
+
+   The journal stores a POINTER, never the recording: one is tens of
+   megabytes and the journal lives in the phone's own small storage.
+   Measured: a trade with a recording attached is 398 characters.
+
+   **Still missing: recording on the PHONE.** That needs the native iPhone
+   app (task 13) and cannot be built from this session at all. Recording
+   only happens while the laptop's browser is open on the chart.
+
+   **Not proven:** no real trade has produced one, and two things cannot be
+   checked from here — whether Chrome actually hands over the tab on his
+   own machine, and whether his server has the storage keys set
+   (`R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` are NOT
+   in the list of settings recorded for Render). Without those the server
+   turns every recording away, and the app now says so in plain words
+   rather than showing a blank.
 7. **Notes — DONE.** His own writing, on the card, never overwritten.
 
 **Additional A — backtesting (bar replay, bar by bar): NOT DONE.** He
@@ -171,9 +202,9 @@ the three plays works best, it cannot answer at all. Third appearance of
 the same fault: a hand-picked field list written before the data grew.
 
 **Score: five of seven core bullets done and automatic. One built but
-unproven. One half-missing (video). Both additional features short.** And
-the thing that overshadows all of it: nothing on this list has been proven
-on a single real live trade.
+unproven (#5). One now built on the laptop but not on the phone (#6). Both
+additional features short.** And the thing that overshadows all of it:
+nothing on this list has been proven on a single real live trade.
 
 
 # Task List
@@ -201,6 +232,135 @@ Reordered 2026-08-17 to put the fix that unblocks other work first, and the
 fix that would actually tell the owner whether his trading edge is real
 ahead of chart/review-tool work. Original order is preserved in git history
 via the `TASKS.md` commit log.
+
+90. **A picture that matched no trade was downloaded again on every
+    single check** (2026-09-13, his own words: *"I want you to fix the part
+    of the app where a picture that doesnt match a trade getting
+    redownloaded."*). **Status: FIXED, verified by measurement, unconfirmed
+    on his phone.**
+
+    A picture waiting to be matched is deliberately LEFT waiting — the
+    trade it belongs to may not have reached his journal yet. That part was
+    right. What was wrong is that the app asks for the waiting list every
+    thirty seconds it is open, and the answer carried every waiting picture
+    IN FULL: up to 3MB each, up to a hundred of them.
+
+    So one mistimed picture that would never match anything was handed over
+    again on every check, for the thirty days a picture is kept. Measured on
+    the real route, not reasoned about: **one stray picture checked on
+    thirty times cost 9,003KB**, and twenty waiting pictures cost 6,002KB
+    per check. His hosting was suspended for going over its free 5GB
+    allowance four days before this was found.
+
+    Deciding which trade a picture belongs to needs only its TIMESTAMP. So:
+    - `/media/pending?slim=1` leaves the pictures out — 6,002KB becomes 2KB
+      for twenty waiting pictures.
+    - New `/media/:id/image` hands over ONE picture, ONCE, after the app has
+      decided to keep it.
+    - The `image` key stays PRESENT and null rather than being dropped, so
+      nothing can mistake "not sent this time" for "there is no picture".
+    - A server too old to understand `slim=1` answers exactly as before and
+      the app still works — checked.
+
+    Three faults, three answers, never one blank: a picture that has left
+    the queue says so, one stored with no image data says THAT instead, and
+    a picture that could not be reached says which. The reason is kept where
+    the Checks page can print it. That store used to be two variables and an
+    `if classify … else rebuild`, so a third kind of problem would have been
+    filed as a rebuild and overwritten the rebuild's own reason — found and
+    fixed before shipping, and checked.
+
+    The recordings queue had the same unbounded fault: ids were pushed on
+    for ever and the whole list read. Capped at a hundred, with an expired
+    id swept as it is found.
+
+    **Checks:** `strat-journal-backend/tests/picture-weight.js` (36) measures
+    it across REPEATED checks, which is the only way this shows itself — one
+    check looks fine either way. `tests/pictures-and-recordings.js` (43)
+    drives the real app in a real browser. Two existing backend tests that
+    could not run in CI because of a hardcoded path now run there too.
+
+91. **VIDEO: the two missing halves, both built** (2026-09-13, his own
+    words: *"I also want to build out the two parts that are missing."*).
+    **Status: BUILT, unconfirmed — no real trade has produced one, and two
+    things cannot be checked from this session at all.**
+
+    The server half had existed since task 12 — receive a recording, keep
+    it, hand back a temporary link. Both ends were missing, and both are
+    done.
+
+    **(a) Nothing recorded.** The laptop add-on now records the chart tab.
+    Chrome will not let a background add-on record on its own — it needs a
+    real click and a page to record onto — so there is one new button in the
+    add-on's small window: *"Start recording my charts."* One press covers
+    the whole session, through as many trades as he takes.
+
+    It records CONTINUOUSLY into a rolling twenty-five minute buffer, and
+    cuts each trade's own stretch out of it when the server says that trade
+    closed. Continuous rather than starting at the entry signal, because
+    **that signal arrives up to a minute after the fill** and a recording
+    that starts a minute in has already missed the entry — which is the part
+    he most wants to look at. Cutting by real timestamps also means a clip
+    can never hold the wrong moment, which is the fault that made the
+    picture path refuse anything older than three minutes.
+
+    Each clip runs from thirty seconds before the entry to fifteen seconds
+    after the exit, capped at fifteen minutes — the same fifteen minutes at
+    which a trade stops being recorded and starts being photographed.
+
+    **THE PIECE THE WHOLE DESIGN RESTS ON WAS MEASURED, NOT ASSUMED.** A
+    rolling recording arrives in one-second pieces, and only the FIRST piece
+    carries the description of the recording itself. Run in a real browser:
+    the first piece plus a later run of pieces **plays**, at full size, and
+    advances. The same later run WITHOUT the first piece **will not open at
+    all** — `DEMUXER_ERROR_COULD_NOT_OPEN`. Had that been guessed at, every
+    recording would have been unplayable and nothing would have said why.
+
+    Three refusals, each with its own reason and none of them a blank:
+    nothing was being recorded; the recording was running but none of it
+    covers this trade; the recording only began N minutes into the trade, so
+    it would not show the entry and nothing was sent. **A rehearsal is never
+    recorded** — his journal has already held 161 contracts he never bought.
+
+    **(b) The app never asked for one.** Even with a recording sitting on the
+    server, the journal would never fetch it, never attach it, never play it.
+    It now claims a waiting recording and files it against the right trade by
+    time, exactly as a picture is claimed, on the same thirty-second rhythm.
+
+    **The journal stores a POINTER, never the recording.** One recording is
+    tens of megabytes and the journal lives in the phone's own small storage
+    alongside three hundred trades; putting even one in there would push the
+    journal itself out. Measured: a trade with a recording attached is 398
+    characters. The link is fetched fresh on each play, because the stored
+    place is private and a link expires.
+
+    **New on his screen (he asked to be told):** one *"▶ Recording"* button on
+    a trade card, and it only appears on a trade that actually has one. Plus
+    the one *"Start recording my charts"* button in the laptop add-on, which
+    Chrome makes unavoidable.
+
+    A recording that matches no trade is left waiting — the trade may not
+    have synced — and that is cheap now, because the answer carries a pointer
+    and not the recording. The same recording offered twice (a clearing that
+    did not land) is cleared rather than filed against a SECOND trade.
+
+    **STILL MISSING: recording on the PHONE.** That needs the native iPhone
+    app (task 13) and cannot be built from this session at all. Recording
+    only happens while his laptop's browser is open on the chart.
+
+    **CANNOT BE VERIFIED FROM HERE, and both would stop it working:**
+    1. Whether Chrome on his own machine actually hands the tab over. That
+       needs the add-on loaded in a real browser.
+    2. Whether his server has somewhere to keep recordings.
+       `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` are
+       **not** in the list of settings recorded for Render. Without them the
+       server turns every recording away — the add-on says so in plain
+       words, and so does the app if he presses play.
+
+    **Checks:** `tests/recording-cuts-the-right-stretch.js` (45) — the
+    decisions against the real add-on code, and the playability in a real
+    browser. `tests/pictures-and-recordings.js` (43) — the app claiming,
+    storing, and actually PLAYING a real recording end to end.
 
 88. **WHEN THE SERVICE IS BACK — the list to work through** (asked for
     2026-09-09: *"Let's make a list/notes of what needs to be fixed based

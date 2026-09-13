@@ -25,7 +25,12 @@
        is to place a real trade and hope. Ten seconds instead. -->
   <button id="testTrade">Run a test trade now</button>
   <button id="checkNow" class="secondary">Check for trades now</button>
+  <!-- Chrome will not hand a tab over to be recorded on a timer, so this
+       has to be a real button press. One press covers the whole session --
+       it keeps recording through as many trades as he takes. -->
+  <button id="recordToggle" class="secondary">Start recording my charts</button>
   <div id="testResult"></div>
+  <div id="recordResult" class="row"></div>
   <a href="#" id="openOptions">Settings</a>
   <script src="popup.js"></script>
 </body>

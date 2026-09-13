@@ -480,6 +480,15 @@
   }
   .trade-card .tc-actions button.tc-del{color:var(--bear); border-color:var(--bear-dim);}
   .trade-card .tc-actions button.tc-replay{color:var(--amber); border-color:var(--amber);}
+  .trade-card .tc-actions button.tc-video{color:var(--gold-lite); border-color:var(--gold-deep);}
+  /* The player fills the black area the same way the replay chart does, so
+     a recording taken on a wide laptop screen is letterboxed rather than
+     cropped -- the chart is the whole point of the recording. */
+  .modal-box.fs .video-wrap{flex:1; min-height:0; margin-top:6px; background:#060806;
+    border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;}
+  .modal-box.fs .video-wrap video{width:100%; height:100%; object-fit:contain; background:#060806;}
+  .video-state{color:var(--text-dim); font-size:13px; line-height:1.5; text-align:center; padding:18px;}
 </style>
 </head>
 <body>
@@ -1153,6 +1162,23 @@
         <div class="replay-btn" onclick="replayStep(1)">▶</div>
       </div>
       <div class="pill-row" id="replaySpeedRow" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- SCREEN RECORDING PLAYER -->
+  <!-- A recording is never kept in the journal itself: one is tens of
+       megabytes and the journal lives in the phone's own small storage,
+       so holding one there would push everything else out. The trade
+       keeps a POINTER, and the recording is fetched when he taps play. -->
+  <div class="modal-overlay" id="videoModal">
+    <div class="modal-box fs">
+      <div class="modal-head">
+        <div class="t" id="videoTitle">Trade Recording</div>
+        <div class="modal-close" onclick="closeVideo()">&#10005;</div>
+      </div>
+      <div class="video-wrap" id="videoWrap">
+        <div class="video-state" id="videoState">Fetching the recording&hellip;</div>
+      </div>
     </div>
   </div>
 
@@ -3771,6 +3797,7 @@ function renderJournal(){
       ${(t.notes||'').trim() ? `<div class="tc-notes clamped" onclick="toggleTradeNotes(this)"><span class="tc-notes-label">Notes</span><div class="tc-notes-body">${escapeHtml(t.notes.trim())}</div></div>` : ''}
       <div class="tc-actions">
         ${((t.replayData && t.replayData.candles) || []).length ? `<button class="tc-replay" onclick="openReplayById('${t.id}')">▶ Replay</button>` : ''}
+        ${(t.video && t.video.r2Key) ? `<button class="tc-video" onclick="openVideoById('${t.id}')">▶ Recording</button>` : ''}
         <button onclick="editTrade('${t.id}')">✎ Edit</button>
         <button class="tc-del" onclick="deleteTrade('${t.id}')">🗑 Delete</button>
       </div>
@@ -3899,16 +3926,19 @@ function noteClassifyTry(id){
 // The last thing that went wrong, and when. Kept so the Checks page can
 // say WHY nothing is happening instead of leaving him to notice that a
 // counter has not moved. He should never have to discover silence.
-let lastClassifyProblem = null;   // {text, at}
-let lastRebuildProblem = null;    // {text, at}
+// Kept by NAME rather than in two named holders. It used to be a pair of
+// variables with `if classify ... else ...`, so a third kind of problem
+// would have been quietly filed as a rebuild -- overwriting the reason the
+// Checks page prints for something else entirely. A store that has to be
+// edited to hold one more thing will be got wrong the first time it is.
+const lastProblems = {};          // name -> {text, at}
 function noteProblem(which, text){
   const entry = { text: String(text).slice(0, 200), at: Date.now() };
-  if(which === 'classify') lastClassifyProblem = entry; else lastRebuildProblem = entry;
+  lastProblems[which] = entry;
   try{ localStorage.setItem('strat_last_problem_' + which, JSON.stringify(entry)); }catch(e){}
 }
 function readProblem(which){
-  const held = which === 'classify' ? lastClassifyProblem : lastRebuildProblem;
-  if(held) return held;
+  if(lastProblems[which]) return lastProblems[which];
   try{ return JSON.parse(localStorage.getItem('strat_last_problem_' + which) || 'null'); }
   catch(e){ return null; }
 }
@@ -5026,12 +5056,17 @@ function loadTestShots(){
   catch(e){ return []; }
 }
 
-function recordTestShots(shots, url){
+async function recordTestShots(shots, url){
   const held = loadTestShots();
   const seen = new Set(held.map(x => x.id));
   for(const shot of shots){
     if(seen.has(shot.id)) continue;
-    held.push({ id: shot.id, image: shot.image, timestamp: shot.timestamp, moment: shot.moment || null });
+    // A rehearsal picture is kept, so its image IS worth fetching -- but
+    // only once, here, rather than on every check. An older server sends
+    // it with the list already.
+    const image = shot.image || (url ? (await fetchScreenshotImage(url, shot.id)).image : null);
+    if(!image) continue;
+    held.push({ id: shot.id, image, timestamp: shot.timestamp, moment: shot.moment || null });
     // Cleared from the server as soon as it is safely held here, exactly
     // as a real picture is once it lands on its trade.
     if(url) fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}).catch(()=>{});
@@ -5150,6 +5185,9 @@ function techText(){
   const auto = all.filter(t => t.optExit != null && fromBroker(t));
   const srv = techNotes.server || {};
   const cp = readProblem('classify'), rp = readProblem('rebuild'), dec = readDecline(), ask = readRebuildAsk();
+  // Behind the Details tap, not on his screen. A reason that is recorded
+  // and never printed anywhere is the same dead end as no reason at all.
+  const sp = readProblem('shots'), vp = readProblem('videos');
   const when = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
   return [
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
@@ -5191,6 +5229,9 @@ function techText(){
     dec ? `rebuild declined: ${dec.text} (${when(dec)})` : 'rebuild not declined',
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
+    sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
+    vp ? `recording problem: ${vp.text} (${when(vp)})` : 'no recording problem',
+    `pictures ${all.filter(t => t.shotEntry || t.shotMid || t.shotExit).length} · recordings ${all.filter(t => t.video && t.video.r2Key).length}`,
   ].join('\n');
 }
 
@@ -7724,7 +7765,7 @@ function startAutoPoll(){
   if(autoPollTimer) return;
   autoPollTimer = setInterval(()=>{
     if(backendUrl() && document.visibilityState==='visible'){
-      pollBackend(true); matchPendingScreenshots(); showRebuildState(backendUrl());
+      pollBackend(true); matchPendingScreenshots(); matchPendingVideos(); showRebuildState(backendUrl());
       // Rechecks itself no more than once every five minutes.
       refreshSchwabReminder().catch(()=>{});
       // Answers the server has finished working out since last time.
@@ -7736,7 +7777,7 @@ function startAutoPoll(){
     }
   }, 30000);
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); collectReadings(); autoClassifyLoop(); }
+    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); matchPendingVideos(); collectReadings(); autoClassifyLoop(); }
     // Forced, not the five-minute one: he may have just come back from
     // signing in, and the whole point is that the box changes when he does.
     if(document.visibilityState==='visible') refreshSchwabReminder(true).catch(()=>{});
@@ -7754,12 +7795,49 @@ startAutoPoll();
 const MID_SHOT_OFFSET_MS = 15 * 60 * 1000;
 const SLOT_OF_FIELD = { shotEntry:'entry', shotMid:'mid', shotExit:'exit' };
 const SCREENSHOT_MATCH_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes — generous enough for Pushcut/Shortcut latency, tight enough not to misattach
+// One picture's actual image, fetched only once this app has decided to
+// keep it.
+//
+// A picture that matches no trade is deliberately left waiting, because the
+// trade may not have reached the journal yet. But this list is asked for
+// every thirty seconds the app is open, and it used to carry every waiting
+// picture IN FULL -- up to 3MB each, up to a hundred of them. So one
+// mistimed picture that would never match anything was downloaded again and
+// again for the thirty days it is kept, and nothing said so.
+//
+// Working out which trade a picture belongs to needs only its TIMESTAMP, so
+// the list comes without the pictures now and this fetches the few that are
+// actually going to be used.
+//
+// Answers with a reason rather than an empty hand -- "it has left the
+// queue", "it never had an image" and "could not reach it" are three
+// different faults.
+async function fetchScreenshotImage(url, id){
+  try{
+    const r = await fetch(url+'/media/'+encodeURIComponent(id)+'/image?key='+encodeURIComponent(appKey()));
+    if(!r.ok){
+      let said = null;
+      try{ said = (await r.json()).reason; }catch(e){}
+      return { image: null, reason: said || ('The server would not hand over that picture (it answered ' + r.status + ').') };
+    }
+    const d = await r.json();
+    if(d && d.image) return { image: d.image, reason: null };
+    return { image: null, reason: (d && d.reason) || 'The server answered with no picture and gave no reason.' };
+  }catch(e){
+    return { image: null, reason: 'Could not reach the server for that picture: ' + (e && e.message ? e.message : 'connection failed') };
+  }
+}
+
 async function matchPendingScreenshots(){
   const url = backendUrl();
   if(!url) return;
   let screenshots;
   try{
-    const r = await fetch(url+'/media/pending?key='+encodeURIComponent(appKey()));
+    // slim=1 leaves the pictures themselves out. A server too old to
+    // understand it ignores the request and answers exactly as before,
+    // which still works -- each picture simply arrives with its image
+    // already attached and nothing extra is asked for.
+    const r = await fetch(url+'/media/pending?slim=1&key='+encodeURIComponent(appKey()));
     if(!r.ok) return; // non-fatal — just try again next cycle
     screenshots = (await r.json()).screenshots || [];
   }catch(e){ return; }
@@ -7802,7 +7880,17 @@ async function matchPendingScreenshots(){
       }
     }
     if(best){
-      best.trade[best.field] = shot.image;
+      // Only NOW is the picture itself worth its weight. An older server
+      // sends it with the list, in which case nothing extra is asked for.
+      const got = shot.image ? { image: shot.image, reason: null }
+                             : await fetchScreenshotImage(url, shot.id);
+      if(!got.image){
+        // Nothing to attach, and the reason is kept rather than lost --
+        // a blank with no cause is the dead end this project keeps hitting.
+        noteProblem('shots', 'A picture could not be collected: ' + got.reason);
+        continue;
+      }
+      best.trade[best.field] = got.image;
       changed = true;
       try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* worst case it's offered again and just gets re-matched harmlessly */ }
       log('syncLog', `Auto-attached ${SHOT_LABEL[SLOT_OF_FIELD[best.field]].toLowerCase()} picture to ${best.trade.ticker} (${best.trade.entryDate}).`);
@@ -7817,7 +7905,7 @@ async function matchPendingScreenshots(){
     renderJournal();
   }
 
-  if(testShots.length) recordTestShots(testShots, url);
+  if(testShots.length) await recordTestShots(testShots, url);
 
   // A screenshot just became available for these — worth a fresh AI pass
   // right away rather than waiting for the owner to notice and tap
@@ -7838,6 +7926,157 @@ async function matchPendingScreenshots(){
     renderDashboard();
     renderJournal();
   }
+}
+
+// ==== Screen recordings ====
+//
+// The other half of goal #6. A recording is produced by the add-on on his
+// laptop while a trade is running, sent to the server, and waits there
+// exactly as a picture does -- with no trade attached to it, because
+// nothing at the moment of capture knows which trade it will turn out to
+// be. This claims it and files it against the right trade by time, the
+// same way a picture is claimed.
+//
+// WHAT IS STORED IS A POINTER, NEVER THE RECORDING. A screen recording of
+// a trade is tens of megabytes; his journal lives in the phone's own small
+// storage alongside three hundred trades, and putting even one recording
+// in there would push the journal itself out. So the trade keeps where the
+// recording is, how big it is and when it was taken, and the recording is
+// fetched only when he taps play.
+const VIDEO_MATCH_TOLERANCE_MS = 10 * 60 * 1000; // the same window a picture is matched in
+
+// A recording covers a trade from its entry onwards, so it is stamped with
+// the ENTRY time -- there is no separate exit recording to match.
+async function matchPendingVideos(){
+  const url = backendUrl();
+  if(!url) return;
+  let videos;
+  try{
+    const r = await fetch(url+'/media/pending-videos?key='+encodeURIComponent(appKey()));
+    if(!r.ok){
+      // A key that does not match is worth saying, once. Anything else is
+      // a bad moment on the line and is simply tried again.
+      if(r.status === 403) noteProblem('videos', 'The App Key on the Journal tab does not match the one the server expects, so recordings cannot be collected.');
+      return;
+    }
+    videos = (await r.json()).videos || [];
+  }catch(e){
+    noteProblem('videos', 'Could not reach the server to look for recordings: ' + (e && e.message ? e.message : 'connection failed'));
+    return;
+  }
+  if(!videos.length) return;
+
+  const trades = loadTrades();
+  const claimed = new Set(); // a trade claimed earlier in THIS batch
+  let changed = false;
+
+  const drop = async (id) => {
+    try{ await fetch(url+'/media/video/'+encodeURIComponent(id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }
+    catch(e){ /* it is offered again next time and lands then */ }
+  };
+
+  for(const vid of videos){
+    if(!vid || !vid.id || !vid.r2Key || typeof vid.timestamp !== 'number') continue;
+
+    // Already attached, and the server was never told. Left alone, this
+    // one comes back on every check and would eventually be filed against
+    // a SECOND trade -- the same recording in two places. Cleared here.
+    if(trades.some(t => t.video && t.video.id === vid.id)){ await drop(vid.id); continue; }
+
+    let best = null; // {trade, diff}
+    for(const t of trades){
+      if(t.video || claimed.has(t.id)) continue;
+      if(!t.entryDate) continue;
+      const entryTs = new Date(`${t.entryDate}T${t.entryTime||'09:30'}:00`).getTime();
+      if(!isFinite(entryTs)) continue;
+      const diff = Math.abs(vid.timestamp - entryTs);
+      if(diff <= VIDEO_MATCH_TOLERANCE_MS && (!best || diff < best.diff)) best = {trade:t, diff};
+    }
+    // No trade for it yet. Deliberately left waiting -- the trade may not
+    // have reached the journal. This costs almost nothing to be offered
+    // again: the answer carries a pointer, not the recording.
+    if(!best) continue;
+
+    best.trade.video = {
+      id: vid.id, r2Key: vid.r2Key, takenAt: vid.timestamp,
+      sizeBytes: typeof vid.sizeBytes === 'number' ? vid.sizeBytes : null,
+    };
+    claimed.add(best.trade.id);
+    changed = true;
+    await drop(vid.id);
+    log('syncLog', `Auto-attached a recording to ${best.trade.ticker} (${best.trade.entryDate}).`);
+  }
+
+  if(changed){ saveTrades(trades); renderJournal(); }
+}
+
+// A link to actually watch one. The stored place is private, so the link
+// is temporary and has to be asked for fresh each time -- which is why
+// this is done on the tap and not kept anywhere.
+//
+// Answers with a reason rather than an empty hand: "could not reach it",
+// "it refused me" and "it answered with nothing" are three different
+// faults with three different fixes.
+async function fetchVideoLink(url, r2Key){
+  try{
+    const r = await fetch(url+'/media/video-url?key='+encodeURIComponent(appKey())+'&r2Key='+encodeURIComponent(r2Key));
+    if(!r.ok){
+      if(r.status === 403) return { url:null, reason:'The App Key on the Journal tab does not match the one the server expects.' };
+      if(r.status === 503) return { url:null, reason:'Recordings are not switched on for storage yet, so there is nowhere to fetch this one from.' };
+      if(r.status === 404) return { url:null, reason:'That recording is no longer being kept.' };
+      return { url:null, reason:'The server would not hand over a link to that recording (it answered ' + r.status + ').' };
+    }
+    const d = await r.json();
+    if(d && d.url) return { url: d.url, reason: null };
+    return { url:null, reason:'The server answered without a link and gave no reason.' };
+  }catch(e){
+    return { url:null, reason:'Could not reach the server: ' + (e && e.message ? e.message : 'connection failed') };
+  }
+}
+
+function openVideoById(id){
+  const trade = loadTrades().find(t=>String(t.id)===String(id));
+  if(trade) openVideo(trade);
+}
+
+async function openVideo(trade){
+  const wrap = document.getElementById('videoWrap');
+  const title = document.getElementById('videoTitle');
+  const modal = document.getElementById('videoModal');
+  if(!wrap || !modal) return;
+  title.textContent = `${trade.ticker||''} ${trade.entryDate||''} ${trade.entryTime||''}`.trim() || 'Trade Recording';
+  // Keeps its name, so whatever it is saying can always be found and read
+  // back -- including by a check standing in for him.
+  const say = (text) => { wrap.innerHTML = `<div class="video-state" id="videoState">${escapeHtml(text)}</div>`; };
+  say('Fetching the recording…');
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+
+  const url = backendUrl();
+  if(!url){ say('This app is not connected to your server, so there is nowhere to fetch the recording from. Connect it on the Journal tab.'); return; }
+  if(!trade.video || !trade.video.r2Key){ say('There is no recording saved against this trade.'); return; }
+
+  const got = await fetchVideoLink(url, trade.video.r2Key);
+  // The modal may have been closed while this was in flight.
+  if(!modal.classList.contains('show')) return;
+  if(!got.url){ say(got.reason); return; }
+
+  wrap.innerHTML = '<video id="videoPlayer" controls playsinline preload="metadata"></video>';
+  const el = document.getElementById('videoPlayer');
+  // A video that will not play says so itself, rather than sitting on a
+  // black rectangle for ever with nothing to read.
+  el.onerror = () => say('The recording was fetched but this phone could not play it. It may have been saved in a format Safari does not open.');
+  el.src = got.url;
+}
+
+function closeVideo(){
+  const modal = document.getElementById('videoModal');
+  const wrap = document.getElementById('videoWrap');
+  if(modal) modal.classList.remove('show');
+  // Emptied rather than paused: a video left in the page keeps its
+  // connection open and keeps downloading.
+  if(wrap) wrap.innerHTML = '<div class="video-state" id="videoState">Fetching the recording…</div>';
+  document.body.style.overflow = '';
 }
 
 // ---- CSV import (Schwab transaction export) ----
