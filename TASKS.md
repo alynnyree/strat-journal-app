@@ -444,7 +444,26 @@ via the `TASKS.md` commit log.
     the capture-taken-late guard. Now it refuses and SAYS which tab to
     open, rather than returning nothing.
 
-    Checked: `tests/only-photographs-the-chart.js`, 22 checks — what the
+    **THE STORE REFUSED THE FIRST UPLOAD, and it was my fault.** It
+    answered *"The description field in manifest is too long: 181. It
+    exceeds maximum size limit of 132 characters."* There are TWO
+    descriptions and they are different fields with different limits: the
+    long one pasted into the store's own form, and a short one INSIDE the
+    package. I checked the first against its limit, wrote the count into
+    the listing notes, and never once checked the second. He uploaded it
+    and was handed a message written for a developer.
+
+    **A limit that is only known to the far end is a limit that gets
+    broken.** Fixed to 121 characters, and
+    `tests/package-the-store-will-accept.js` (19 checks) now applies every
+    rule the store applies on upload — both lengths, the version's shape
+    and its numbers' size, no key of its own, no update address, every file
+    the manifest points at actually present, no stray files, nothing
+    loading code from the internet, and every file parsing. Written as a
+    SWEEP rather than as one check for the one that failed, because finding
+    these one upload at a time is exactly what it cost him.
+
+    Checked: `tests/only-photographs-the-chart.js`, 26 checks — what the
     manifest asks for, which addresses count as his chart (including a
     look-alike domain and the insecure address, both refused), and that a
     refusal names the tab to open in plain words with nothing raw from

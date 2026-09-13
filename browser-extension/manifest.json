@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Strat Journal Auto-Capture",
-  "version": "1.2",
-  "description": "Automatically captures a picture of your chart when a trade opens, is still open after 15 minutes, or closes \u2014 and, while recording is switched on, a screen recording of each trade.",
+  "version": "1.3",
+  "description": "Captures your TradingView chart when a trade opens, at 15 minutes, and when it closes, and records each trade on request.",
   "permissions": [
     "storage",
     "alarms",
