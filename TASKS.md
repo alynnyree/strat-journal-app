@@ -61,6 +61,43 @@ chooses whether to do the possible part now or move on), and an item where
 the answer is "this needs a real live trade to prove" — which is most of
 them.
 
+### Goal #5 — work done 2026-09-13
+
+He chose to start at #5 and improve it by teaching me the method properly:
+*"I want you to study these videos which will hopefully give you a better
+understanding of my only 3 strategies that i need you to recognize."*
+
+He sent a written study guide covering 13 Strat masterclass lessons (the
+videos themselves could not be reached — this session is blocked from
+YouTube and Google Docs, which was checked rather than assumed). Notes were
+taken from it and handed back as a 9-tab spreadsheet, sectioned by category.
+
+**Reading the three plays back to him is what found the real fault.** Two of
+the three had been written into the classifier as candle shapes, which they
+are not. He corrected it in his own words and the definitions are now:
+- Broadening Formation Scalp — **LOCATION**. Recognised on ANY timeframe;
+  his method is to spot it on a LARGER one (30m, 1h) and trade it on a
+  LOWER one (1m, 5m). ANY combo can trigger it. Exhaustion is a factor,
+  not a gate.
+- FTFC Direction Play — **DIRECTION**. ANY combo, with the agreement.
+  **FTFC stays at 4 consecutive timeframes, at his instruction.**
+- 2s Turning Into 3s — one side taken out then the other, by EITHER of two
+  routes: a 2 expanding into a 3, or the Rev Strat where an inside bar must
+  break one side first (making it a 2) then fails and reverses through the
+  other side (making it a 3). **The failure and the reversal are the trade.**
+
+Done: all three rewritten in `aiClient.js`'s `PLAYS`, the prompt now states
+outright that a play is not a candle pattern and that any combo can be any
+play, and the app's own picker text matches. 32 checks in
+`tests/plays-are-not-patterns.js`, which stands in for the network and
+asserts on the prompt the model ACTUALLY receives.
+
+**Still open on #5, and unchanged by this:** the reading has never been
+confirmed against a real trade of his, a missing PLAY shows nothing at all
+on the card while a missing combo says "Needs Setup", and there is no way
+for him to tell the app when it got one wrong. All three raised, none
+decided.
+
 ### Where each bullet stands (2026-09-09, corrected)
 
 Kept HERE rather than in a message, so the check-ins read from a record
