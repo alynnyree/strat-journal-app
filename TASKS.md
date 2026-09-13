@@ -362,6 +362,70 @@ via the `TASKS.md` commit log.
     browser. `tests/pictures-and-recordings.js` (43) — the app claiming,
     storing, and actually PLAYING a real recording end to end.
 
+92. **Publishing the laptop add-on so it updates itself** (2026-09-13,
+    his own words: *"I would also like you to look into publishing it
+    properly."*). **Status: RESEARCHED, NOT STARTED — needs his decision,
+    and one of the answers costs him money.**
+
+    The problem it solves is real and he has just lived it. Getting the
+    recording onto his laptop took six rounds: a folder name that stopped
+    being unique the moment he downloaded twice, a version number that did
+    not exist so he could not tell a failed copy from a failed build, and
+    settings wiped by a remove-and-re-add. Every future change to the
+    add-on repeats all of it. Published, it updates itself in the
+    background like his journal does.
+
+    **What it costs and what it involves** (checked 2026-09-13; Google's
+    own pages are unreachable from this session, so this is from search
+    results rather than read first-hand and the fee should be confirmed on
+    the payment screen before he pays):
+    - **One-time US$5** developer registration, per account, not per
+      add-on and not yearly.
+    - **Unlisted** is the right visibility: no listing anyone can find,
+      installable only from a link he holds. "Private" also exists
+      (named testers only) and is stricter, but every visibility goes
+      through the SAME review, so private buys nothing here.
+    - **Review is required, and this add-on is the slow kind.** It asks
+      for `<all_urls>`, tab access, and now tab recording — the exact
+      combination that skips the automatic track and goes to a human.
+      Most reviews finish inside three days; a few weeks is possible, and
+      rejection-with-changes is a real outcome, not a remote one.
+    - Needs a privacy policy and a written justification for each
+      permission.
+
+    **RAISED, NOT DECIDED — narrowing the permissions would help twice.**
+    `<all_urls>` exists so it can photograph a tab without him clicking.
+    It does not need every website for that; it needs the site he charts
+    on. Narrowing it to that one site would cut the review scrutiny
+    sharply AND stop Chrome warning him it can "read and change all your
+    data on all websites", which is a frightening thing to be told about
+    your own tool. Needs one answer from him: which site he charts on.
+
+    **Do not start any of this without him saying so.** It is his money,
+    his Google account, and a listing with his name on it.
+
+93. **A rehearsal cannot yet rehearse a RECORDING** (noticed 2026-09-13
+    while explaining "Run a test trade now" to him). **Status: RAISED,
+    NOT BUILT.**
+
+    "Run a test trade now" queues three moments and the add-on
+    photographs the tab at each, so the whole picture path can be proven
+    without placing a trade. The recorder deliberately ignores a rehearsal
+    (`ev.test` is skipped) so nothing invented can ever produce footage
+    filed against a real trade — right, and the reason his journal once
+    held 161 contracts he never bought.
+
+    The consequence is that **the only way to find out whether recording
+    works is a real trade**, and if it does not work, that trade's footage
+    is gone. This is the exact situation task 57 called out for pictures
+    ("the only way to find out whether the whole path works is to place a
+    real trade and hope") and then fixed. It is unfixed for recordings.
+
+    What it would take: let a rehearsal cut a clip, keep the rehearsal
+    mark on it all the way through, and show it in the existing "Test
+    Trade" card beside the three pictures — never in his journal. Not
+    built, because it is another thing on his screen and that is his call.
+
 88. **WHEN THE SERVICE IS BACK — the list to work through** (asked for
     2026-09-09: *"Let's make a list/notes of what needs to be fixed based
     off of the list you gave me... for when Render is back up and
