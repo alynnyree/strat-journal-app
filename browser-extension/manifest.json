@@ -2,9 +2,17 @@
   "manifest_version": 3,
   "name": "Strat Journal Auto-Capture",
   "version": "1.0",
-  "description": "Automatically captures a picture of your chart when a trade opens, is still open after 15 minutes, or closes.",
-  "permissions": ["storage", "alarms", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "description": "Automatically captures a picture of your chart when a trade opens, is still open after 15 minutes, or closes \u2014 and, while recording is switched on, a screen recording of each trade.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs",
+    "tabCapture",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },

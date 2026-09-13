@@ -64,6 +64,7 @@ function wire(id, message, busyText, doneText) {
     }
     btn.disabled = false;
     render();
+    renderRecording();
   });
 }
 
@@ -72,9 +73,59 @@ wire('testTrade', 'testTrade',
   'Started. Three pictures over the next 90 seconds — opening, middle, close. They are marked as a test and will not touch your real trades.');
 wire('checkNow', 'checkNow', 'Checking…', 'Checked.');
 
+// Recording is one press for the whole session, not one per trade. While
+// it is on, every trade that opens and closes is cut out of it and sent on
+// its own -- he does nothing.
+async function renderRecording() {
+  const btn = document.getElementById('recordToggle');
+  const out = document.getElementById('recordResult');
+  let state = { recording: false };
+  try { state = await chrome.runtime.sendMessage({ type: 'recorderState' }) || state; } catch (e) {}
+  const { lastClippedCount, lastRecorderFault } = await chrome.storage.local.get(['lastClippedCount', 'lastRecorderFault']);
+  if (state.recording) {
+    btn.textContent = 'Stop recording';
+    const held = state.heldSeconds ? `${Math.round(state.heldSeconds / 60)} min held` : 'just started';
+    out.className = 'row ok';
+    out.textContent = `Recording this tab — ${held}.`;
+  } else {
+    btn.textContent = 'Start recording my charts';
+    out.className = 'row';
+    out.textContent = 'Not recording. Open your chart, then press this once — it covers every trade until you stop it.';
+  }
+  // A reason, never a blank. If a clip was turned away, that is said here
+  // rather than left to be noticed by a recording never appearing.
+  const fault = lastRecorderFault || state.lastFault;
+  if (fault) {
+    out.className = 'row err';
+    out.textContent = fault;
+  } else if (lastClippedCount) {
+    out.textContent += ` ${lastClippedCount} recording(s) sent on the last check.`;
+  }
+}
+
+document.getElementById('recordToggle').addEventListener('click', async () => {
+  const btn = document.getElementById('recordToggle');
+  const out = document.getElementById('recordResult');
+  let state = { recording: false };
+  try { state = await chrome.runtime.sendMessage({ type: 'recorderState' }) || state; } catch (e) {}
+  btn.disabled = true;
+  out.className = 'row';
+  out.textContent = state.recording ? 'Stopping…' : 'Starting…';
+  try {
+    const res = await chrome.runtime.sendMessage({ type: state.recording ? 'stopRecording' : 'startRecording' });
+    if (!res || !res.ok) { out.className = 'row err'; out.textContent = (res && res.error) || 'It did not work.'; }
+  } catch (err) {
+    out.className = 'row err';
+    out.textContent = err.message || 'It did not work.';
+  }
+  btn.disabled = false;
+  renderRecording();
+});
+
 document.getElementById('openOptions').addEventListener('click', (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 });
 
 render();
+renderRecording();
