@@ -1360,6 +1360,23 @@ Uses **The Strat**. Key concepts the code implements:
   round: it stands in for the network and asserts on the prompt the model
   actually receives, not on the source text, because a description that
   never reaches the far end would pass either way.
+- **A CATEGORY WITH NO ROWS IS NOT ABSENT, AND MUST NOT LOOK IT.** He
+  photographed his Home tab on 2026-09-13: *"I dont see Broadening Formation
+  in the FTFC & Play Performance box."* He was right. That card was built
+  only from the trades in his journal, so a play he had not yet taken got no
+  row at all and simply vanished — two of his three plays showing and the
+  third missing, which reads as "the app is not tracking it" rather than
+  "you have not taken one". Those are different facts and must never share
+  one answer, exactly like "could not reach it" versus "it answered with
+  nothing". Every play is listed now, an untaken one saying "no trades yet"
+  with a dash rather than $0.00 — a figure of zero reads as a break-even
+  RESULT, which is a third untrue thing. And the three names are read from
+  his own picker rather than typed into the card, so there is no fourth copy
+  to drift out of sync.
+  **The same shape is still live on the Setup Performance card** — seven of
+  his nine combos are missing from it for the identical reason. Raised with
+  him rather than changed, because nine rows of mostly nothing is a
+  judgement about his screen, and that is his to make.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
