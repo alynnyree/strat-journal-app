@@ -177,6 +177,39 @@ Uses **The Strat**. Key concepts the code implements:
   All three target reward at least 2x risk. The authoritative copy lives
   in `aiClient.js`'s `PLAYS` array and must stay in sync with the app's
   own picker (`data-v` on `.play-opt`).
+
+  **A PLAY IS NOT A CANDLE PATTERN** (his correction, 2026-09-13, after
+  reading the definitions back). Two of the three are not patterns at all,
+  and both had been written as though they were — the broadening scalp as
+  "2-Down to 2-Up", the FTFC play as "2-1-2 continuations". His words:
+  *"Broadening formation is more so about location rather than the actual
+  strat combo"* and *"FTFC is not combo specific either, it is mainly based
+  off trading in the direction of FTFC with ANY combo."*
+  **ANY of the nine combos can be ANY of the three plays.** The combo is
+  WHAT the bars did; the play is WHERE price was and WHICH WAY the
+  timeframes pointed. This mattered more than wording: the prompt hands
+  over the nine candle patterns and asks for the play immediately
+  afterwards, so a play described as a shape pushes the model to answer a
+  LOCATION question by pattern-matching. The prompt now says outright that
+  a play is not a pattern, that any combo can be any play, and that a play
+  may never be identified by — or ruled out because of — which combo
+  appeared.
+  Each play, as he has settled it:
+  - **Broadening Formation Scalp — LOCATION.** A broadening formation can
+    form and be recognised on ANY timeframe. His method is to recognise it
+    on a LARGER timeframe (30-minute, 1-hour) and trade it on a LOWER one
+    (1-minute, 5-minute), in at one edge and aiming for the other side.
+    Exhaustion after a higher-timeframe target is a factor worth weighing,
+    NOT a gate.
+  - **FTFC Direction Play — DIRECTION.** Any combo, with the agreement.
+    **FTFC stays at 4 consecutive timeframes** — his instruction,
+    2026-09-13: *"FTFC is still 4 timeframes consecutively, do not change
+    that."*
+  - **2s Turning Into 3s — one side taken out, then the other, by either
+    of two routes.** A 2 expanding into a 3; or the Rev Strat, where an
+    inside bar must break one side FIRST (which is what makes it a 2),
+    then fails and reverses through the opposite side, making it a 3.
+    **The failure and the reversal are the trade.**
 - **FTFC and Broadening Formation are context, not setups of their own.**
   Any of the 9 combos above can be taken with FTFC aligned and/or off a
   Broadening Formation — that's still that combo, just with context worth
@@ -1307,6 +1340,26 @@ Uses **The Strat**. Key concepts the code implements:
   catch-all, which answers `{"ok":true}` — no trades, no error, five checks
   reading as real failures in three different files. Match the path with a
   trailing `*` so a query cannot orphan it.
+- **Describing a thing as the wrong KIND of thing is worse than describing
+  it vaguely.** Two of his three plays were written into the classifier as
+  candle shapes. They are not shapes — one is a location, one is a
+  direction — and the prompt asks for the play immediately after listing
+  nine candle patterns, so the wrong KIND of definition actively pushed the
+  model to pattern-match an answer that cannot be pattern-matched. He spotted
+  it the moment the definitions were read back to him in plain words, which
+  is the whole argument for reading them back: *"Broadening formation is
+  more so about location rather than the actual strat combo."* Before
+  writing a definition for a model to use, ask what kind of question it
+  answers.
+- **Reading the definitions back to him found in one round what no test
+  could.** Every check on the classifier passed the entire time those
+  definitions were wrong, because a test can only confirm the words reach
+  the model — never that the words are true. The source of truth for what
+  his strategies ARE is him, and the only way to check is to state it
+  plainly and let him correct it. Its own test is now written the same way
+  round: it stands in for the network and asserts on the prompt the model
+  actually receives, not on the source text, because a description that
+  never reaches the far end would pass either way.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
