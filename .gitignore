@@ -1,0 +1,4 @@
+# Secrets never go into version control.
+.env
+.env.*
+!.env.example

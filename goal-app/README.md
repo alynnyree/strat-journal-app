@@ -1,0 +1,67 @@
+# Goal Execution App
+
+Private. One database talking to one chat app. No AI anywhere in it.
+
+## Where things are
+
+```
+goal-app/
+  supabase/functions/_shared/brief.ts        the wording and the layout of the message
+  supabase/functions/morning-brief/index.ts  the piece that runs: reads, formats, sends
+  sql/check-schema.sql                       a read-only query that prints your column names
+  tests/brief-format.test.ts                 checks the message, no internet needed
+  tests/morning-brief.test.ts                runs the whole thing with fake answers standing in
+  .env.example                               a template. Copy to .env. Never commit .env
+```
+
+A "function" here means one small program that Supabase runs for you when
+something asks it to. It is not running all the time and there is no server of
+yours to keep alive.
+
+## What the morning brief does
+
+1. Looks up your Telegram chat id in the `app_settings` table.
+2. Reads every row of `trading_rules`.
+3. Reads every row of `protocol_items` and keeps the ones marked `trading_open`.
+4. Puts them into one message.
+5. Sends that one message to Telegram.
+
+Your rules and checklist items are printed exactly as they are stored. They are
+never reworded, reordered or tidied up.
+
+## What it does NOT do
+
+It does not contact Gemini, OpenAI, Anthropic or any other AI service. There is
+a check in `tests/morning-brief.test.ts` that fails if any code path ever tries.
+
+## Running the checks
+
+You need nothing installed beyond Node, which your Mac may already have. From
+the folder above this one:
+
+```
+node --experimental-strip-types goal-app/tests/brief-format.test.ts
+node --experimental-strip-types goal-app/tests/morning-brief.test.ts
+```
+
+Both print a list of ticks and a count at the end. Neither touches the internet,
+your database, or Telegram.
+
+## If the brief does not arrive
+
+The function answers with a list of steps and says which one refused and what it
+said. Ask for the answer as a "dry run" to see the message without sending it:
+
+```
+.../morning-brief?dry=1
+```
+
+A dry run builds the message and sends nothing.
+
+## Secrets
+
+`TELEGRAM_BOT_TOKEN` is the only secret you set by hand. Supabase fills in
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on its own.
+
+Nothing secret is ever written into a file here, and nothing secret comes back
+out in the function's answer. There is a check for that too.
