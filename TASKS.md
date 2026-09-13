@@ -480,15 +480,40 @@ via the `TASKS.md` commit log.
     Everything from here is about trades arriving correctly AS THEY
     HAPPEN, entry to exit. That is now the only import that matters.
 
-86. **The laptop add-on is installed** (2026-09-09, his own note: *"I just
-    recently added the chrome browser extension to my laptop"*).
-    **Status: INSTALLED, NOT YET PROVEN.** Task 57 left it built, tested
-    against 26 checks, and never once run in a real browser. It now is.
-    What is still unknown: whether it can reach the server (which is
-    suspended for its data allowance), whether it has his app key, and
-    whether a picture it takes actually lands on a trade. Its own status
-    window has "Take a test picture now" and "Check for trades now" for
-    exactly this, and that test needs the service running first.
+86. **The laptop add-on is installed, pinned, and REACHING THE SERVICE**
+    (2026-09-09, his own note: *"I just recently added the chrome browser
+    extension to my laptop"*; confirmed by his own screenshot 2026-09-13).
+    **Status: INSTALLED AND CONNECTED. A real capture still unproven.**
+
+    Task 57 left it built, tested against 26 checks, and never once run in
+    a real browser. His screenshot of its own status window settles three
+    of the four unknowns at once: *"Last checked: 6s ago · Connected, no
+    errors · Last check found 0 trade moment(s), captured 0."* So it is
+    loaded, it is pinned where he can see it, it has the address and the
+    key (a wrong key answers 403 and would have said so), and the service
+    is answering it. Zero moments found is correct — he is not in a trade.
+
+    **Still unproven:** that a picture it takes actually lands on a trade.
+    That needs a real trade, or the "Run a test trade now" button.
+
+    **How it was installed, recorded here so it is not asked again:**
+    Chrome's extensions page → Developer mode → "Load unpacked" → the
+    `browser-extension` folder. Confirmed by him 2026-09-13: *"I
+    downloaded a folder of files and pointed Chrome at it."* He charts in
+    a Chrome TAB, which is what the recorder captures — also confirmed
+    2026-09-13, and the question task 57 left open.
+
+    **IT DOES NOT UPDATE ITSELF.** This is the trap. His journal updates
+    on its own because it is a website; the add-on is a folder of files
+    sitting on his laptop, so everything shipped to it — the recording
+    button included — reaches him only when he fetches the folder again
+    and presses Reload. Anything built for the add-on has to be handed
+    over with that step attached, or it is built and never arrives.
+
+    **His settings survive a Reload but NOT a Remove.** Taking it out and
+    putting it back clears the address and key, and it goes quiet with a
+    plausible-looking status window. Always Reload in place where
+    possible.
 
 84. **"Will the journal automatically upload my times for entries and
     exits?"** (2026-09-09, his own words). **Status: FIXED AND TESTED
