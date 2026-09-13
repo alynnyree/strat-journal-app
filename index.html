@@ -3245,9 +3245,32 @@ function renderDashboard(){
   });
   const pb = document.getElementById('playBreakdown');
   if(pb){
+    // ALL THREE PLAYS ALWAYS APPEAR, even with no trades against them.
+    //
+    // He reported this on 2026-09-13: "I dont see Broadening Formation in the
+    // FTFC & Play Performance box." He was right, and the reason is that this
+    // card was built ONLY from the trades that exist -- so a play he has not
+    // taken yet had no row at all, and vanished. On his screen that left two
+    // of his three plays showing and the third simply absent, which reads as
+    // "the app is not tracking it" rather than "you have not taken one".
+    //
+    // Those are completely different things and must never share an answer.
+    // A play with no trades now says so in its own row.
+    //
+    // The three names come from his own picker rather than a list typed here,
+    // so there is no fourth copy to drift. If the picker cannot be read, this
+    // seeds nothing and behaves exactly as it did before -- an invented list
+    // would be worse than a short one.
+    const canonicalPlays = Array.from(document.querySelectorAll('.play-opt'))
+      .map(o => o.getAttribute('data-v')).filter(Boolean);
+    // Whether ANY trade carries a play. Asked before seeding, because after
+    // seeding every play has a key whether or not it was ever traded.
+    const anyTagged = Object.keys(byPlay).some(k => k !== 'No play recorded');
+    for(const name of canonicalPlays){
+      if(!byPlay[name]) byPlay[name] = { all: blank(), aligned: blank(), against: blank() };
+    }
     const pkeys = Object.keys(byPlay);
-    const onlyUnrecorded = pkeys.length === 1 && pkeys[0] === 'No play recorded';
-    if(!pkeys.length || onlyUnrecorded){
+    if(!trades.length){
       pb.innerHTML = '<div class="empty">Once your trades carry a play, this shows which of the three actually pays.</div>';
     } else {
       const money = v => `<span class="num ${v>=0?'pos':'neg'}">${fmtMoney(v)}</span>`;
@@ -3256,17 +3279,39 @@ function renderDashboard(){
           <span>${label} — won ${b.wins} of ${b.count} (${Math.round(b.wins/b.count*100)}%)</span>
           <span>${money(b.pnl)}</span>
         </div>`;
-      pb.innerHTML = pkeys.sort((a,b)=>byPlay[b].all.pnl-byPlay[a].all.pnl).map(k=>{
+      // Plays he has actually taken come first, best to worst. The ones with
+      // no trades sit at the bottom -- a row worth nothing must not float
+      // above a real losing play just because zero is the larger number.
+      // Equal inputs answer 0, so the sort stays stable -- the comparator
+      // trap already on the record once on this project.
+      const sorted = pkeys.sort((a,b)=>{
+        const ta = byPlay[a].all.count > 0 ? 1 : 0;
+        const tb = byPlay[b].all.count > 0 ? 1 : 0;
+        if(ta !== tb) return tb - ta;
+        return byPlay[b].all.pnl - byPlay[a].all.pnl;
+      });
+      pb.innerHTML = sorted.map(k=>{
         const s2 = byPlay[k];
         const worthSplitting = s2.aligned.count > 0 && s2.against.count > 0;
-        return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+        // No trades is not a score of zero. It says so in words, and shows a
+        // dash rather than $0.00, which would read as a break-even result.
+        const line = s2.all.count
+          ? `won ${s2.all.wins} of ${s2.all.count} (${Math.round(s2.all.wins/s2.all.count*100)}%)`
+          : 'no trades yet';
+        const figure = s2.all.count
+          ? `<div class="num ${s2.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s2.all.pnl)}</div>`
+          : `<div class="num" style="font-weight:700; color:var(--text-dim);">—</div>`;
+        return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; ${s2.all.count ? '' : 'opacity:.6;'}">
           <div style="display:flex; justify-content:space-between; gap:10px;">
-            <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">won ${s2.all.wins} of ${s2.all.count} (${Math.round(s2.all.wins/s2.all.count*100)}%)</div></div>
-            <div class="num ${s2.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s2.all.pnl)}</div>
+            <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${line}</div></div>
+            ${figure}
           </div>
           ${worthSplitting ? sub('✅ ' + FTFC_STANCE_SHORT.with, s2.aligned) + sub('✕ ' + FTFC_STANCE_SHORT.against, s2.against) : ''}
         </div>`;
       }).join('');
+      if(!anyTagged){
+        pb.innerHTML += `<div style="font-size:11px; color:var(--text-dim); margin-top:8px;">None of your trades carries a play yet, so there is nothing to compare. All three are listed so you can see they are being tracked.</div>`;
+      }
     }
   }
 

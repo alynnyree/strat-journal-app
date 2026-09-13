@@ -98,6 +98,20 @@ on the card while a missing combo says "Needs Setup", and there is no way
 for him to tell the app when it got one wrong. All three raised, none
 decided.
 
+### A play with no trades had no row (2026-09-13)
+
+He photographed the Home tab: *"I dont see Broadening Formation in the FTFC &
+Play Performance box."* The card was built only from the trades that exist, so
+an untaken play vanished entirely — which reads as "not tracked", not as "none
+taken". All three are listed now; an untaken one says "no trades yet" and shows
+a dash, never $0.00. Names read from his own picker so they cannot drift.
+15 checks in `tests/every-play-shows.js`.
+
+**OPEN, ASKED, NOT DECIDED:** the Setup Performance card has the identical
+fault — seven of his nine combos are missing from it because he has no trades
+against them. Whether nine rows of mostly nothing belongs on his screen is his
+call, not mine.
+
 ### Where each bullet stands (2026-09-09, corrected)
 
 Kept HERE rather than in a message, so the check-ins read from a record
