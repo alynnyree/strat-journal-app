@@ -32,7 +32,27 @@ check(`it asks for TradingView and nothing else (${JSON.stringify(manifest.host_
 check('it asks for the tab he is on when he presses a button',
   manifest.permissions.includes('activeTab'));
 check('it still asks to record a tab', manifest.permissions.includes('tabCapture'));
-check('the version moved, so he can see the new copy landed', manifest.version === '1.2');
+check('the version moved, so he can see the new copy landed', /^1\.[3-9]|^[2-9]\./.test(manifest.version));
+
+// THE STORE REFUSED THE PACKAGE OVER THIS, and it cost him a round.
+//
+// There are TWO descriptions and they are different fields with different
+// limits: the long one pasted into the store's own form, and this one,
+// which lives INSIDE the package. I checked the first against its limit and
+// never checked the second, so he uploaded it and was handed
+// "The description field in manifest is too long: 181. It exceeds maximum
+// size limit of 132 characters."
+//
+// A limit that is only known to the far end is a limit that gets broken.
+check(`the description inside the package fits the store's limit (${manifest.description.length} of 132)`,
+  manifest.description.length <= 132);
+check('...and is not empty, which the store also refuses',
+  typeof manifest.description === 'string' && manifest.description.trim().length > 0);
+// The name has its own, much shorter limit.
+check(`the name fits too (${manifest.name.length} of 45)`, manifest.name.length <= 45);
+// A version the store will accept: up to four whole numbers, dots between.
+check(`the version is a shape the store accepts (${manifest.version})`,
+  /^\d+(\.\d+){0,3}$/.test(manifest.version));
 
 console.log('\n--- which pages count as his chart ---');
 const yes = [
