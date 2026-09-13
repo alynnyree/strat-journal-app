@@ -362,7 +362,39 @@ via the `TASKS.md` commit log.
     browser. `tests/pictures-and-recordings.js` (43) — the app claiming,
     storing, and actually PLAYING a real recording end to end.
 
-92. **Publishing the laptop add-on so it updates itself** (2026-09-13,
+92. **SUBMITTED TO THE STORE 2026-09-13 — awaiting Google's review.**
+    Item id `oafeonipldnejlafcmdjclgenaakhnfb`, version 1.3, Unlisted, free,
+    all regions, publisher alynnyree@gmail.com. Status: *Pending review*.
+
+    **What it cost him to get there, so the next one is cheaper:** two
+    rejected uploads and about a dozen rounds. The faults were mine and
+    they were all the same shape — a limit or a requirement that only the
+    far end knew, which I had not checked:
+    - a folder name that stopped being unique once he downloaded twice, so
+      Chrome was loading September's files
+    - no version number to tell a failed copy from a failed build
+    - `<all_urls>` against a store policy, enforced since 1 August, that
+      permissions be the minimum the stated purpose needs
+    - a description INSIDE the package, 181 against a limit of 132, while
+      I had carefully counted the OTHER description
+    - a contact email that has to exist and be verified on the ACCOUNT
+      before any item can publish — nothing to do with the add-on at all
+
+    Only the last of those was unforeseeable from here.
+    `tests/package-the-store-will-accept.js` now applies every rule the
+    store applies on upload, so the next submission does not rediscover
+    them one attempt at a time.
+
+    **WHAT REMAINS, and it is his to do when the approval email arrives:**
+    remove the hand-loaded copy FIRST (two copies both polling means double
+    pictures), install from the store link, and put the address and App Key
+    back one final time. After that it updates itself and he never touches
+    a folder again. **Until then his hand-loaded copy is working and must
+    be left alone.**
+
+    Research and preparation that led here:
+
+92a. **Publishing the laptop add-on so it updates itself** (2026-09-13,
     his own words: *"I would also like you to look into publishing it
     properly."*). **Status: RESEARCHED, NOT STARTED — needs his decision,
     and one of the answers costs him money.**
