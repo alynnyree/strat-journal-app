@@ -1373,10 +1373,12 @@ Uses **The Strat**. Key concepts the code implements:
   RESULT, which is a third untrue thing. And the three names are read from
   his own picker rather than typed into the card, so there is no fourth copy
   to drift out of sync.
-  **The same shape is still live on the Setup Performance card** — seven of
-  his nine combos are missing from it for the identical reason. Raised with
-  him rather than changed, because nine rows of mostly nothing is a
-  judgement about his screen, and that is his to make.
+  **The Setup Performance card had the identical fault** — seven of his nine
+  combos were missing from it for the same reason. Raised rather than
+  decided, because nine rows of mostly nothing is a judgement about his
+  screen; he settled it in one line (*"Yes, show all nine combos the same
+  way"*) and both cards now behave identically. They are ONE rule and are
+  checked together in one file so they cannot drift apart.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

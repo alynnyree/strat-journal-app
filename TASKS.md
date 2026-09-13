@@ -107,10 +107,12 @@ taken". All three are listed now; an untaken one says "no trades yet" and shows
 a dash, never $0.00. Names read from his own picker so they cannot drift.
 15 checks in `tests/every-play-shows.js`.
 
-**OPEN, ASKED, NOT DECIDED:** the Setup Performance card has the identical
-fault — seven of his nine combos are missing from it because he has no trades
-against them. Whether nine rows of mostly nothing belongs on his screen is his
-call, not mine.
+He was asked whether the Setup Performance card should do the same, since
+seven of his nine combos were missing from it for the identical reason, and
+answered: *"Yes, show all nine combos the same way."* Done — all nine always
+listed, untraded ones saying "no trades yet" with a dash, traded ones first.
+Both cards are checked in the same file (24 checks) so the two cannot drift
+apart.
 
 ### Where each bullet stands (2026-09-09, corrected)
 
