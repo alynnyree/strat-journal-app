@@ -3205,8 +3205,24 @@ function renderDashboard(){
   });
 
   const sb = document.getElementById('setupBreakdown');
+  // ALL NINE COMBOS ALWAYS APPEAR, on his instruction (2026-09-13: "Yes,
+  // show all nine combos the same way"), after the same fault was fixed on
+  // the play card he reported.
+  //
+  // This was built only from the trades in his journal, so a combo he had
+  // not taken had no row and vanished — seven of his nine were missing from
+  // his screen. A missing row reads as "not tracked"; the truth is "none
+  // taken". Different facts, and they must never share one answer.
+  //
+  // The nine names are read from his own Strat Setup cards rather than typed
+  // here, so there is no second copy to drift out of sync with the backend.
+  const canonicalCombos = Array.from(document.querySelectorAll('.combo-opt'))
+    .map(o => o.getAttribute('data-v')).filter(Boolean);
+  for(const name of canonicalCombos){
+    if(!bySetup[name]) bySetup[name] = { all: blank(), aligned: blank(), against: blank() };
+  }
   const keys = Object.keys(bySetup);
-  if(!keys.length){ sb.innerHTML = '<div class="empty">Log trades to see which Strat setups actually make you money.</div>'; }
+  if(!trades.length){ sb.innerHTML = '<div class="empty">Log trades to see which Strat setups actually make you money.</div>'; }
   else {
     const money = v => `<span class="num ${v>=0?'pos':'neg'}">${fmtMoney(v)}</span>`;
     const sub = (label, b) => !b.count ? '' :
@@ -3214,15 +3230,32 @@ function renderDashboard(){
         <span>${label} — won ${b.wins} of ${b.count} (${Math.round(b.wins/b.count*100)}%)</span>
         <span>${money(b.pnl)}</span>
       </div>`;
-    sb.innerHTML = keys.sort((a,b)=>bySetup[b].all.pnl-bySetup[a].all.pnl).map(k=>{
+    // Combos he has actually traded first, best to worst; untraded ones at
+    // the bottom. A row worth nothing must not outrank a real losing setup
+    // just because zero is the larger number. Equal inputs answer 0.
+    const sortedSetups = keys.sort((a,b)=>{
+      const ta = bySetup[a].all.count > 0 ? 1 : 0;
+      const tb = bySetup[b].all.count > 0 ? 1 : 0;
+      if(ta !== tb) return tb - ta;
+      return bySetup[b].all.pnl - bySetup[a].all.pnl;
+    });
+    sb.innerHTML = sortedSetups.map(k=>{
       const s = bySetup[k];
       // Only split when there is something to compare. One-sided is not a
       // comparison, and printing an empty half would imply otherwise.
       const worthSplitting = s.aligned.count > 0 && s.against.count > 0;
-      return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
+      // No trades is not a score of zero. A dash, not $0.00, which would
+      // read as a break-even result.
+      const line = s.all.count
+        ? `won ${s.all.wins} of ${s.all.count} (${Math.round(s.all.wins/s.all.count*100)}%)`
+        : 'no trades yet';
+      const figure = s.all.count
+        ? `<div class="num ${s.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.all.pnl)}</div>`
+        : `<div class="num" style="font-weight:700; color:var(--text-dim);">—</div>`;
+      return `<div style="padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; ${s.all.count ? '' : 'opacity:.6;'}">
         <div style="display:flex; justify-content:space-between; gap:10px;">
-          <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">won ${s.all.wins} of ${s.all.count} (${Math.round(s.all.wins/s.all.count*100)}%)</div></div>
-          <div class="num ${s.all.pnl>=0?'pos':'neg'}" style="font-weight:700;">${fmtMoney(s.all.pnl)}</div>
+          <div>${escapeHtml(k)}<div style="font-size:11px; color:var(--text-dim);">${line}</div></div>
+          ${figure}
         </div>
         ${worthSplitting ? sub('✅ ' + FTFC_STANCE_SHORT.with, s.aligned) + sub('✕ ' + FTFC_STANCE_SHORT.against, s.against) : ''}
       </div>`;

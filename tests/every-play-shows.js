@@ -1,4 +1,4 @@
-// All three plays appear, whether or not he has traded them.
+// All three plays — and all nine combos — appear, traded or not.
 //
 // He reported this on 2026-09-13 with a photo of his Home tab: "I dont see
 // Broadening Formation in the FTFC & Play Performance box."
@@ -9,6 +9,11 @@
 // is not tracking it", not as "you have not taken one" -- two completely
 // different things sharing one answer, which is the fault this project keeps
 // finding in new places.
+//
+// The SETUP card had the identical fault: seven of his nine combos were
+// missing from it for the same reason. He settled it in one line -- "Yes, show
+// all nine combos the same way" -- so both cards are checked here together,
+// because they are one rule and must not drift apart.
 const { launch, serve } = require('./browser.js');
 
 (async () => {
@@ -44,8 +49,11 @@ const { launch, serve } = require('./browser.js');
     await p.reload(); await p.waitForTimeout(900);
     const out = await p.evaluate(() => {
       const el = document.getElementById('playBreakdown');
+      const sel = document.getElementById('setupBreakdown');
       return { text: el ? el.textContent : null, html: el ? el.innerHTML : null,
-               picker: Array.from(document.querySelectorAll('.play-opt')).map(o=>o.getAttribute('data-v')) };
+               setup: sel ? sel.textContent : null,
+               picker: Array.from(document.querySelectorAll('.play-opt')).map(o=>o.getAttribute('data-v')),
+               combos: Array.from(document.querySelectorAll('.combo-opt')).map(o=>o.getAttribute('data-v')) };
     });
     return { p, out, errors, close: async () => p.close() };
   }
@@ -112,6 +120,45 @@ const { launch, serve } = require('./browser.js');
     const { out, close } = await home([T(1, {})]);
     check(`the picker is the source of the three names (${out.picker.join(' · ')})`,
       out.picker.length === 3 && out.picker.every(k => out.text.includes(k)));
+    await close();
+  }
+
+  // ---- And the same for all nine combos ---------------------------------
+  //
+  // "Yes, show all nine combos the same way" (2026-09-13).
+  {
+    const trades = [
+      T(1, { strat: '2-1-2 Continuation' }),
+      T(2, { strat: '2-2 Continuation', pnlDollar: -13, pnlNet: -14.33, winLoss: 'Loss' }),
+      T(3, {}),
+    ];
+    const { out, errors, close } = await home(trades);
+    const missing = out.combos.filter(k => !out.setup.includes(k));
+    check(`all nine combos are on the card (${out.combos.length - missing.length} of ${out.combos.length})`,
+      out.combos.length === 9 && missing.length === 0);
+    check('including the seven he has never traded',
+      /3-1-2 Reversal/.test(out.setup) && /1 Bar Rev Strat/.test(out.setup) && /PMG/.test(out.setup));
+    check('an untraded combo says "no trades yet"',
+      /PMG[\s\S]{0,40}no trades yet/.test(out.setup));
+    check('untagged trades still get their own line', /Unclassified \(needs setup\)/.test(out.setup));
+    check('and no percentage of nothing is printed', !/NaN/.test(out.setup));
+    check('nothing threw', errors.length === 0);
+
+    // A combo worth nothing must not outrank a real losing one.
+    check('traded combos come first, best to worst',
+      out.setup.indexOf('2-1-2 Continuation') < out.setup.indexOf('2-2 Continuation')
+      && out.setup.indexOf('2-2 Continuation') < out.setup.indexOf('PMG'));
+    check('a row worth nothing does not outrank a real losing setup',
+      out.setup.indexOf('PMG') > out.setup.indexOf('2-2 Continuation'));
+    await close();
+  }
+
+  {
+    // The nine names come from his own Strat Setup cards -- one list, no
+    // second copy to drift. And an empty journal keeps its own message.
+    const { out, close } = await home([]);
+    check('an empty journal keeps the setup card\'s own message',
+      /Log trades to see which Strat setups/.test(out.setup));
     await close();
   }
 
