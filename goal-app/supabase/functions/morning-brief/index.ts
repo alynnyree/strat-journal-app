@@ -286,7 +286,15 @@ async function handler(request: Request): Promise<Response> {
   // The schedule fires twice so that one of them is always 8:10 his time,
   // whatever the clocks are doing. This is where the other one bows out.
   // A call made by hand has no "scheduled" mark and always goes through.
-  if (params.get("scheduled") === "1") {
+  //
+  // The mark is accepted as EITHER a query on the address or a header, because
+  // which of those the scheduling screen will let him set is not something that
+  // can be checked from here. Supporting both costs one line and removes a
+  // round of "the screen has no box for that".
+  const scheduled =
+    params.get("scheduled") === "1" || request.headers.get("x-scheduled") === "1";
+
+  if (scheduled) {
     const due = dueNow(now);
     steps.push({ step: "is it time", ok: true, detail: due.note });
     if (!due.due) {

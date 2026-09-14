@@ -106,8 +106,12 @@ function reset(): void {
   dbKeysUsed = [];
 }
 
-async function invoke(query = "", key: string | null = TRIGGER_KEY): Promise<{ status: number; body: any }> {
-  const headers = new Headers();
+async function invoke(
+  query = "",
+  key: string | null = TRIGGER_KEY,
+  extraHeaders: Record<string, string> = {},
+): Promise<{ status: number; body: any }> {
+  const headers = new Headers(extraHeaders);
   if (key !== null) headers.set("x-trigger-key", key);
   const response = await handler!(
     new Request(`https://example.functions.supabase.co/morning-brief${query}`, { headers }),
@@ -381,6 +385,41 @@ await check("no database key is ever repeated in the answer", async () => {
   env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ default: SECRET_KEY }));
   const { body } = await invoke();
   assert.ok(!JSON.stringify(body).includes(SECRET_KEY));
+});
+
+// ------------------------- the scheduled marker, however it is delivered
+
+await check("a call made by hand always sends, whatever the time", async () => {
+  const { body } = await invoke();
+  assert.equal(body.sent, true);
+  assert.ok(!body.steps.some((s: any) => s.step === "is it time"), "no clock check on a manual call");
+});
+
+await check("the marker on the address makes it obey the clock", async () => {
+  const { status, body } = await invoke("?scheduled=1");
+  assert.equal(status, 200);
+  const step = body.steps.find((s: any) => s.step === "is it time");
+  assert.ok(step, "the clock should have been consulted");
+});
+
+await check("the marker as a header does exactly the same", async () => {
+  const { status, body } = await invoke("", TRIGGER_KEY, { "x-scheduled": "1" });
+  assert.equal(status, 200);
+  const step = body.steps.find((s: any) => s.step === "is it time");
+  assert.ok(step, "a header must work as well as a query, since the screen may only offer one");
+});
+
+await check("standing down is not a failure and sends nothing", async () => {
+  // Whichever way the clock falls, a stand-down must never read as an error.
+  const byQuery = await invoke("?scheduled=1");
+  const byHeader = await invoke("", TRIGGER_KEY, { "x-scheduled": "1" });
+  for (const r of [byQuery, byHeader]) {
+    assert.equal(r.status, 200, "a stand-down is a 200, never an error");
+    assert.equal(r.body.ok, true);
+    if (r.body.sent === false) {
+      assert.ok(r.body.steps.find((s: any) => s.step === "is it time").detail.includes("Nothing sent"));
+    }
+  }
 });
 
 console.log(`\n${passed} checks passed\n`);
