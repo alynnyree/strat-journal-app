@@ -282,7 +282,8 @@ export function capForTelegram(text: string): string {
 //   TELEGRAM_BOT_TOKEN          you set this one
 //   BRIEF_TRIGGER_SECRET        you set this one. See callerIsAllowed below
 //   SUPABASE_URL                Supabase fills this in for you
-//   SUPABASE_SERVICE_ROLE_KEY   Supabase fills this in for you
+//   SUPABASE_SECRET_KEYS        Supabase fills this in for you. Newer projects
+//   SUPABASE_SERVICE_ROLE_KEY   Supabase fills this in for you. Older projects
 //   TELEGRAM_CHAT_ID            optional, only used if app_settings has no row
 
 
@@ -390,6 +391,97 @@ async function sendTelegram(token: string, chatId: string, text: string): Promis
 }
 
 /**
+ * Does this look like a key that can actually read the tables?
+ *
+ * A publishable key is deliberately NOT accepted. Row Level Security is on with
+ * no policies, so a publishable key is not refused, it is simply handed nothing
+ * back. Every table would read as empty and the brief would confidently report
+ * "the table is empty" about six rules that are sitting right there. A wrong
+ * answer that looks like a real one is worse than a refusal.
+ */
+function looksLikeDatabaseKey(value: string): boolean {
+  return value.startsWith("sb_secret_") || value.startsWith("eyJ");
+}
+
+/** Describe what arrived without ever repeating a value. */
+function describeShape(value: unknown): string {
+  if (Array.isArray(value)) return `a list of ${value.length} item(s)`;
+  if (value !== null && typeof value === "object") {
+    return `a group labelled: ${Object.keys(value as Record<string, unknown>).join(", ")}`;
+  }
+  return typeof value;
+}
+
+function firstDatabaseKeyIn(value: unknown): string | null {
+  const found: string[] = [];
+  const walk = (node: unknown, depth: number): void => {
+    if (depth > 6) return;
+    if (typeof node === "string") {
+      if (looksLikeDatabaseKey(node)) found.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, depth + 1);
+      return;
+    }
+    if (node !== null && typeof node === "object") {
+      for (const item of Object.values(node as Record<string, unknown>)) walk(item, depth + 1);
+    }
+  };
+  walk(value, 0);
+  return found.find((key) => key.startsWith("sb_secret_")) ?? found.find((key) => key.startsWith("eyJ")) ?? null;
+}
+
+/**
+ * Find the key that lets this function read the database.
+ *
+ * Older Supabase projects hand a function SUPABASE_SERVICE_ROLE_KEY, one key on
+ * its own. Newer ones, this project among them, hand it SUPABASE_SECRET_KEYS,
+ * which is a bundle rather than a single key.
+ *
+ * Rather than guess the exact shape of that bundle, this looks through whatever
+ * is in there and takes the first thing that can actually read tables. When it
+ * finds nothing it reports the SHAPE of what it was given and never a value, so
+ * the next round starts from evidence instead of from another guess.
+ */
+function findDatabaseKey(): { key: string | null; note: string } {
+  const direct = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
+  if (direct !== "") return { key: direct, note: "Reading the database with SUPABASE_SERVICE_ROLE_KEY." };
+
+  const bundle = (Deno.env.get("SUPABASE_SECRET_KEYS") ?? "").trim();
+  if (bundle === "") {
+    return {
+      key: null,
+      note: "Neither SUPABASE_SERVICE_ROLE_KEY nor SUPABASE_SECRET_KEYS is set on this function.",
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bundle);
+  } catch {
+    if (looksLikeDatabaseKey(bundle)) {
+      return { key: bundle, note: "Reading the database with SUPABASE_SECRET_KEYS, which held one key." };
+    }
+    return {
+      key: null,
+      note: "SUPABASE_SECRET_KEYS is set but is neither readable data nor a key on its own.",
+    };
+  }
+
+  const found = firstDatabaseKeyIn(parsed);
+  if (found !== null) {
+    return { key: found, note: "Reading the database with a key found inside SUPABASE_SECRET_KEYS." };
+  }
+  return {
+    key: null,
+    note:
+      `SUPABASE_SECRET_KEYS was readable but held no key that can read tables. ` +
+      `What arrived was ${describeShape(parsed)}.`,
+  };
+}
+
+/**
  * Who is allowed to set this off.
  *
  * Supabase's own door check is switched off for this function, because it only
@@ -450,23 +542,23 @@ async function handler(request: Request): Promise<Response> {
 
   const token = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const database = findDatabaseKey();
+  const serviceKey = database.key ?? "";
 
   const missing = [
     token ? null : "TELEGRAM_BOT_TOKEN",
     supabaseUrl ? null : "SUPABASE_URL",
-    serviceKey ? null : "SUPABASE_SERVICE_ROLE_KEY",
   ].filter((name): name is string => name !== null);
 
-  if (missing.length > 0) {
-    steps.push({
-      step: "settings",
-      ok: false,
-      detail: `These are not set: ${missing.join(", ")}. Nothing was sent.`,
-    });
+  if (missing.length > 0 || database.key === null) {
+    const reasons: string[] = [];
+    if (missing.length > 0) reasons.push(`These are not set: ${missing.join(", ")}.`);
+    if (database.key === null) reasons.push(database.note);
+    reasons.push("Nothing was sent.");
+    steps.push({ step: "settings", ok: false, detail: reasons.join(" ") });
     return Response.json({ ok: false, sent: false, dateLine, steps }, { status: 500 });
   }
-  steps.push({ step: "settings", ok: true, detail: "Bot token and database keys are present." });
+  steps.push({ step: "settings", ok: true, detail: `Bot token is present. ${database.note}` });
 
   // Chat id. Read from the database first, fall back to a secret.
   const settings = await readTable(supabaseUrl, serviceKey, "app_settings");

@@ -41,6 +41,7 @@ let sent: Sent[] = [];
 let tokensSeen: string[] = [];
 
 let reachedOut: string[] = [];
+let dbKeysUsed: string[] = [];
 
 (globalThis as any).fetch = async (input: string, init?: RequestInit): Promise<Response> => {
   const url = String(input);
@@ -54,6 +55,8 @@ let reachedOut: string[] = [];
     return new Response(reply.body, { status: reply.status });
   }
 
+  const offered = new Headers(init?.headers ?? {}).get("apikey");
+  if (offered !== null) dbKeysUsed.push(offered);
   const table = url.split("/rest/v1/")[1]?.split("?")[0] as keyof Answers;
   const answer = answers[table];
   if (answer === undefined) return new Response("[]", { status: 200 });
@@ -100,6 +103,7 @@ function reset(): void {
   sent = [];
   tokensSeen = [];
   reachedOut = [];
+  dbKeysUsed = [];
 }
 
 async function invoke(query = "", key: string | null = TRIGGER_KEY): Promise<{ status: number; body: any }> {
@@ -295,6 +299,88 @@ await check("an empty trigger key does not match an unset secret", async () => {
 await check("the trigger secret never appears in the answer", async () => {
   const { body } = await invoke();
   assert.ok(!JSON.stringify(body).includes(TRIGGER_KEY));
+});
+
+// ------------------------------- the key that reads the database
+
+const SECRET_KEY = "sb_secret_AbCdEf0123456789";
+
+await check("an older project's single service role key is used as before", async () => {
+  const { status, body } = await invoke();
+  assert.equal(status, 200);
+  assert.deepEqual([...new Set(dbKeysUsed)], ["fake-service-role-key"]);
+  const step = body.steps.find((s: any) => s.step === "settings");
+  assert.ok(step.detail.includes("SUPABASE_SERVICE_ROLE_KEY"));
+});
+
+await check("a newer project's bundle of keys is searched, and the right one used", async () => {
+  env.delete("SUPABASE_SERVICE_ROLE_KEY");
+  env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ default: SECRET_KEY }));
+  const { status } = await invoke();
+  assert.equal(status, 200);
+  assert.deepEqual([...new Set(dbKeysUsed)], [SECRET_KEY], "the secret key must be the one that reads the tables");
+});
+
+await check("the bundle is found whatever shape it arrives in", async () => {
+  for (const shape of [
+    JSON.stringify([SECRET_KEY]),
+    JSON.stringify([{ name: "default", api_key: SECRET_KEY }]),
+    JSON.stringify({ keys: { live: { value: SECRET_KEY } } }),
+    SECRET_KEY,
+  ]) {
+    reset();
+    env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    env.set("SUPABASE_SECRET_KEYS", shape);
+    const { status } = await invoke();
+    assert.equal(status, 200, `this shape was not understood: ${shape.slice(0, 40)}`);
+    assert.deepEqual([...new Set(dbKeysUsed)], [SECRET_KEY]);
+  }
+});
+
+await check("a publishable key is refused rather than used", async () => {
+  env.delete("SUPABASE_SERVICE_ROLE_KEY");
+  env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ browser: "sb_publishable_y6AjQQ" }));
+  const { status, body } = await invoke();
+  assert.equal(status, 500, "a publishable key reads every table as empty, which is worse than refusing");
+  assert.equal(reachedOut.length, 0);
+  const step = body.steps.find((s: any) => s.step === "settings");
+  assert.ok(step.detail.includes("held no key"));
+});
+
+await check("no database key at all names both places it looked", async () => {
+  env.delete("SUPABASE_SERVICE_ROLE_KEY");
+  const { status, body } = await invoke();
+  assert.equal(status, 500);
+  assert.equal(sent.length, 0);
+  const step = body.steps.find((s: any) => s.step === "settings");
+  assert.ok(step.detail.includes("SUPABASE_SERVICE_ROLE_KEY"));
+  assert.ok(step.detail.includes("SUPABASE_SECRET_KEYS"));
+});
+
+await check("an unreadable bundle says so rather than reading tables as empty", async () => {
+  env.delete("SUPABASE_SERVICE_ROLE_KEY");
+  env.set("SUPABASE_SECRET_KEYS", "this is not data and not a key");
+  const { status, body } = await invoke();
+  assert.equal(status, 500);
+  assert.equal(reachedOut.length, 0);
+  const step = body.steps.find((s: any) => s.step === "settings");
+  assert.ok(step.detail.includes("neither readable data nor a key"));
+});
+
+await check("the failure describes the shape and never a value", async () => {
+  env.delete("SUPABASE_SERVICE_ROLE_KEY");
+  env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ browser: "sb_publishable_SENSITIVE-VALUE" }));
+  const { body } = await invoke();
+  const text = JSON.stringify(body);
+  assert.ok(text.includes("browser"), "the label is useful and safe");
+  assert.ok(!text.includes("SENSITIVE-VALUE"), "the value must never come back out");
+});
+
+await check("no database key is ever repeated in the answer", async () => {
+  env.delete("SUPABASE_SERVICE_ROLE_KEY");
+  env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ default: SECRET_KEY }));
+  const { body } = await invoke();
+  assert.ok(!JSON.stringify(body).includes(SECRET_KEY));
 });
 
 console.log(`\n${passed} checks passed\n`);

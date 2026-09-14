@@ -112,7 +112,21 @@ No Supabase key is needed or wanted in that request.
 
 ## Secrets
 
-`TELEGRAM_BOT_TOKEN` and `BRIEF_TRIGGER_SECRET` are the two secrets you set by hand. Supabase fills in
+`TELEGRAM_BOT_TOKEN` and `BRIEF_TRIGGER_SECRET` are the two secrets you set by
+hand. **Secret names are case sensitive.** `Brief_Trigger_Secret` is a different
+name from `BRIEF_TRIGGER_SECRET` and will not be found.
+
+The key that reads the database is found by `findDatabaseKey`, because projects
+differ. Older ones are given `SUPABASE_SERVICE_ROLE_KEY`, a single key. Newer
+ones are given `SUPABASE_SECRET_KEYS`, a bundle. Rather than guess the bundle's
+shape it is searched, and when nothing is found the failure names the shape and
+never a value.
+
+A **publishable key is deliberately refused** even when one is sitting there.
+Row Level Security is on with no policies, so a publishable key is not turned
+away, it is simply handed nothing. Every table would read as empty and the
+brief would report "the table is empty" about six rules that are plainly there.
+A wrong answer wearing the clothes of a real one is worse than a refusal. Supabase fills in
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on its own.
 
 Nothing secret is ever written into a file here, and nothing secret comes back
