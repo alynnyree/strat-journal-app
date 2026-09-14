@@ -434,7 +434,7 @@
 
   <div class="now">
     <p class="eyebrow">Where you stand</p>
-    <h2>Step 1 is done. A real brief arrived on your phone.</h2>
+    <h2>Step 1 is done. Step 2 is set and waits for the morning.</h2>
     <p>14 September 2026. Your six rules and five checklist items were read out of your own database and delivered to Telegram, in your wording, unaltered. Every part of the spine now works: the schedule calls the code, the code reads the database, the database answers, the message reaches your phone. <strong>That is the whole app in miniature, and it is proven rather than assumed.</strong></p>
     <ol class="asks">
       <li><strong>Step 2 next: the schedule.</strong> There is one real decision inside it about clocks changing twice a year. It is set out under step 2 below and it is yours to make, not mine.</li>
@@ -492,16 +492,18 @@
         <div class="step-num">02</div>
         <div class="step-head">
           <h3>The schedule</h3>
-          <span class="chip" data-tone="waiting">Next</span>
+          <span class="chip" data-tone="waiting">Set, unproven</span>
         </div>
         <div class="step-body">
-          <p>Makes the brief send itself every morning without you asking for it.</p>
+          <p>Sends the brief at 8:10 every morning without you asking. It fires at 12:10 and 13:10 GMT and the code throws away whichever one is not your 8:10, so the clocks changing needs nothing from you, ever.</p>
           <dl class="facts">
-            <div><dt>Your test</dt><dd>You get the brief tomorrow morning having touched nothing.</dd></div>
+            <div><dt>Verified</dt><dd>Walked across 365 consecutive days: every one sends exactly once, never twice, never none. Both clock-change days checked by name. The job itself read back out of the database rather than off a form: switched on, both headers present, the key exactly 64 valid characters, twenty second timeout.</dd></div>
+            <div><dt>Unproven</dt><dd><strong>The scheduler has never once called the function.</strong> Every test so far was a typed command. That link is what tomorrow morning tests.</dd></div>
+            <div><dt>Your test</dt><dd>One message at 8:10 means done. Two an hour apart means the older code is still deployed. None means the scheduler could not reach it, and the job keeps a history that will say so.</dd></div>
           </dl>
           <div class="heads-up">
-            <b>Raise this before building</b>
-            Supabase counts time in UTC. You are US Eastern, which is 4 hours behind UTC in summer and 5 hours behind in winter. So a 7am brief is 11:00 UTC in summer and 12:00 UTC in winter, and the schedule does not move itself when the clocks change. Either the brief shifts by an hour twice a year, or we handle it. I will put the options to you when we get here rather than picking for you.
+            <b>Settled: the clocks</b>
+            Supabase counts in GMT. 8:10 in New Jersey is 12:10 GMT in summer and 13:10 GMT in winter, and a schedule does not move itself when the clocks change. Rather than ask you to edit a line twice a year and remember to, both moments fire and the code decides. You never touch this again, in November, in March, or if the rules about clocks ever change.
           </div>
         </div>
       </article>
