@@ -8,6 +8,8 @@
 // message that reaches Telegram and the answer the function hands back.
 
 import assert from "node:assert/strict";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // ---------------------------------------------------------------- stand-ins
 
@@ -58,8 +60,17 @@ let tokensSeen: string[] = [];
   return new Response(answer.body, { status: answer.status });
 };
 
-await import("../supabase/functions/morning-brief/index.ts");
-assert.ok(handler, "index.ts did not hand its handler to Deno.serve");
+// Which file to test. Defaults to the real two-file version. Pass a path to
+// test the combined file the Supabase website gets instead, so the thing he
+// actually pastes is covered by these same checks and not by a similar set.
+const here = path.dirname(fileURLToPath(import.meta.url));
+const target = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.join(here, "../supabase/functions/morning-brief/index.ts");
+
+console.log(`testing: ${path.relative(process.cwd(), target)}`);
+await import(pathToFileURL(target).href);
+assert.ok(handler, "the function did not hand its handler to Deno.serve");
 
 // ------------------------------------------------------------------ helpers
 

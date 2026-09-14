@@ -16,8 +16,16 @@ goal-app/
   sql/check-schema.sql                       a read-only query that prints your column names
   tests/brief-format.test.ts                 checks the message, no internet needed
   tests/morning-brief.test.ts                runs the whole thing with fake answers standing in
+  dist/morning-brief.single.ts               GENERATED. The one file you paste into Supabase
+  tools/build-single-file.mjs                makes that file from the two above it
+  tools/check-all.sh                         runs every check in one go
   .env.example                               a template. Copy to .env. Never commit .env
 ```
+
+Never edit `dist/morning-brief.single.ts` by hand. Edit the two real files and
+run `node goal-app/tools/build-single-file.mjs` again. `--check` on that same
+command fails if the combined file has gone stale, and `tools/check-all.sh`
+runs it, so a stale paste cannot slip through unnoticed.
 
 A "function" here means one small program that Supabase runs for you when
 something asks it to. It is not running all the time and there is no server of
@@ -45,9 +53,12 @@ You need nothing installed beyond Node, which your Mac may already have. From
 the folder above this one:
 
 ```
-node --experimental-strip-types goal-app/tests/brief-format.test.ts
-node --experimental-strip-types goal-app/tests/morning-brief.test.ts
+sh goal-app/tools/check-all.sh
 ```
+
+That runs 29 checks twice over: once against the two real files, and once
+against the combined file you actually paste into Supabase. Same checks, both
+versions, so the two cannot pass separately while disagreeing with each other.
 
 Both print a list of ticks and a count at the end. Neither touches the internet,
 your database, or Telegram.
