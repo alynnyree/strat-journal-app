@@ -434,11 +434,12 @@
 
   <div class="now">
     <p class="eyebrow">Where you stand</p>
-    <h2>Step 1 is written and checked. It has not run yet.</h2>
-    <p>The morning brief code is finished and saved. <strong>29 checks pass.</strong> Nothing has touched your real database and nothing has arrived on your phone, because the code is not on Supabase yet. Two things are waiting on you.</p>
+    <h2>The code works. The database is empty.</h2>
+    <p>The brief is deployed, the lock works, the bot token is found, and it reaches your database successfully. <strong>43 checks pass.</strong> It then asks for your settings table and is told there is no such table, because <strong>none of your nine tables exist.</strong> That is now the only thing between you and a working brief.</p>
     <ol class="asks">
-      <li>Paste the code into the Supabase website and run it once. It is one file, <code>goal-app/dist/morning-brief.single.ts</code>, and the same 29 checks pass against it as against the originals.</li>
-      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>. This is now urgent rather than tidy. See below.</li>
+      <li>Run <code>sql/001-create-schema.sql</code> in the SQL Editor. It creates the nine tables. It has been run against a real PostgreSQL 16 here, twice, and the tables it builds were fed through the real message code to confirm the two agree.</li>
+      <li>Send your six trading rules and six checklist items, word for word, plus your Telegram chat id. They are not recoverable from anywhere, and they will never be guessed at.</li>
+      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>. Still outstanding. See below.</li>
     </ol>
     <div class="heads-up" style="margin-top:4px">
       <b>The storage area this is sitting in is public</b>
@@ -454,8 +455,8 @@
     <div class="rows">
       <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Telegram bot exists</b><span>Token confirmed working.</span></span></div>
       <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Chat id confirmed</b><span>Stored in the <code>app_settings</code> table as <code>telegram_chat_id</code>.</span></span></div>
-      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Nine tables created</b><span>Goals, projects, roadmap steps, trading rules, protocol items, tasks, thoughts, daily reviews, settings.</span></span></div>
-      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Your content loaded</b><span>Two projects, your six trading rules, your six item open checklist.</span></span></div>
+      <div class="row"><span class="tick" style="color:var(--wait)">&times;</span><span class="row-text"><b>Nine tables created. They are not there.</b><span>Checked on 14 Sep 2026 by asking the database to list everything it holds. It returned 35 tables, every one of them Supabase's own internal furniture. Not one of yours. The plan said this was done; the database says otherwise, and the database wins. <code>sql/001-create-schema.sql</code> creates them.</span></span></div>
+      <div class="row"><span class="tick" style="color:var(--wait)">&times;</span><span class="row-text"><b>Your content loaded. It is not there either.</b><span>Your six trading rules and six checklist items are in no database on your account. They have to be typed in again from wherever you have them written down. They will never be invented for you.</span></span></div>
     </div>
   </section>
 
@@ -471,13 +472,13 @@
         <div class="step-num">01</div>
         <div class="step-head">
           <h3>Morning brief</h3>
-          <span class="chip" data-tone="waiting">Built, not running</span>
+          <span class="chip" data-tone="waiting">Live, waiting on data</span>
         </div>
         <div class="step-body">
           <p>Reads your trading rules and the <code>trading_open</code> items from your checklist, puts them into one message, and sends it to you on Telegram. Your wording is printed exactly as stored. Nothing is reordered or improved.</p>
           <dl class="facts">
-            <div><dt>Done</dt><dd>Code written. 29 checks pass against the real code, with your database and Telegram stood in for. Saved to GitHub.</dd></div>
-            <div><dt>Left to do</dt><dd>Put it on Supabase, set the bot token as a secret, run it once by hand.</dd></div>
+            <div><dt>Done</dt><dd>Deployed and running. 43 checks pass against the real code. The lock, the bot token and the database key all work.</dd></div>
+            <div><dt>Left to do</dt><dd>Create the nine tables, then put your rules and checklist into them.</dd></div>
             <div><dt>Your test</dt><dd><strong>A Telegram message arrives</strong> with your six rules numbered 1 to 6, and your six checklist items each with an empty box.</dd></div>
           </dl>
           <div class="heads-up">
