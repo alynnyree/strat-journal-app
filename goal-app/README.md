@@ -2,6 +2,11 @@
 
 Private. One database talking to one chat app. No AI anywhere in it.
 
+**The step by step plan for the whole project is `docs/build-steps.html`.** Open
+that file in a browser. It says which of the six steps we are on, what each one
+does, and the test you run yourself to confirm it worked. This README only
+covers the step 1 files.
+
 ## Where things are
 
 ```

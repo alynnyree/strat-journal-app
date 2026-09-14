@@ -1,0 +1,617 @@
+<title>Goal App Build Order</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+  :root {
+    --ground:      #F1F4F3;
+    --surface:     #FFFFFF;
+    --surface-sunk:#E8EDEC;
+    --ink:         #131E1D;
+    --ink-soft:    #566361;
+    --ink-faint:   #8A9795;
+    --line:        #D6DEDC;
+    --line-strong: #B8C4C2;
+    --accent:      #0E6B68;
+    --accent-wash: #DCEBE9;
+    --wait:        #96600C;
+    --wait-wash:   #F6E9D2;
+
+    --step-0: 0.78rem;
+    --step-1: 0.875rem;
+    --step-2: 1rem;
+    --step-3: 1.25rem;
+    --step-4: 1.6rem;
+    --step-5: 2.1rem;
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0D1514;
+      --surface:     #15201F;
+      --surface-sunk:#101A19;
+      --ink:         #E2EAE8;
+      --ink-soft:    #97A7A4;
+      --ink-faint:   #6C7B79;
+      --line:        #253432;
+      --line-strong: #374846;
+      --accent:      #52C0B6;
+      --accent-wash: #10302E;
+      --wait:        #D9A055;
+      --wait-wash:   #2C2317;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0D1514;
+    --surface:     #15201F;
+    --surface-sunk:#101A19;
+    --ink:         #E2EAE8;
+    --ink-soft:    #97A7A4;
+    --ink-faint:   #6C7B79;
+    --line:        #253432;
+    --line-strong: #374846;
+    --accent:      #52C0B6;
+    --accent-wash: #10302E;
+    --wait:        #D9A055;
+    --wait-wash:   #2C2317;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--step-2);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead { display: flex; flex-direction: column; gap: 14px; }
+
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: var(--step-5);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+  }
+
+  .standfirst {
+    font-family: var(--serif);
+    font-size: var(--step-3);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 34ch;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    color: var(--ink-faint);
+  }
+
+  /* ------------------------------------------------------------- now */
+
+  .now {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--wait);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .now h2 {
+    font-size: var(--step-3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .now p { margin: 0; color: var(--ink-soft); }
+  .now strong { color: var(--ink); font-weight: 600; }
+
+  .asks {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .asks li {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 10px;
+    align-items: start;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .asks li::before {
+    content: counter(list-item);
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 600;
+    color: var(--wait);
+    background: var(--wait-wash);
+    text-align: center;
+    line-height: 1.5rem;
+    height: 1.5rem;
+  }
+
+  /* ------------------------------------------------------------ steps */
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+
+  .section-head { display: flex; flex-direction: column; gap: 6px; }
+
+  .section-head h2 {
+    font-size: var(--step-4);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .section-head p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: var(--step-1);
+    max-width: 62ch;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 2px; }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: 2.25rem 1fr;
+    gap: 4px 16px;
+  }
+
+  .step + .step { border-top: none; }
+
+  .step[data-state="current"] {
+    border-color: var(--line-strong);
+    border-left: 3px solid var(--wait);
+    padding-left: 20px;
+  }
+
+  .step[data-state="later"] { background: var(--surface-sunk); }
+
+  .step-num {
+    grid-row: 1 / span 3;
+    font-family: var(--mono);
+    font-size: var(--step-1);
+    font-weight: 600;
+    color: var(--ink-faint);
+    padding-top: 0.15em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step[data-state="current"] .step-num { color: var(--wait); }
+
+  .step-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+  }
+
+  .step-head h3 {
+    font-size: var(--step-3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .chip[data-tone="done"]    { color: var(--accent); background: var(--accent-wash); }
+  .chip[data-tone="waiting"] { color: var(--wait);   background: var(--wait-wash); }
+  .chip[data-tone="idle"]    { color: var(--ink-faint); border-color: var(--line); }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 8px;
+  }
+
+  .step-body p { margin: 0; color: var(--ink-soft); max-width: 62ch; }
+
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .facts > div {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: 4px 14px;
+    align-items: start;
+  }
+
+  .facts dt {
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-top: 0.25em;
+  }
+
+  .facts dd {
+    margin: 0;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .facts dd strong { color: var(--ink); font-weight: 600; }
+
+  .heads-up {
+    background: var(--surface-sunk);
+    border-left: 2px solid var(--line-strong);
+    padding: 12px 14px;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .heads-up b {
+    display: block;
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--surface-sunk);
+    padding: 1px 5px;
+    color: var(--ink);
+  }
+
+  .step[data-state="later"] code { background: var(--surface); }
+
+  /* -------------------------------------------------------- plain lists */
+
+  .rows { display: flex; flex-direction: column; gap: 0; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1.4rem 1fr;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+
+  .row:first-child { border-top: 1px solid var(--line); }
+
+  .tick {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: var(--step-1);
+    color: var(--accent);
+    line-height: 1.55;
+  }
+
+  .row-text { font-size: var(--step-1); }
+  .row-text b { font-weight: 600; }
+  .row-text span { display: block; color: var(--ink-soft); }
+
+  .locked .tick { color: var(--ink-faint); }
+
+  /* ------------------------------------------------------------ pull */
+
+  .pull {
+    font-family: var(--serif);
+    font-size: var(--step-3);
+    line-height: 1.5;
+    color: var(--ink);
+    border-top: 2px solid var(--accent);
+    border-bottom: 1px solid var(--line);
+    padding-block: 18px;
+    margin: 0;
+    max-width: 44ch;
+  }
+
+  /* --------------------------------------------------------- glossary */
+
+  .glossary {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .glossary > div {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 4px 16px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .glossary > div:first-child { border-top: 1px solid var(--line); }
+
+  .glossary dt {
+    font-family: var(--mono);
+    font-size: var(--step-1);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .glossary dd {
+    margin: 0;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    color: var(--ink-faint);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 560px) {
+    :root { --step-5: 1.75rem; --step-4: 1.4rem; --step-3: 1.1rem; }
+    .page { padding-block: 30px 56px; gap: 38px; }
+    .step { grid-template-columns: 1.75rem 1fr; padding: 18px 16px; gap: 4px 12px; }
+    .step[data-state="current"] { padding-left: 14px; }
+    .facts > div { grid-template-columns: 1fr; gap: 2px; }
+    .glossary > div { grid-template-columns: 1fr; gap: 2px; }
+    .now { padding: 18px 16px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Goal Execution App</p>
+    <h1>Build Order</h1>
+    <p class="standfirst">Six steps, in order. One database talking to one chat app. No AI in any of it.</p>
+    <div class="masthead-meta">
+      <span>Updated 14 Sep 2026</span>
+      <span>Step 1 of 6</span>
+      <span>Supabase &middot; Telegram</span>
+    </div>
+  </header>
+
+  <div class="now">
+    <p class="eyebrow">Where you stand</p>
+    <h2>Step 1 is written and checked. It has not run yet.</h2>
+    <p>The morning brief code is finished and saved. <strong>29 checks pass.</strong> Nothing has touched your real database and nothing has arrived on your phone, because the code is not on Supabase yet. Two things are waiting on you.</p>
+    <ol class="asks">
+      <li>Decide how the code gets onto Supabase: paste it into the Supabase website, or install the Supabase tool on your Mac. The website is quicker to start.</li>
+      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>, so this project stops living inside your trading journal's storage.</li>
+    </ol>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>Already standing</h2>
+      <p>The groundwork that was done before any code was written.</p>
+    </div>
+    <div class="rows">
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Telegram bot exists</b><span>Token confirmed working.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Chat id confirmed</b><span>Stored in the <code>app_settings</code> table as <code>telegram_chat_id</code>.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Nine tables created</b><span>Goals, projects, roadmap steps, trading rules, protocol items, tasks, thoughts, daily reviews, settings.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Your content loaded</b><span>Two projects, your six trading rules, your six item open checklist.</span></span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>The six steps</h2>
+      <p>In this order. Each one has a test you can run yourself, so you never have to take my word for it that something works.</p>
+    </div>
+
+    <div class="steps">
+
+      <article class="step" data-state="current">
+        <div class="step-num">01</div>
+        <div class="step-head">
+          <h3>Morning brief</h3>
+          <span class="chip" data-tone="waiting">Built, not running</span>
+        </div>
+        <div class="step-body">
+          <p>Reads your trading rules and the <code>trading_open</code> items from your checklist, puts them into one message, and sends it to you on Telegram. Your wording is printed exactly as stored. Nothing is reordered or improved.</p>
+          <dl class="facts">
+            <div><dt>Done</dt><dd>Code written. 29 checks pass against the real code, with your database and Telegram stood in for. Saved to GitHub.</dd></div>
+            <div><dt>Left to do</dt><dd>Put it on Supabase, set the bot token as a secret, run it once by hand.</dd></div>
+            <div><dt>Your test</dt><dd><strong>A Telegram message arrives</strong> with your six rules numbered 1 to 6, and your six checklist items each with an empty box.</dd></div>
+          </dl>
+          <div class="heads-up">
+            <b>One thing outstanding</b>
+            I could not reach your Supabase from here, so I have not seen your real column names. The code copes with whatever they are and reports which ones it used, rather than guessing in silence. There is a read only query at <code>goal-app/sql/check-schema.sql</code> that prints the real names. Run it, send me the result, and the guessing stops for good.
+          </div>
+        </div>
+      </article>
+
+      <article class="step" data-state="idle">
+        <div class="step-num">02</div>
+        <div class="step-head">
+          <h3>The schedule</h3>
+          <span class="chip" data-tone="idle">Not started</span>
+        </div>
+        <div class="step-body">
+          <p>Makes the brief send itself every morning without you asking for it.</p>
+          <dl class="facts">
+            <div><dt>Your test</dt><dd>You get the brief tomorrow morning having touched nothing.</dd></div>
+          </dl>
+          <div class="heads-up">
+            <b>Raise this before building</b>
+            Supabase counts time in UTC. You are US Eastern, which is 4 hours behind UTC in summer and 5 hours behind in winter. So a 7am brief is 11:00 UTC in summer and 12:00 UTC in winter, and the schedule does not move itself when the clocks change. Either the brief shifts by an hour twice a year, or we handle it. I will put the options to you when we get here rather than picking for you.
+          </div>
+        </div>
+      </article>
+
+      <article class="step" data-state="idle">
+        <div class="step-num">03</div>
+        <div class="step-head">
+          <h3>Catching what you send</h3>
+          <span class="chip" data-tone="idle">Not started</span>
+        </div>
+        <div class="step-body">
+          <p>Whatever you send the bot during the day gets saved to <code>thoughts</code>, word for word. Hashtags at the front become tags. A <code>!</code> at the front marks it private. The bot replies with a short confirmation so you know it landed.</p>
+          <dl class="facts">
+            <div><dt>Your test</dt><dd>Send <code>#test hello</code> and see it saved with the tag <code>test</code>. Send <code>!something</code> and see it saved with private set to true.</dd></div>
+            <div><dt>Note</dt><dd>This is the step where switching to the Supabase tool on your Mac starts paying for itself, because we will change this one repeatedly while getting it right.</dd></div>
+          </dl>
+        </div>
+      </article>
+
+      <article class="step" data-state="idle">
+        <div class="step-num">04</div>
+        <div class="step-head">
+          <h3>Finding it again</h3>
+          <span class="chip" data-tone="idle">Not started</span>
+        </div>
+        <div class="step-body">
+          <p>A <code>/find</code> command. You send <code>/find schwab</code> and it sends back every thought with that word in it. Plain word matching, nothing clever.</p>
+          <dl class="facts">
+            <div><dt>Your test</dt><dd>Save a thought, then find it by a word from the middle of it.</dd></div>
+          </dl>
+        </div>
+      </article>
+
+      <article class="step" data-state="idle">
+        <div class="step-num">05</div>
+        <div class="step-head">
+          <h3>Tasks</h3>
+          <span class="chip" data-tone="idle">Not started</span>
+        </div>
+        <div class="step-body">
+          <p>Three commands. <code>/add</code> to create one, <code>/today</code> to list what is open, <code>/done</code> to close one off.</p>
+          <dl class="facts">
+            <div><dt>Your test</dt><dd>Add two tasks, list them, complete one, list again and see only the other.</dd></div>
+          </dl>
+        </div>
+      </article>
+
+      <article class="step" data-state="later">
+        <div class="step-num">06</div>
+        <div class="step-head">
+          <h3>Evening review</h3>
+          <span class="chip" data-tone="idle">Not started</span>
+        </div>
+        <div class="step-body">
+          <p>The bot asks what got done. Your answer is saved to <code>daily_reviews</code> exactly as you typed it. Nothing reads it, nothing sorts it, nothing interprets it.</p>
+          <dl class="facts">
+            <div><dt>Your test</dt><dd>The bot asks in the evening. You answer. Your answer is in the table, word for word.</dd></div>
+            <div><dt>Then we stop</dt><dd><strong>Making sense of that answer is the first place AI would genuinely help.</strong> We build to here and then talk. Nothing past this gets built or scaffolded before that conversation.</dd></div>
+          </dl>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>The privacy rules</h2>
+      <p>Hard requirements, not preferences. These are the reason the app is shaped the way it is.</p>
+    </div>
+    <blockquote class="pull">Your private thoughts, your income situation and your business arrangements are not going to be used to train anybody's model.</blockquote>
+    <div class="rows">
+      <div class="row"><span class="tick">1</span><span class="row-text"><b>No AI request leaves this app. None.</b><span>Not Gemini, not OpenAI, not Anthropic. There is a check that fails on purpose if any code path ever tries to reach one, so this cannot be added by accident later.</span></span></div>
+      <div class="row"><span class="tick">2</span><span class="row-text"><b>The private flag is load bearing</b><span>If AI is ever turned on, the check for it goes in <em>before</em> the outbound request, never after.</span></span></div>
+      <div class="row"><span class="tick">3</span><span class="row-text"><b>No secret is ever written into a file</b><span>Bot token and keys live in Supabase's own secret storage. A file that ignores <code>.env</code> went in first, before any code.</span></span></div>
+      <div class="row"><span class="tick">4</span><span class="row-text"><b>The tables are locked to everyone</b><span>Deliberately. The public key can read and write nothing at all. Only code holding the private key gets in. If something cannot read the database, it is holding the wrong key, and the answer is never to unlock the table.</span></span></div>
+      <div class="row"><span class="tick">5</span><span class="row-text"><b>Turning AI on is your decision, later</b><span>And it would be a paid tier, because free tiers generally reserve the right to train on what you send them.</span></span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Settled, and not up for discussion</h2>
+      <p>Decided after a full review. Recorded here so no future session reopens them.</p>
+    </div>
+    <div class="rows locked">
+      <div class="row"><span class="tick">&times;</span><span class="row-text"><b>No n8n</b><span>A local install cannot fire a 7am brief while the laptop is asleep, and the cloud version has no permanent free tier. This is one database talking to one chat app, which is code, not plumbing.</span></span></div>
+      <div class="row"><span class="tick">&times;</span><span class="row-text"><b>No React Native or Expo</b><span>Telegram is the interface. A PWA is the fallback if a real app is ever wanted.</span></span></div>
+      <div class="row"><span class="tick">&times;</span><span class="row-text"><b>No local AI model</b><span>A 2019 Intel Mac runs them slowly and badly.</span></span></div>
+      <div class="row"><span class="tick">&times;</span><span class="row-text"><b>No Whisper</b><span>The iPhone keyboard already has a dictation mic. Speak into Telegram and it arrives as text.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Supabase for all of it</b><span>Database, the small programs, and the scheduling. One free tier, one place, nothing to keep alive.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Trading stays deliberately dumb</b><span>Rules and checklist, read out verbatim. No market data, no trade records, no analysis. You have two other tools for that.</span></span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Words I will keep using</h2>
+      <p>So none of them ever need explaining twice.</p>
+    </div>
+    <dl class="glossary">
+      <div><dt>Function</dt><dd>One small program Supabase runs for you when something asks it to. It is not running all the time and there is no server of yours to keep alive.</dd></div>
+      <div><dt>Deploy</dt><dd>Putting code somewhere it can actually run. Until then it is just a document in a folder.</dd></div>
+      <div><dt>Secret</dt><dd>A password-like string, such as your bot token. Stored by Supabase, never written into a file.</dd></div>
+      <div><dt>Storage area</dt><dd>A folder on GitHub that keeps every version of your files, so nothing is ever lost by overwriting it.</dd></div>
+      <div><dt>Branch</dt><dd>A parallel copy of that folder. Work happens on one so the main copy stays untouched until you are happy.</dd></div>
+      <div><dt>Cron</dt><dd>A clock that runs something on a schedule. Yours counts time in UTC, not Eastern.</dd></div>
+      <div><dt>Dry run</dt><dd>Asking the code to build the message and show it to you without sending it.</dd></div>
+      <div><dt>Row</dt><dd>One entry in a table. One trading rule is one row.</dd></div>
+    </dl>
+  </section>
+
+  <footer>
+    Private project. Nothing here is shared and no AI service is contacted by any part of it.<br>
+    Source of this page: goal-app/docs/build-steps.html
+  </footer>
+
+</div>
