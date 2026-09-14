@@ -66,6 +66,13 @@ if (process.argv.includes("--check")) {
   console.log(`up to date: ${path.relative(process.cwd(), OUT)}`);
 } else {
   writeFileSync(OUT, built);
-  const lines = built.split("\n").length;
-  console.log(`wrote ${path.relative(process.cwd(), OUT)} (${lines} lines, ${built.length} characters)`);
+  // Report the number an EDITOR shows, not the number of pieces the text splits
+  // into. A file ending in a newline splits into one more piece than it has
+  // lines, and quoting the wrong one sends him hunting for a line that is not
+  // there. Told him 715 and 723 when the editor said 714 and 722.
+  const lastLineNumber = built.replace(/\n$/, "").split("\n").length;
+  const lastLine = built.trimEnd().split("\n").pop();
+  console.log(`wrote ${path.relative(process.cwd(), OUT)}`);
+  console.log(`  the editor will show ${lastLineNumber} lines, ending: ${lastLine}`);
+  console.log(`  to tell it apart from an older paste, search the code for: x-scheduled`);
 }
