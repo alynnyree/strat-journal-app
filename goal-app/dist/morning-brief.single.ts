@@ -209,6 +209,62 @@ export function easternDateLine(now: Date): string {
   }).format(now);
 }
 
+/** When he wants it: 8:10 in the morning, his time, every day. */
+export const BRIEF_HOUR = 8;
+export const BRIEF_MINUTE = 10;
+
+/**
+ * How late a run may be and still count. The two scheduled moments are an hour
+ * apart, so anything under an hour cannot let both of them through on one day.
+ */
+export const BRIEF_WINDOW_MINUTES = 50;
+
+/**
+ * What time is it where he is, counted in minutes since midnight.
+ *
+ * Midnight is reported as hour 24 by some systems rather than 0. That is a real
+ * trap, not a hypothetical one, and it is handled here rather than left to
+ * whichever system happens to run this.
+ */
+export function easternMinutesSinceMidnight(now: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const value = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const hour = value("hour") % 24;
+  return hour * 60 + value("minute");
+}
+
+/**
+ * Is this the moment to send?
+ *
+ * The schedule fires twice a day, at 12:10 and 13:10 UTC. One of those is 8:10
+ * in New York and the other is not, and WHICH one swaps over when the clocks
+ * change. So rather than ask him to edit a schedule twice a year and remember
+ * to, both moments fire and this decides. Nothing to maintain, and it survives
+ * any future change to when the clocks move.
+ *
+ * A skip is not a failure. It says so, in words, so a quiet morning can be told
+ * apart from a broken one.
+ */
+export function dueNow(now: Date): { due: boolean; note: string } {
+  const target = BRIEF_HOUR * 60 + BRIEF_MINUTE;
+  const current = easternMinutesSinceMidnight(now);
+  const clock = (mins: number) =>
+    `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+  if (current >= target && current < target + BRIEF_WINDOW_MINUTES) {
+    return { due: true, note: `It is ${clock(current)} in New York, which is the morning slot.` };
+  }
+  return {
+    due: false,
+    note: `It is ${clock(current)} in New York, not ${clock(target)}. This run was not the one. Nothing sent.`,
+  };
+}
+
 export interface BriefParts {
   dateLine: string;
   rules: ExtractResult;
@@ -537,8 +593,21 @@ async function handler(request: Request): Promise<Response> {
   }
 
   const steps: Step[] = [{ step: "who is asking", ok: true, detail: "The trigger key matched." }];
-  const dateLine = easternDateLine(new Date());
-  const dryRun = new URL(request.url).searchParams.get("dry") === "1";
+  const now = new Date();
+  const dateLine = easternDateLine(now);
+  const params = new URL(request.url).searchParams;
+  const dryRun = params.get("dry") === "1";
+
+  // The schedule fires twice so that one of them is always 8:10 his time,
+  // whatever the clocks are doing. This is where the other one bows out.
+  // A call made by hand has no "scheduled" mark and always goes through.
+  if (params.get("scheduled") === "1") {
+    const due = dueNow(now);
+    steps.push({ step: "is it time", ok: true, detail: due.note });
+    if (!due.due) {
+      return Response.json({ ok: true, sent: false, dateLine, steps });
+    }
+  }
 
   const token = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";

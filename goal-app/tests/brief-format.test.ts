@@ -8,7 +8,11 @@
 
 import assert from "node:assert/strict";
 import {
+  BRIEF_HOUR,
+  BRIEF_MINUTE,
   buildBriefMessage,
+  dueNow,
+  easternMinutesSinceMidnight,
   buildFailureMessage,
   capForTelegram,
   easternDateLine,
@@ -228,6 +232,77 @@ check("nothing written for him contains an em dash", () => {
     buildFailureMessage("Sunday, September 13, 2026", "a reason"),
   ];
   for (const text of texts) assert.ok(!text.includes("—"), `em dash found in: ${text}`);
+});
+
+// ------------------------------- the two scheduled moments, all year round
+//
+// The schedule fires at 12:10 and 13:10 UTC every day. Exactly one of those is
+// 8:10 in New York, and which one swaps when the clocks change. These check
+// that, on real dates, including both changeover days.
+
+const MORNING = `${String(BRIEF_HOUR).padStart(2, "0")}:${String(BRIEF_MINUTE).padStart(2, "0")}`;
+
+function decideBoth(day: string): { early: boolean; late: boolean } {
+  return {
+    early: dueNow(new Date(`${day}T12:10:00Z`)).due,
+    late: dueNow(new Date(`${day}T13:10:00Z`)).due,
+  };
+}
+
+check(`he asked for ${MORNING}, so that is what is targeted`, () => {
+  assert.equal(BRIEF_HOUR, 8);
+  assert.equal(BRIEF_MINUTE, 10);
+});
+
+check("in summer the earlier run sends and the later one stands down", () => {
+  assert.deepEqual(decideBoth("2026-07-15"), { early: true, late: false });
+});
+
+check("in winter it is the other way round, with no change by him", () => {
+  assert.deepEqual(decideBoth("2027-01-15"), { early: false, late: true });
+});
+
+check("on the day the clocks go back, still exactly one", () => {
+  assert.deepEqual(decideBoth("2026-11-01"), { early: false, late: true });
+});
+
+check("on the day the clocks go forward, still exactly one", () => {
+  assert.deepEqual(decideBoth("2027-03-14"), { early: true, late: false });
+});
+
+check("across a whole year, never twice in a day and never none", () => {
+  const day = new Date(Date.UTC(2026, 8, 14));
+  let sends = 0;
+  for (let i = 0; i < 365; i += 1) {
+    const iso = day.toISOString().slice(0, 10);
+    const { early, late } = decideBoth(iso);
+    const today = (early ? 1 : 0) + (late ? 1 : 0);
+    assert.equal(today, 1, `${iso} would have sent ${today} times, not once`);
+    sends += today;
+    day.setUTCDate(day.getUTCDate() + 1);
+  }
+  assert.equal(sends, 365);
+});
+
+check("a late run still counts, a run an hour out does not", () => {
+  // 20 minutes late in summer: still his morning, still sends.
+  assert.equal(dueNow(new Date("2026-07-15T12:30:00Z")).due, true);
+  // A full hour early is 7:10 his time. Not his morning.
+  assert.equal(dueNow(new Date("2026-07-15T11:10:00Z")).due, false);
+});
+
+check("standing down says the time, so a quiet morning can be told from a broken one", () => {
+  const skipped = dueNow(new Date("2026-07-15T13:10:00Z"));
+  assert.equal(skipped.due, false);
+  assert.ok(skipped.note.includes("09:10"));
+  assert.ok(skipped.note.includes("08:10"));
+  assert.ok(skipped.note.includes("Nothing sent"));
+});
+
+check("midnight reads as 00:00, never as 24:00", () => {
+  // 04:00 UTC in summer is midnight in New York. Some systems call that hour 24.
+  assert.equal(easternMinutesSinceMidnight(new Date("2026-07-15T04:00:00Z")), 0);
+  assert.equal(easternMinutesSinceMidnight(new Date("2026-07-15T04:30:00Z")), 30);
 });
 
 console.log(`\n${passed} checks passed\n`);

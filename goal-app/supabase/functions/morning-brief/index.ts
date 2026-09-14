@@ -17,6 +17,7 @@
 
 import {
   buildBriefMessage,
+  dueNow,
   buildFailureMessage,
   capForTelegram,
   columnNames,
@@ -277,8 +278,21 @@ async function handler(request: Request): Promise<Response> {
   }
 
   const steps: Step[] = [{ step: "who is asking", ok: true, detail: "The trigger key matched." }];
-  const dateLine = easternDateLine(new Date());
-  const dryRun = new URL(request.url).searchParams.get("dry") === "1";
+  const now = new Date();
+  const dateLine = easternDateLine(now);
+  const params = new URL(request.url).searchParams;
+  const dryRun = params.get("dry") === "1";
+
+  // The schedule fires twice so that one of them is always 8:10 his time,
+  // whatever the clocks are doing. This is where the other one bows out.
+  // A call made by hand has no "scheduled" mark and always goes through.
+  if (params.get("scheduled") === "1") {
+    const due = dueNow(now);
+    steps.push({ step: "is it time", ok: true, detail: due.note });
+    if (!due.due) {
+      return Response.json({ ok: true, sent: false, dateLine, steps });
+    }
+  }
 
   const token = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
