@@ -280,6 +280,7 @@ export function capForTelegram(text: string): string {
 //
 // Secrets it needs:
 //   TELEGRAM_BOT_TOKEN          you set this one
+//   BRIEF_TRIGGER_SECRET        you set this one. See callerIsAllowed below
 //   SUPABASE_URL                Supabase fills this in for you
 //   SUPABASE_SERVICE_ROLE_KEY   Supabase fills this in for you
 //   TELEGRAM_CHAT_ID            optional, only used if app_settings has no row
@@ -388,8 +389,62 @@ async function sendTelegram(token: string, chatId: string, text: string): Promis
   return null;
 }
 
+/**
+ * Who is allowed to set this off.
+ *
+ * Supabase's own door check is switched off for this function, because it only
+ * understands the old style of key and this project uses the new style. Checked
+ * against Supabase's own documentation and confirmed by their staff, not
+ * assumed. So the door is ours to lock, and this is the lock.
+ *
+ * Two rules it has to obey:
+ *
+ *   It runs BEFORE a single row is read. A caller who cannot say who they are
+ *   never causes the database to be touched at all.
+ *
+ *   No secret set means nobody gets in. A lock that falls open when its key is
+ *   missing is not a lock.
+ *
+ * The comparison looks at every character even after it knows the answer, so
+ * the time it takes gives nothing away about how much of the secret was right.
+ */
+function callerIsAllowed(request: Request, expected: string): boolean {
+  const offered = request.headers.get("x-trigger-key") ?? "";
+  if (expected.length === 0) return false;
+  if (offered.length !== expected.length) return false;
+  let difference = 0;
+  for (let i = 0; i < expected.length; i += 1) {
+    difference |= expected.charCodeAt(i) ^ offered.charCodeAt(i);
+  }
+  return difference === 0;
+}
+
 async function handler(request: Request): Promise<Response> {
-  const steps: Step[] = [];
+  // Nothing above this line reaches the database, Telegram, or anywhere else.
+  const triggerSecret = Deno.env.get("BRIEF_TRIGGER_SECRET") ?? "";
+  if (!callerIsAllowed(request, triggerSecret)) {
+    return Response.json(
+      {
+        ok: false,
+        sent: false,
+        steps: [
+          {
+            step: "who is asking",
+            ok: false,
+            detail:
+              triggerSecret === ""
+                ? "BRIEF_TRIGGER_SECRET is not set on this function, so nobody is allowed in. " +
+                  "Nothing was read and nothing was sent."
+                : "The x-trigger-key header was missing or did not match. " +
+                  "Nothing was read and nothing was sent.",
+          },
+        ],
+      },
+      { status: 401 },
+    );
+  }
+
+  const steps: Step[] = [{ step: "who is asking", ok: true, detail: "The trigger key matched." }];
   const dateLine = easternDateLine(new Date());
   const dryRun = new URL(request.url).searchParams.get("dry") === "1";
 

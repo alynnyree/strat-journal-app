@@ -74,9 +74,45 @@ said. Ask for the answer as a "dry run" to see the message without sending it:
 
 A dry run builds the message and sends nothing.
 
+## Calling it, and why the door is locked the way it is
+
+Supabase has its own check on the front of an Edge Function ("verify JWT").
+**It is switched OFF for this function, deliberately.** That check only
+understands the old style of Supabase key. This project uses the new style
+(`sb_publishable_...`), which is not a JWT, so the check refuses it. Confirmed
+against Supabase's own documentation and a Supabase collaborator's answer, not
+guessed: with the new keys, `--no-verify-jwt` is required and the function has
+to authorise the caller itself.
+
+So the lock is ours: `callerIsAllowed` in `index.ts`. The caller sends an
+`x-trigger-key` header and it has to match the `BRIEF_TRIGGER_SECRET` secret.
+
+This is tighter than what it replaces, not looser. A publishable key is meant
+to be public and would sit in any client app. `BRIEF_TRIGGER_SECRET` is known
+only to this function and to whatever is allowed to set it off.
+
+Three rules the lock obeys, each with a check that fails if it stops obeying:
+
+- It runs **before** anything is read. A caller who cannot prove who they are
+  never causes one row to be looked at. The test counts outbound calls and
+  fails if the number is anything but zero.
+- **No secret set means nobody gets in.** A lock that falls open when its key
+  is missing is not a lock.
+- The comparison reads every character even once it knows the answer, so how
+  long it takes says nothing about how much of the secret was right.
+
+To call it:
+
+```
+curl -s -X POST "https://YOUR-PROJECT.supabase.co/functions/v1/morning-brief?dry=1" \
+  -H "x-trigger-key: YOUR-BRIEF-TRIGGER-SECRET"
+```
+
+No Supabase key is needed or wanted in that request.
+
 ## Secrets
 
-`TELEGRAM_BOT_TOKEN` is the only secret you set by hand. Supabase fills in
+`TELEGRAM_BOT_TOKEN` and `BRIEF_TRIGGER_SECRET` are the two secrets you set by hand. Supabase fills in
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on its own.
 
 Nothing secret is ever written into a file here, and nothing secret comes back

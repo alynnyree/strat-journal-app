@@ -40,8 +40,11 @@ let answers: Answers = {};
 let sent: Sent[] = [];
 let tokensSeen: string[] = [];
 
+let reachedOut: string[] = [];
+
 (globalThis as any).fetch = async (input: string, init?: RequestInit): Promise<Response> => {
   const url = String(input);
+  reachedOut.push(url);
 
   if (url.startsWith("https://api.telegram.org/")) {
     tokensSeen.push(url.split("/bot")[1].split("/")[0]);
@@ -75,10 +78,12 @@ assert.ok(handler, "the function did not hand its handler to Deno.serve");
 // ------------------------------------------------------------------ helpers
 
 const BOT_TOKEN = "123456:FAKE-TOKEN-DO-NOT-USE";
+const TRIGGER_KEY = "fake-trigger-secret-0123456789abcdef";
 
 function reset(): void {
   env.clear();
   env.set("TELEGRAM_BOT_TOKEN", BOT_TOKEN);
+  env.set("BRIEF_TRIGGER_SECRET", TRIGGER_KEY);
   env.set("SUPABASE_URL", "https://example.supabase.co");
   env.set("SUPABASE_SERVICE_ROLE_KEY", "fake-service-role-key");
   answers = {
@@ -94,10 +99,15 @@ function reset(): void {
   };
   sent = [];
   tokensSeen = [];
+  reachedOut = [];
 }
 
-async function invoke(query = ""): Promise<{ status: number; body: any }> {
-  const response = await handler!(new Request(`https://example.functions.supabase.co/morning-brief${query}`));
+async function invoke(query = "", key: string | null = TRIGGER_KEY): Promise<{ status: number; body: any }> {
+  const headers = new Headers();
+  if (key !== null) headers.set("x-trigger-key", key);
+  const response = await handler!(
+    new Request(`https://example.functions.supabase.co/morning-brief${query}`, { headers }),
+  );
   return { status: response.status, body: await response.json() };
 }
 
@@ -160,7 +170,8 @@ await check("a missing bot token is named, and nothing is attempted", async () =
   const { status, body } = await invoke();
   assert.equal(status, 500);
   assert.equal(sent.length, 0);
-  assert.ok(body.steps[0].detail.includes("TELEGRAM_BOT_TOKEN"));
+  const step = body.steps.find((s: any) => s.step === "settings");
+  assert.ok(step.detail.includes("TELEGRAM_BOT_TOKEN"));
 });
 
 await check("one table refusing still sends the other half, with the reason in place", async () => {
@@ -239,6 +250,51 @@ await check("no AI service is contacted by any path", async () => {
     assert.ok(!banned.test(url), `this function must not contact ${url}`);
   }
   assert.ok(contacted.length > 0, "it should have contacted something");
+});
+
+await check("no trigger key means nothing is read and nothing is sent", async () => {
+  const { status, body } = await invoke("", null);
+  assert.equal(status, 401);
+  assert.equal(body.sent, false);
+  assert.equal(sent.length, 0);
+  assert.equal(reachedOut.length, 0, "the database must not be touched by a caller who has not proved who they are");
+  assert.ok(body.steps[0].detail.includes("x-trigger-key"));
+});
+
+await check("a wrong trigger key is refused the same way", async () => {
+  const { status, body } = await invoke("", "not-the-right-secret-at-all-xxxxxxx");
+  assert.equal(status, 401);
+  assert.equal(reachedOut.length, 0);
+  assert.ok(body.steps[0].detail.includes("did not match"));
+});
+
+await check("a key of the right length but wrong content is still refused", async () => {
+  const nearly = TRIGGER_KEY.slice(0, -1) + "X";
+  assert.equal(nearly.length, TRIGGER_KEY.length, "this case is only meaningful at equal length");
+  const { status } = await invoke("", nearly);
+  assert.equal(status, 401);
+  assert.equal(reachedOut.length, 0);
+});
+
+await check("no secret set locks everyone out rather than letting everyone in", async () => {
+  env.delete("BRIEF_TRIGGER_SECRET");
+  const { status, body } = await invoke();
+  assert.equal(status, 401);
+  assert.equal(sent.length, 0);
+  assert.equal(reachedOut.length, 0);
+  assert.ok(body.steps[0].detail.includes("BRIEF_TRIGGER_SECRET is not set"));
+});
+
+await check("an empty trigger key does not match an unset secret", async () => {
+  env.delete("BRIEF_TRIGGER_SECRET");
+  const { status } = await invoke("", "");
+  assert.equal(status, 401, "empty against empty must not read as a match");
+  assert.equal(reachedOut.length, 0);
+});
+
+await check("the trigger secret never appears in the answer", async () => {
+  const { body } = await invoke();
+  assert.ok(!JSON.stringify(body).includes(TRIGGER_KEY));
 });
 
 console.log(`\n${passed} checks passed\n`);
