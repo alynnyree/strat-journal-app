@@ -523,6 +523,77 @@ via the `TASKS.md` commit log.
     Trade" card beside the three pictures — never in his journal. Not
     built, because it is another thing on his screen and that is his call.
 
+94. **Somewhere to keep the recordings** (he asked 2026-09-14: *"how do
+    we take care of the storage issue?"*). **Status: NOT CONFIRMED EITHER
+    WAY — he has to look, because this session cannot reach his service
+    (the proxy refuses strat-journal-backend.onrender.com) and cannot see
+    what is set on Render.**
+
+    **State it honestly: "those three settings are not in my record" is not
+    "those three settings are missing."** My record may simply be
+    incomplete. He checks Render's own settings list for three names
+    beginning `R2_` and says yes or no. Thirty seconds, no guessing.
+
+    If missing: a free Cloudflare account, one bucket, one token, three
+    values pasted into Render. Checked 2026-09-14 rather than recalled —
+    the free tier is **10 GB of storage, free egress, and it does not
+    expire**, unlike Amazon's twelve-month one.
+
+    **TWO THINGS I DO NOT KNOW, said rather than papered over:**
+    1. **How big one recording actually is.** None has ever been made. A
+       chart barely moves between frames so it should compress very well,
+       but the 4.5MB used in the tests is a made-up placeholder and must
+       not be quoted as a measurement. The first real recording settles it.
+    2. **NOTHING EVER DELETES A RECORDING.** The pending record expires
+       after 30 days; the stored video itself is never removed once it is
+       attached to a trade. So storage only grows. Fine against 10 GB for a
+       long while, not fine for ever, and the failure mode is uploads
+       starting to be refused for a reason he would have no way to read.
+       Wants a sweep of recordings past some age — not built, not decided.
+
+95. **Recording on the PHONE — the hardest thing on the list, and the
+    worst fit for how we work** (he asked 2026-09-14: *"how do we build out
+    the recording for phone?"*). **Status: RESEARCHED, NOT STARTED. Needs
+    one answer from him before anything is costed.**
+
+    **THE QUESTION THAT DECIDES IT: is his laptop open and on the chart
+    when he takes a trade?** He charts on TradingView in Chrome and the
+    laptop recording is already built. If the laptop is open, phone
+    recording adds nothing and the honest advice is not to build it. Asked
+    outright rather than assumed.
+
+    Three routes if he does need it:
+
+    - **A real iPhone app.** The only fully automatic way — Apple forbids a
+      website from recording the screen, and real-device testing on this
+      project already confirmed Shortcuts cannot start or stop screen
+      recording either. A real installed app can, via ReplayKit, after one
+      permission.
+      **I cannot build, compile or test an iOS app from this session.** I
+      would write Swift and he would drive Xcode, and he is not a
+      developer. That is a bad fit and saying so is more use than costing
+      it out.
+      Also a closing window: checked 2026-09-14, **Xcode 26 is the last
+      version Apple will ship for Intel Macs**, and his is a 2019 Intel i7.
+      And with a free Apple ID the app stops working every 7 days and must
+      be reinstalled from Xcode — a weekly chore worse than the folder
+      chore that just cost him a day. $99/year removes it.
+    - **He records the session himself and the app slices it.** He starts
+      iPhone screen recording from Control Centre when he sits down, stops
+      it when done, shares it once to a Shortcut that uploads it. The
+      server notes when the recording started; every trade inside that
+      window gets a pointer to it WITH AN OFFSET, and the player seeks to
+      his entry. **No clipping and no video processing, so nothing new on
+      the server** — which matters, because Render's free tier will not
+      carry video work. Two taps a session, one large file instead of many
+      small ones.
+    - **Pictures only on the phone.** Three a trade, already built, plus
+      the full recording whenever the laptop is open.
+
+    My recommendation, for the record: laptop open → the third. Genuinely
+    trades from the phone alone → the second, which is a fraction of the
+    work of the first and has no weekly chore.
+
 88. **WHEN THE SERVICE IS BACK — the list to work through** (asked for
     2026-09-09: *"Let's make a list/notes of what needs to be fixed based
     off of the list you gave me... for when Render is back up and
