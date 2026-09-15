@@ -427,19 +427,19 @@
     <p class="standfirst">Six steps, in order. One database talking to one chat app. No AI in any of it.</p>
     <div class="masthead-meta">
       <span>Updated 15 Sep 2026</span>
-      <span>Step 3 of 6</span>
+      <span>Step 4 of 6</span>
       <span>Supabase &middot; Telegram</span>
     </div>
   </header>
 
   <div class="now">
     <p class="eyebrow">Where you stand</p>
-    <h2>Steps 1 and 2 are done. The app runs on its own.</h2>
-    <p>15 September 2026, 8:10am. One message arrived, on its own, with nothing from you. <strong>That was the last unproven link in the whole spine:</strong> the schedule calls the code, the code reads the database, the database answers, the message reaches your phone. Every part of it has now actually happened rather than being assumed.</p>
+    <h2>Three of six done. It speaks and it listens.</h2>
+    <p>15 September 2026. The brief arrived at 8:10 on its own, and by the afternoon the bot was saving what you send it. <strong>Both directions now work.</strong> It tells you something every morning without being asked, and it catches whatever you send it during the day.</p>
     <ol class="asks">
-      <li><strong>Step 3 is written and waiting.</strong> Paste one new function in, add one new password, run one command pointing Telegram at it, then message your bot. Details under step 3 below.</li>
-      <li>Your checklist holds <strong>five</strong> items. Your brief and your September plan both say six. No sixth has been invented. Tell Claude if one is missing.</li>
-      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>. Still outstanding, and your rules exist in only two places.</li>
+      <li><strong>Use it for a few days before building more.</strong> Send the bot whatever comes to mind. Step 4 is finding those thoughts again, and it will be a better feature once there is something real to search.</li>
+      <li>Your checklist holds <strong>five</strong> items. Your brief and your September plan both say six. No sixth has been invented. Say if one is missing.</li>
+      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>. Still outstanding.</li>
     </ol>
     <div class="heads-up" style="margin-top:4px">
       <b>The storage area this is sitting in is public</b>
@@ -511,27 +511,26 @@
         </div>
       </article>
 
-      <article class="step" data-state="current">
+      <article class="step" data-state="idle">
         <div class="step-num">03</div>
         <div class="step-head">
           <h3>Catching what you send</h3>
-          <span class="chip" data-tone="waiting">Written, not deployed</span>
+          <span class="chip" data-tone="done">Done &check;</span>
         </div>
         <div class="step-body">
           <p>Whatever you send the bot during the day gets saved to <code>thoughts</code>, word for word. Hashtags at the front become tags. A <code>!</code> at the front marks it private. The bot replies with a short confirmation so you know it landed.</p>
           <dl class="facts">
-            <div><dt>Written</dt><dd>93 checks pass. Verified against a real PostgreSQL 16: your punctuation survives, tags store as a list, and a failed save says so rather than staying quiet.</dd></div>
-            <div><dt>You do</dt><dd>Paste one new function in, turn off the JWT setting for it, add one new password, run one command pointing Telegram at it.</dd></div>
-            <div><dt>Your test</dt><dd>Send <code>#test hello</code> and see it in the <code>thoughts</code> table with the tag <code>test</code>. Send <code>!something</code> and see private set to true.</dd></div>
+            <div><dt>Proven</dt><dd><strong>15 Sep 2026. Webhook set, message sent, bot replied.</strong> Your words are saved exactly as typed, marks included.</dd></div>
+            <div><dt>How</dt><dd>93 checks, plus a run against a real PostgreSQL 16 confirming your punctuation survives and tags store as a list.</dd></div>
           </dl>
         </div>
       </article>
 
-      <article class="step" data-state="idle">
+      <article class="step" data-state="current">
         <div class="step-num">04</div>
         <div class="step-head">
           <h3>Finding it again</h3>
-          <span class="chip" data-tone="idle">Not started</span>
+          <span class="chip" data-tone="waiting">Next, when you are ready</span>
         </div>
         <div class="step-body">
           <p>A <code>/find</code> command. You send <code>/find schwab</code> and it sends back every thought with that word in it. Plain word matching, nothing clever.</p>
