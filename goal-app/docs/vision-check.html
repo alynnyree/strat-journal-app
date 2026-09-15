@@ -1,0 +1,564 @@
+<title>Your Vision, Measured</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+  :root {
+    --ground:      #F1F4F3;
+    --surface:     #FFFFFF;
+    --surface-sunk:#E8EDEC;
+    --ink:         #131E1D;
+    --ink-soft:    #566361;
+    --ink-faint:   #8A9795;
+    --line:        #D6DEDC;
+    --line-strong: #B8C4C2;
+    --accent:      #0E6B68;
+    --accent-wash: #DCEBE9;
+    --wait:        #96600C;
+    --wait-wash:   #F6E9D2;
+
+    --step-0: 0.78rem;
+    --step-1: 0.875rem;
+    --step-2: 1rem;
+    --step-3: 1.25rem;
+    --step-4: 1.6rem;
+    --step-5: 2.1rem;
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0D1514;
+      --surface:     #15201F;
+      --surface-sunk:#101A19;
+      --ink:         #E2EAE8;
+      --ink-soft:    #97A7A4;
+      --ink-faint:   #6C7B79;
+      --line:        #253432;
+      --line-strong: #374846;
+      --accent:      #52C0B6;
+      --accent-wash: #10302E;
+      --wait:        #D9A055;
+      --wait-wash:   #2C2317;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0D1514;
+    --surface:     #15201F;
+    --surface-sunk:#101A19;
+    --ink:         #E2EAE8;
+    --ink-soft:    #97A7A4;
+    --ink-faint:   #6C7B79;
+    --line:        #253432;
+    --line-strong: #374846;
+    --accent:      #52C0B6;
+    --accent-wash: #10302E;
+    --wait:        #D9A055;
+    --wait-wash:   #2C2317;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--step-2);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead { display: flex; flex-direction: column; gap: 14px; }
+
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: var(--step-5);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+  }
+
+  .standfirst {
+    font-family: var(--serif);
+    font-size: var(--step-3);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 34ch;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    color: var(--ink-faint);
+  }
+
+  /* ------------------------------------------------------------- now */
+
+  .now {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--wait);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .now h2 {
+    font-size: var(--step-3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .now p { margin: 0; color: var(--ink-soft); }
+  .now strong { color: var(--ink); font-weight: 600; }
+
+  .asks {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .asks li {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 10px;
+    align-items: start;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .asks li::before {
+    content: counter(list-item);
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 600;
+    color: var(--wait);
+    background: var(--wait-wash);
+    text-align: center;
+    line-height: 1.5rem;
+    height: 1.5rem;
+  }
+
+  /* ------------------------------------------------------------ steps */
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+
+  .section-head { display: flex; flex-direction: column; gap: 6px; }
+
+  .section-head h2 {
+    font-size: var(--step-4);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .section-head p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: var(--step-1);
+    max-width: 62ch;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 2px; }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: 2.25rem 1fr;
+    gap: 4px 16px;
+  }
+
+  .step + .step { border-top: none; }
+
+  .step[data-state="current"] {
+    border-color: var(--line-strong);
+    border-left: 3px solid var(--wait);
+    padding-left: 20px;
+  }
+
+  .step[data-state="later"] { background: var(--surface-sunk); }
+
+  .step-num {
+    grid-row: 1 / span 3;
+    font-family: var(--mono);
+    font-size: var(--step-1);
+    font-weight: 600;
+    color: var(--ink-faint);
+    padding-top: 0.15em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step[data-state="current"] .step-num { color: var(--wait); }
+
+  .step-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+  }
+
+  .step-head h3 {
+    font-size: var(--step-3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .chip[data-tone="done"]    { color: var(--accent); background: var(--accent-wash); }
+  .chip[data-tone="waiting"] { color: var(--wait);   background: var(--wait-wash); }
+  .chip[data-tone="idle"]    { color: var(--ink-faint); border-color: var(--line); }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 8px;
+  }
+
+  .step-body p { margin: 0; color: var(--ink-soft); max-width: 62ch; }
+
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .facts > div {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: 4px 14px;
+    align-items: start;
+  }
+
+  .facts dt {
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-top: 0.25em;
+  }
+
+  .facts dd {
+    margin: 0;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .facts dd strong { color: var(--ink); font-weight: 600; }
+
+  .heads-up {
+    background: var(--surface-sunk);
+    border-left: 2px solid var(--line-strong);
+    padding: 12px 14px;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .heads-up b {
+    display: block;
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--surface-sunk);
+    padding: 1px 5px;
+    color: var(--ink);
+  }
+
+  .step[data-state="later"] code { background: var(--surface); }
+
+  /* -------------------------------------------------------- plain lists */
+
+  .rows { display: flex; flex-direction: column; gap: 0; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1.4rem 1fr;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+
+  .row:first-child { border-top: 1px solid var(--line); }
+
+  .tick {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: var(--step-1);
+    color: var(--accent);
+    line-height: 1.55;
+  }
+
+  .row-text { font-size: var(--step-1); }
+  .row-text b { font-weight: 600; }
+  .row-text span { display: block; color: var(--ink-soft); }
+
+  .locked .tick { color: var(--ink-faint); }
+
+  /* ------------------------------------------------------------ pull */
+
+  .pull {
+    font-family: var(--serif);
+    font-size: var(--step-3);
+    line-height: 1.5;
+    color: var(--ink);
+    border-top: 2px solid var(--accent);
+    border-bottom: 1px solid var(--line);
+    padding-block: 18px;
+    margin: 0;
+    max-width: 44ch;
+  }
+
+  /* --------------------------------------------------------- glossary */
+
+  .glossary {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .glossary > div {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 4px 16px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .glossary > div:first-child { border-top: 1px solid var(--line); }
+
+  .glossary dt {
+    font-family: var(--mono);
+    font-size: var(--step-1);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .glossary dd {
+    margin: 0;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    color: var(--ink-faint);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 560px) {
+    :root { --step-5: 1.75rem; --step-4: 1.4rem; --step-3: 1.1rem; }
+    .page { padding-block: 30px 56px; gap: 38px; }
+    .step { grid-template-columns: 1.75rem 1fr; padding: 18px 16px; gap: 4px 12px; }
+    .step[data-state="current"] { padding-left: 14px; }
+    .facts > div { grid-template-columns: 1fr; gap: 2px; }
+    .glossary > div { grid-template-columns: 1fr; gap: 2px; }
+    .now { padding: 18px 16px; }
+  }
+</style>
+<style>
+  .piece { background: var(--surface); border: 1px solid var(--line); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .piece + .piece { border-top: none; }
+  .piece[data-verdict="now"]  { border-left: 3px solid var(--accent); padding-left: 20px; }
+  .piece[data-verdict="ai"]   { border-left: 3px solid var(--wait); padding-left: 20px; }
+  .piece-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+  .piece-head h3 { font-size: var(--step-3); font-weight: 600; letter-spacing: -0.01em; }
+  .said { font-family: var(--serif); font-size: var(--step-2); line-height: 1.5; color: var(--ink-soft);
+          border-left: 2px solid var(--line-strong); padding-left: 12px; }
+  .verdict { font-family: var(--mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em;
+             text-transform: uppercase; padding: 3px 8px; white-space: nowrap; }
+  .verdict[data-v="now"]  { color: var(--accent); background: var(--accent-wash); }
+  .verdict[data-v="rule"] { color: var(--accent); background: var(--accent-wash); }
+  .verdict[data-v="ai"]   { color: var(--wait);   background: var(--wait-wash); }
+  .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 2px; }
+  .tally > div { background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; }
+  .tally .n { font-family: var(--mono); font-size: var(--step-5); font-weight: 600; line-height: 1;
+              font-variant-numeric: tabular-nums; display: block; margin-bottom: 6px; }
+  .tally .n[data-v="now"]  { color: var(--accent); }
+  .tally .n[data-v="ai"]   { color: var(--wait); }
+  .tally p { margin: 0; font-size: var(--step-1); color: var(--ink-soft); }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Goal Execution App</p>
+    <h1>Your Vision, Measured</h1>
+    <p class="standfirst">Seven things you described. What this can honestly do, what it can do with rules you set, and the one piece that cannot be done without AI.</p>
+    <div class="masthead-meta">
+      <span>15 Sep 2026</span>
+      <span>Your words, in full</span>
+      <span>No AI in the app today</span>
+    </div>
+  </header>
+
+  <div class="now">
+    <p class="eyebrow">The short answer</p>
+    <h2>Most of it, yes. One piece, no, not without AI.</h2>
+    <p>You described seven things. <strong>One already works.</strong> <strong>Three more need nothing but building</strong>, with rules you set rather than judgement you cannot check. <strong>Two are half and half.</strong> <strong>One genuinely cannot be done</strong> without something that understands what your words mean.</p>
+    <p>That last one is real and I am not going to soften it. But it is one of seven, not the whole thing, and your own plan always put that decision at the end rather than the start.</p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>The tally</h2>
+    </div>
+    <div class="tally">
+      <div><span class="n" data-v="now">1</span><p>Works today</p></div>
+      <div><span class="n" data-v="now">3</span><p>Buildable, no AI</p></div>
+      <div><span class="n">2</span><p>Half now, half AI</p></div>
+      <div><span class="n" data-v="ai">1</span><p>Needs AI outright</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Piece by piece</h2>
+      <p>Your words first, then what is actually true about each.</p>
+    </div>
+
+    <div class="steps">
+
+      <article class="piece" data-verdict="now">
+        <div class="piece-head"><h3>Speaking thoughts in</h3><span class="verdict" data-v="now">Works today</span></div>
+        <p class="said">"You can speak or type them into a shortcut on your phone."</p>
+        <p>Done. Double-tap the back of your phone, tap the keyboard microphone, speak, send. Saved word for word with the time on it. Nothing further needed.</p>
+      </article>
+
+      <article class="piece">
+        <div class="piece-head"><h3>Filing thoughts under the right goal</h3><span class="verdict" data-v="rule">Half</span><span class="verdict" data-v="ai">Half</span></div>
+        <p class="said">"The app sections or categorises your thoughts and ideas off into the overall life goal that it aligns with."</p>
+        <p><strong>With rules you set: yes.</strong> You already tag with hashtags. You decide <code>#biz</code> means the automation business and <code>#trading</code> means the trading app, and the app files them accordingly. It can never file something wrongly, because it never guesses.</p>
+        <p><strong>Working it out for itself: needs AI.</strong> Reading "restaurants might have a POS problem" and knowing which goal that serves means understanding the sentence.</p>
+      </article>
+
+      <article class="piece" data-verdict="ai">
+        <div class="piece-head"><h3>Turning an idea into steps</h3><span class="verdict" data-v="ai">Needs AI</span></div>
+        <p class="said">"It gives you steps to completing that thought or idea, therefore you can achieve your goal."</p>
+        <p><strong>This one has no version without AI, and I will not pretend otherwise.</strong> No rule turns "restaurants might have a double entry problem" into a plan. That requires knowing what a restaurant is, what the problem means, and what a sensible first move would be.</p>
+        <p>It is also the piece most likely to disappoint even when built. Generated steps read well and are often not what you would actually do. Worth going in with that expectation.</p>
+      </article>
+
+      <article class="piece" data-verdict="now">
+        <div class="piece-head"><h3>Asking what got done</h3><span class="verdict" data-v="rule">No AI needed</span></div>
+        <p class="said">"It asks you at the end of the day what tasks you have completed."</p>
+        <p>That is step 6, already in your plan. The bot asks in the evening, you answer in your own words, your answer is saved exactly as typed.</p>
+      </article>
+
+      <article class="piece" data-verdict="now">
+        <div class="piece-head"><h3>Rolling unfinished work forward</h3><span class="verdict" data-v="rule">No AI needed</span></div>
+        <p class="said">"If you haven't completed these tasks, if they are important, they will be rolled over to the next day's tasks."</p>
+        <p>Straightforward, as long as <em>you</em> mark what is important rather than asking the app to guess. Your database already has a <code>postpone_count</code> column, so it can also tell you what you keep putting off, which is often the more useful thing.</p>
+      </article>
+
+      <article class="piece">
+        <div class="piece-head"><h3>Building the daily list</h3><span class="verdict" data-v="rule">Half</span><span class="verdict" data-v="ai">Half</span></div>
+        <p class="said">"It puts tasks on the daily to do list for you based off your goals and how far along you are in your journey."</p>
+        <p><strong>Ordering what is already there: yes, and better than AI would.</strong> Your database knows your ultimate goal, your projects, and exactly which roadmap step you are on. Work serving the step you are on now outranks work that does not. That is a fact, not an opinion, and you can correct it by moving the step.</p>
+        <p><strong>Inventing tasks you have not thought of: needs AI.</strong></p>
+      </article>
+
+      <article class="piece">
+        <div class="piece-head"><h3>The daily briefing, and the traps</h3><span class="verdict" data-v="rule">Half</span><span class="verdict" data-v="ai">Half</span></div>
+        <p class="said">"A daily briefing of things to do and things not to do that you usually fall into the trap of doing that misguide you from your path."</p>
+        <p><strong>You are already doing this and it works.</strong> Your six trading rules are precisely a list of traps you fall into, written by you, read back every morning. "Don't look at P&L" is that exact thing. The same pattern extends to the rest of your life with no AI whatsoever: you write the traps, the app puts them in front of you daily.</p>
+        <p><strong>Spotting traps you have not noticed yourself: needs AI.</strong> That means watching your behaviour over months and finding a pattern.</p>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>The honest recommendation</h2>
+    </div>
+    <blockquote class="pull">Build everything that needs no AI first. Not as a stopgap. Because for deciding what matters to you today, something you can check beats something that sounds confident.</blockquote>
+    <div class="rows">
+      <div class="row"><span class="tick">1</span><span class="row-text"><b>You get a working system in weeks, not months</b><span>Every no-AI piece is ordinary building. Nothing experimental, nothing that might not pan out.</span></span></div>
+      <div class="row"><span class="tick">2</span><span class="row-text"><b>You find out what you actually want</b><span>Right now the AI half is a guess about your own future behaviour. After a month of real use it stops being a guess.</span></span></div>
+      <div class="row"><span class="tick">3</span><span class="row-text"><b>The AI version is still there afterwards</b><span>Your database already has <code>is_private</code> and <code>ai_processed</code> waiting. Switching it on later is a small change, not a rebuild. Your brief planned it that way.</span></span></div>
+      <div class="row"><span class="tick">4</span><span class="row-text"><b>Nothing you build now is wasted</b><span>The AI version reads the same tables, the same goals, the same roadmap. It sits on top rather than replacing.</span></span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>What it will and will not be</h2>
+      <p>So there is no ambiguity later.</p>
+    </div>
+    <div class="rows">
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>A notes app that never loses a thought</b><span>Speak it, it is kept, tagged, findable.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>A daily brief built from your own structure</b><span>Your rules, your traps, and the work that serves the step you are actually on.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>An honest record of what you did and did not do</b><span>Including what you keep postponing, which you may not enjoy reading.</span></span></div>
+      <div class="row locked"><span class="tick">&times;</span><span class="row-text"><b>Not, without AI, something that thinks for you</b><span>It will not read an idea and work out the plan. That is the one piece with no substitute, and it is a decision waiting at the end of the build rather than a limitation of it.</span></span></div>
+    </div>
+  </section>
+
+  <footer>
+    Private project. No AI request leaves this app today, and a test fails if one is ever added.<br>
+    Source: goal-app/docs/vision-check.html
+  </footer>
+
+</div>
