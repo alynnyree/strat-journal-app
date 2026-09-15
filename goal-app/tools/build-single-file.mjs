@@ -86,7 +86,10 @@ for (const fn of FUNCTIONS) {
       console.error(current === null ? `MISSING: ${shown}` : `OUT OF DATE: ${shown}`);
       stale += 1;
     } else {
-      console.log(`up to date: ${shown}`);
+      // --check prints the line count too, deliberately. Quoting a number from
+      // an earlier build once sent him hunting for a difference that was mine,
+      // not his. Now every verification run shows the number as it stands.
+      console.log(`up to date: ${shown} (${editorLines(built)} lines, marker "${fn.marker}")`);
     }
     continue;
   }
