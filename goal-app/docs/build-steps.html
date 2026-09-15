@@ -426,20 +426,20 @@
     <h1>Build Order</h1>
     <p class="standfirst">Six steps, in order. One database talking to one chat app. No AI in any of it.</p>
     <div class="masthead-meta">
-      <span>Updated 14 Sep 2026</span>
-      <span>Step 2 of 6</span>
+      <span>Updated 15 Sep 2026</span>
+      <span>Step 3 of 6</span>
       <span>Supabase &middot; Telegram</span>
     </div>
   </header>
 
   <div class="now">
     <p class="eyebrow">Where you stand</p>
-    <h2>Step 1 is done. Step 2 is set and waits for the morning.</h2>
-    <p>14 September 2026. Your six rules and five checklist items were read out of your own database and delivered to Telegram, in your wording, unaltered. Every part of the spine now works: the schedule calls the code, the code reads the database, the database answers, the message reaches your phone. <strong>That is the whole app in miniature, and it is proven rather than assumed.</strong></p>
+    <h2>Steps 1 and 2 are done. The app runs on its own.</h2>
+    <p>15 September 2026, 8:10am. One message arrived, on its own, with nothing from you. <strong>That was the last unproven link in the whole spine:</strong> the schedule calls the code, the code reads the database, the database answers, the message reaches your phone. Every part of it has now actually happened rather than being assumed.</p>
     <ol class="asks">
-      <li><strong>Step 2 next: the schedule.</strong> There is one real decision inside it about clocks changing twice a year. It is set out under step 2 below and it is yours to make, not mine.</li>
+      <li><strong>Step 3 is written and waiting.</strong> Paste one new function in, add one new password, run one command pointing Telegram at it, then message your bot. Details under step 3 below.</li>
       <li>Your checklist holds <strong>five</strong> items. Your brief and your September plan both say six. No sixth has been invented. Tell Claude if one is missing.</li>
-      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>. Still outstanding, and now more pressing, because your rules exist in only two places.</li>
+      <li>Make an empty, private storage area on GitHub called <code>goal-execution-app</code>. Still outstanding, and your rules exist in only two places.</li>
     </ol>
     <div class="heads-up" style="margin-top:4px">
       <b>The storage area this is sitting in is public</b>
@@ -476,6 +476,10 @@
         </div>
         <div class="step-body">
           <p>Reads your trading rules and the <code>trading_open</code> items from your checklist, puts them into one message, and sends it to you on Telegram. Your wording is printed exactly as stored. Nothing is reordered or improved.</p>
+          <div class="heads-up">
+            <b>A different lock, and a stranger check</b>
+            Telegram cannot send the password the schedule uses, so this function uses Telegram's own: a secret handed over when the webhook is registered, which Telegram returns on every message. And anyone who finds your bot can message it, so a message from any chat but yours is dropped without being saved and without a reply, because replying would tell them the bot is listening.
+          </div>
           <dl class="facts">
             <div><dt>Proven</dt><dd><strong>14 Sep 2026. The message arrived on his phone.</strong> Six rules numbered 1 to 6 and five checklist items with empty boxes, in his own words.</dd></div>
             <div><dt>How</dt><dd>43 checks against the code, then the schema run against a real PostgreSQL 16, then his real rows fed through the real message code and compared character for character.</dd></div>
@@ -488,18 +492,17 @@
         </div>
       </article>
 
-      <article class="step" data-state="current">
+      <article class="step" data-state="idle">
         <div class="step-num">02</div>
         <div class="step-head">
           <h3>The schedule</h3>
-          <span class="chip" data-tone="waiting">Set, unproven</span>
+          <span class="chip" data-tone="done">Done &check;</span>
         </div>
         <div class="step-body">
           <p>Sends the brief at 8:10 every morning without you asking. It fires at 12:10 and 13:10 GMT and the code throws away whichever one is not your 8:10, so the clocks changing needs nothing from you, ever.</p>
           <dl class="facts">
             <div><dt>Verified</dt><dd>Walked across 365 consecutive days: every one sends exactly once, never twice, never none. Both clock-change days checked by name. The job itself read back out of the database rather than off a form: switched on, both headers present, the key exactly 64 valid characters, twenty second timeout.</dd></div>
-            <div><dt>Unproven</dt><dd><strong>The scheduler has never once called the function.</strong> Every test so far was a typed command. That link is what tomorrow morning tests.</dd></div>
-            <div><dt>Your test</dt><dd>One message at 8:10 means done. Two an hour apart means the older code is still deployed. None means the scheduler could not reach it, and the job keeps a history that will say so.</dd></div>
+            <div><dt>Proven</dt><dd><strong>15 Sep 2026, 8:10am. One message, on its own.</strong> The scheduler had never once called the function before that moment. It has now.</dd></div>
           </dl>
           <div class="heads-up">
             <b>Settled: the clocks</b>
@@ -508,17 +511,18 @@
         </div>
       </article>
 
-      <article class="step" data-state="idle">
+      <article class="step" data-state="current">
         <div class="step-num">03</div>
         <div class="step-head">
           <h3>Catching what you send</h3>
-          <span class="chip" data-tone="idle">Not started</span>
+          <span class="chip" data-tone="waiting">Written, not deployed</span>
         </div>
         <div class="step-body">
           <p>Whatever you send the bot during the day gets saved to <code>thoughts</code>, word for word. Hashtags at the front become tags. A <code>!</code> at the front marks it private. The bot replies with a short confirmation so you know it landed.</p>
           <dl class="facts">
-            <div><dt>Your test</dt><dd>Send <code>#test hello</code> and see it saved with the tag <code>test</code>. Send <code>!something</code> and see it saved with private set to true.</dd></div>
-            <div><dt>Note</dt><dd>This is the step where switching to the Supabase tool on your Mac starts paying for itself, because we will change this one repeatedly while getting it right.</dd></div>
+            <div><dt>Written</dt><dd>93 checks pass. Verified against a real PostgreSQL 16: your punctuation survives, tags store as a list, and a failed save says so rather than staying quiet.</dd></div>
+            <div><dt>You do</dt><dd>Paste one new function in, turn off the JWT setting for it, add one new password, run one command pointing Telegram at it.</dd></div>
+            <div><dt>Your test</dt><dd>Send <code>#test hello</code> and see it in the <code>thoughts</code> table with the tag <code>test</code>. Send <code>!something</code> and see private set to true.</dd></div>
           </dl>
         </div>
       </article>
