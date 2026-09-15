@@ -564,11 +564,25 @@ via the `TASKS.md` commit log.
 
     Three routes if he does need it:
 
-    - **A real iPhone app.** The only fully automatic way — Apple forbids a
-      website from recording the screen, and real-device testing on this
-      project already confirmed Shortcuts cannot start or stop screen
-      recording either. A real installed app can, via ReplayKit, after one
-      permission.
+    - **A real iPhone app. NOT fully automatic, and I said it was.**
+      Corrected 2026-09-15: I put "fully automatic on the phone, exactly
+      what you asked for" in a table for him, and it is not true. Apple
+      requires a USER TAP to begin recording anything outside the app
+      itself — `RPSystemBroadcastPickerView` has to be shown and pressed.
+      The known workaround reaches into that view and presses its button in
+      code, which uses a private call and invites rejection.
+      **So the app also starts with one tap per session, exactly like him
+      starting the recording himself from Control Centre.**
+
+      What the app still buys over doing it by hand: the upload happens on
+      its own, and each trade is cut out on its own. What it costs: a
+      separate codebase in a language nothing else here uses, a broadcast
+      extension with a hard 50MB memory ceiling that is notoriously
+      awkward, signing, and **a build I cannot compile or test from this
+      session** — so he drives Xcode and reads its errors back to me.
+      **All of that, to save one share action per session.** Which makes
+      "how long would it take" the wrong question, and saying so is more
+      use to him than a number.
       **I cannot build, compile or test an iOS app from this session.** I
       would write Swift and he would drive Xcode, and he is not a
       developer. That is a bad fit and saying so is more use than costing
