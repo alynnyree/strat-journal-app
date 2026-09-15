@@ -11,12 +11,16 @@ covers the step 1 files.
 
 ```
 goal-app/
-  supabase/functions/_shared/brief.ts        the wording and the layout of the message
-  supabase/functions/morning-brief/index.ts  the piece that runs: reads, formats, sends
+  supabase/functions/_shared/brief.ts        the wording and layout of the morning message
+  supabase/functions/_shared/thought.ts      reading a message he sends the bot
+  supabase/functions/_shared/db.ts           talking to the database, proving who is calling
+  supabase/functions/morning-brief/index.ts  sends the brief: reads, formats, sends
+  supabase/functions/telegram-webhook/index.ts  catches what he sends the bot and saves it
   sql/check-schema.sql                       a read-only query that prints your column names
   tests/brief-format.test.ts                 checks the message, no internet needed
   tests/morning-brief.test.ts                runs the whole thing with fake answers standing in
-  dist/morning-brief.single.ts               GENERATED. The one file you paste into Supabase
+  dist/morning-brief.single.ts               GENERATED. Paste this into Supabase
+  dist/telegram-webhook.single.ts            GENERATED. Paste this into Supabase
   tools/build-single-file.mjs                makes that file from the two above it
   tools/check-all.sh                         runs every check in one go
   .env.example                               a template. Copy to .env. Never commit .env
@@ -73,6 +77,44 @@ said. Ask for the answer as a "dry run" to see the message without sending it:
 ```
 
 A dry run builds the message and sends nothing.
+
+## Two locks, because two different callers
+
+`morning-brief` is set off by the schedule, which can send whatever header we
+tell it to. So it carries `x-trigger-key` and is checked against
+`BRIEF_TRIGGER_SECRET`.
+
+`telegram-webhook` is called by TELEGRAM, which will not send our header. So it
+uses Telegram's own mechanism instead: a secret handed over when the webhook is
+registered, which Telegram returns on every request in the header
+`X-Telegram-Bot-Api-Secret-Token`. Checked against Telegram's own documentation
+(1-256 characters, only A-Z a-z 0-9 _ and -), not assumed.
+
+Both compare with `secretsMatch`, which reads every character even after it
+knows the answer and treats an unset secret as matching nothing.
+
+Three more rules the webhook obeys, each with a check that fails if it stops:
+
+- **A stranger's message is never saved and never replied to.** Anyone who
+  finds the bot can message it. The chat is compared against the one in
+  `app_settings`, and anything else is dropped silently, because a reply tells
+  a stranger the bot is listening.
+- **The answer is ALWAYS 200 once Telegram has proved itself**, even when
+  something failed inside. Telegram repeats anything that is not 2xx and
+  eventually switches the webhook off. What went wrong is reported to him in
+  the reply message instead, where he will see it.
+- **A failed save says "NOT saved"** with the database's own words. Silence
+  there would let him believe a thought had landed when it had not.
+
+## The duplicated database code
+
+`readTable` and the key finding live in BOTH `morning-brief/index.ts` and
+`_shared/db.ts`. That is deliberate: morning-brief is deployed and working, and
+re-pasting it would cost him a deploy for no benefit.
+
+`tests/no-drift.test.ts` reads both files and fails if those functions stop
+matching character for character. When morning-brief next changes for its own
+reasons, it switches to importing them and both the copy and that test go away.
 
 ## Calling it, and why the door is locked the way it is
 

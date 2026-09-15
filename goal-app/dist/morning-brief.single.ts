@@ -1,7 +1,7 @@
 // GENERATED FILE. DO NOT EDIT THIS ONE.
 //
-// This is the two real files joined together so it can be pasted into the
-// Supabase website in one go. The originals are:
+// This is the real files for "morning-brief" joined together so it can be pasted
+// into the Supabase website in one go. The originals are:
 //
 //   goal-app/supabase/functions/_shared/brief.ts
 //   goal-app/supabase/functions/morning-brief/index.ts
