@@ -385,6 +385,29 @@ via the `TASKS.md` commit log.
     store applies on upload, so the next submission does not rediscover
     them one attempt at a time.
 
+    **CORRECTED 2026-09-16 — "it updates itself" is only half true, and I
+    said the whole thing.** I told him "after that it updates itself and you
+    never touch a folder again." The FIRST half is true: once a version is
+    in the store, Chrome fetches it on its own. The second half is not.
+    Getting a version INTO the store still needs HIS Google account — I
+    cannot upload, so every future version needs him to download the
+    package, open the dashboard, upload it and submit it, then wait for
+    review.
+
+    He found this himself: his card reads **1.3**, which is right, because
+    1.3 is what Google approved. **1.4 was built and merged and has never
+    been sent to the store at all.** Nothing was going to deliver it.
+
+    The win is real but smaller than I described: uploading a package on the
+    Package tab is about two minutes against the afternoon the folder dance
+    cost him, and he never installs by hand again. It is not "never touch
+    it again", and saying so set him up to expect a version that was never
+    coming.
+
+    (A programmatic publish exists — the store has an interface for it —
+    but it needs him to create credentials in Google Cloud, which is a worse
+    chore than a two-minute upload. Raised, not recommended.)
+
     **WHAT REMAINS, and it is his to do when the approval email arrives:**
     remove the hand-loaded copy FIRST (two copies both polling means double
     pictures), install from the store link, and put the address and App Key
