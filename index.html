@@ -3949,7 +3949,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-16 18:30';
+const APP_BUILD = '2026-09-16 18:50';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -4440,12 +4440,24 @@ function brokerNote(text){
 // one for this without asking. It belongs in the Details text, which is
 // written to be sent to me and is only opened when I ask for it. If it
 // never fires, he never needs to know it exists.
+// Anything already written down under the OLD rule is read under the new
+// one, so twenty-one rounding artefacts already on his trades stop being
+// reported as arguments about his money. Nothing stored is rewritten: if
+// the rule is ever tightened again, they come back, which is right.
+const DISAGREEMENT_NEAR = { pnlPercent: 0.05 };
+function reallyDisagrees(key, kept, offered){
+  if(typeof kept !== 'number' || typeof offered !== 'number') return kept !== offered;
+  return Math.abs(kept - offered) >= (DISAGREEMENT_NEAR[key] || 0.005);
+}
+
 function moneyDisagreements(){
   const out = [];
   for(const t of loadTrades()){
     if(!t.moneyDisagreement) continue;
     for(const key of Object.keys(t.moneyDisagreement)){
-      out.push({ trade: t, key, ...t.moneyDisagreement[key] });
+      const d = t.moneyDisagreement[key];
+      if(!d || !reallyDisagrees(key, d.kept, d.offered)) continue;
+      out.push({ trade: t, key, ...d });
     }
   }
   return out;
@@ -7556,8 +7568,20 @@ function refreshTradeFacts(saved, fresh){
   // trust the numbers.
   const MONEY = ['optEntry', 'optExit', 'contracts', 'pnlDollar', 'pnlPercent',
                  'fees', 'entryFees', 'exitFees', 'pnlNet', 'winLoss'];
-  const near = (a, b) => typeof a === 'number' && typeof b === 'number'
-    ? Math.abs(a - b) < 0.005 : a === b;
+  // TWO FIGURES CANNOT DISAGREE MORE FINELY THAN THE COARSER ONE IS
+  // WRITTEN. Half a cent is right for money and wrong for the percentage,
+  // which this app ROUNDS TO ONE DECIMAL PLACE in one of the two places it
+  // works it out and leaves whole in the other. So every trade reported
+  // 16.666666666666682 against 16.7 -- the same number, written twice --
+  // and twenty-one of them were on his screen as money disagreements.
+  //
+  // That is worse than clutter. This list exists so a REAL argument about
+  // his money cannot be missed, and a page of rounding noise is how it gets
+  // missed. Half of one decimal place for the percentage; money untouched
+  // at half a cent, where two cents is a genuine difference.
+  const NEAR_ENOUGH = { pnlPercent: 0.05 };
+  const near = (a, b, key) => typeof a === 'number' && typeof b === 'number'
+    ? Math.abs(a - b) < (NEAR_ENOUGH[key] || 0.005) : a === b;
   for(const key of MONEY){
     const incoming = fresh[key];
     if(incoming === undefined || incoming === null) continue;
@@ -7568,7 +7592,7 @@ function refreshTradeFacts(saved, fresh){
       saved[key] = incoming; changed = true;      // filling in a blank is not a change of mind
       continue;
     }
-    if(near(saved[key], incoming)) continue;
+    if(near(saved[key], incoming, key)) continue;
     // A real disagreement about money. Kept, never applied.
     saved.moneyDisagreement = saved.moneyDisagreement || {};
     if(saved.moneyDisagreement[key] === undefined){
