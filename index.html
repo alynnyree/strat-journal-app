@@ -3935,6 +3935,30 @@ function noteClassifyTry(id){
 // would have been quietly filed as a rebuild -- overwriting the reason the
 // Checks page prints for something else entirely. A store that has to be
 // edited to hold one more thing will be got wrong the first time it is.
+// WHICH COPY OF THIS APP HE IS ACTUALLY RUNNING.
+//
+// On 2026-09-16 he reloaded after an update, read a message back to me, and
+// the wording told me he was still on the OLD copy -- the update had gone
+// out nineteen minutes earlier and his phone was serving what it already
+// had. I worked that out by noticing a missing phrase, which is not a way
+// to run a project: without that phrase I would have gone hunting a fault
+// that had already been fixed.
+//
+// Two independent answers, because either alone can mislead. The stamp
+// below is written by hand and is exact when I remember it; the file's own
+// date is automatic and cannot be forgotten, but a page served without one
+// reports the time right now and so always looks fresh. Together they
+// settle it, and if they disagree THAT is worth knowing too.
+const APP_BUILD = '2026-09-16 18:30';
+function appBuildLine(){
+  let fileDate = 'not reported by this browser';
+  try{
+    const d = new Date(document.lastModified);
+    if(!isNaN(d.getTime())) fileDate = d.toLocaleString();
+  }catch(e){}
+  return `app build ${APP_BUILD} · file dated ${fileDate}`;
+}
+
 const lastProblems = {};          // name -> {text, at}
 function noteProblem(which, text){
   const entry = { text: String(text).slice(0, 200), at: Date.now() };
@@ -5221,6 +5245,9 @@ function techText(){
   const sp = readProblem('shots'), vp = readProblem('videos');
   const when = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
   return [
+    // FIRST, before anything else. Everything below it is only worth
+    // reading once we both know which copy of the app produced it.
+    appBuildLine(),
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
     `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
     `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,

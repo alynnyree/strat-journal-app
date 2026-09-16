@@ -202,6 +202,24 @@ const { launch, serve } = require('./browser.js');
   }
 
   // ------------------------------------------------------------------
+  console.log('\n--- which copy of the app he is running ---');
+  {
+    // He reloaded after an update, read a message back to me, and only the
+    // WORDING told me he was still on the old copy. Without that accident I
+    // would have gone hunting a fault that was already fixed.
+    const { p, errors, close } = await phone({});
+    const txt = await p.evaluate(() => techText());
+    const line = (txt.split('\n')[0] || '');
+    check('the very first line says which copy this is: ' + line, /^app build /.test(line));
+    check('with a stamp I set by hand', /app build \d{4}-\d{2}-\d{2}/.test(line));
+    check("and the file's own date, which cannot be forgotten", /file dated .+/.test(line));
+    check('it is FIRST, above everything it would otherwise explain',
+      txt.indexOf('app build') === 0);
+    check('nothing threw', errors.length === 0);
+    await close();
+  }
+
+  // ------------------------------------------------------------------
   console.log('\n--- before any check has run ---');
   {
     const ctx = await b.newContext({ viewport:{width:390,height:844} });
