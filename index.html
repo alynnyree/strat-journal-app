@@ -7898,24 +7898,56 @@ async function matchPendingScreenshots(){
   const url = backendUrl();
   if(!url) return;
   let screenshots;
-  try{
+  // A SERVICE THAT IS WAKING UP IS NOT A SERVICE THAT IS BROKEN, and from
+  // here they look identical: both are a request that does not come back.
+  // His hosting puts the service to sleep when nothing has talked to it for
+  // a while, and the first request afterwards is the one that pays for
+  // waking it -- so a check the moment he opens the app can fail while
+  // nothing is wrong at all. He read one of those as a fault, and so did I.
+  //
+  // So a failure is asked again, once, after a few seconds. Only a SECOND
+  // failure is worth telling him about, and it says it was tried twice so
+  // that "it did not answer once" is never reported as "it is down". A
+  // success is never retried, so this costs nothing on the ordinary path.
+  const askOnce = async () => {
     // slim=1 leaves the pictures themselves out. A server too old to
     // understand it ignores the request and answers exactly as before,
     // which still works -- each picture simply arrives with its image
     // already attached and nothing extra is asked for.
     const r = await fetch(url+'/media/pending?slim=1&key='+encodeURIComponent(appKey()));
     if(!r.ok){
-      // Both of these used to return in silence, so "my picture never
-      // arrived" and "the app never got as far as asking" looked
-      // identical. They are different faults with different fixes.
-      noteProblem('shotsSeen', r.status === 403
-        ? 'Could not ask for waiting pictures: the App Key was not accepted.'
-        : 'Could not ask for waiting pictures (' + r.status + ').');
-      return;
+      // These used to return in silence, so "my picture never arrived" and
+      // "the app never got as far as asking" looked identical. They are
+      // different faults with different fixes.
+      const err = new Error(r.status === 403
+        ? 'the App Key was not accepted'
+        : 'it turned the request down (' + r.status + ')');
+      // A refused key is settled -- asking again cannot change the answer,
+      // and would only delay him being told.
+      err.settled = r.status === 403;
+      throw err;
     }
-    screenshots = (await r.json()).screenshots || [];
+    return (await r.json()).screenshots || [];
+  };
+
+  try{
+    try{
+      screenshots = await askOnce();
+    }catch(first){
+      if(first.settled) throw first;
+      await new Promise(r => setTimeout(r, 4000));
+      try{
+        screenshots = await askOnce();
+      }catch(second){
+        second.triedTwice = true;
+        throw second;
+      }
+    }
   }catch(e){
-    noteProblem('shotsSeen', 'Could not reach the service to ask for waiting pictures.');
+    noteProblem('shotsSeen', e.settled
+      ? 'Could not ask for waiting pictures: ' + e.message + '.'
+      : 'Could not reach the service to ask for waiting pictures'
+        + (e.triedTwice ? ', tried twice a few seconds apart.' : '.'));
     return;
   }
   if(!screenshots.length){
