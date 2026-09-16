@@ -35,6 +35,7 @@ const { launch, serve } = require('./browser.js');
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
     let shots = (o.shots || []).slice();
+    let asks = 0;
 
     // Broad rules FIRST, exact ones LAST -- the last-registered rule wins.
     await p.route('**/*', r => r.request().url().startsWith(site.base) ? r.continue()
@@ -43,8 +44,13 @@ const { launch, serve } = require('./browser.js');
       const u = new URL(r.request().url());
       const seg = u.pathname.split('/').filter(Boolean);
       if(seg[1] === 'pending'){
+        asks++;
         if(o.refuseKey) return r.fulfill({status:403,contentType:'text/plain',body:'Forbidden'});
         if(o.unreachable) return r.abort('failed');
+        // A service that was asleep: the first ask pays for waking it, the
+        // next one works. Nothing is wrong, and it must not read as though
+        // something is.
+        if(o.asleepForFirst && asks === 1) return r.abort('failed');
         return r.fulfill({status:200,contentType:'application/json',
           body: JSON.stringify({ screenshots: shots.map(s => Object.assign({}, s, {image:null, hasImage:true})),
                                  waiting: shots.length })});
@@ -73,7 +79,7 @@ const { launch, serve } = require('./browser.js');
     }, { base: BASE, journal: o.journal || [trade()] });
     await p.reload(); await p.waitForTimeout(900);
     const seen = async () => (await p.evaluate(() => readProblem('shotsSeen')) || {}).text || null;
-    return { p, errors, seen, close: () => ctx.close() };
+    return { p, errors, seen, asks: () => asks, close: () => ctx.close() };
   }
 
   // ------------------------------------------------------------------
@@ -136,10 +142,45 @@ const { launch, serve } = require('./browser.js');
   {
     const { p, errors, seen, close } = await phone({ unreachable: true });
     await p.evaluate(() => matchPendingScreenshots());
+    await p.waitForTimeout(6000); // it asks again before giving up
     const t = await seen();
     check('it says so: ' + t, !!t && /could not reach/i.test(t));
+    check('and says it was tried twice, so one blip is never reported as down',
+      !!t && /tried twice/i.test(t));
     check('and does not read as a key problem', !!t && !/App Key/i.test(t));
     check('and does not read as "nothing was waiting"', !!t && !/no pictures were waiting/i.test(t));
+    check('nothing threw', errors.length === 0);
+    await close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n--- the service was asleep: NOT a fault, and must not read as one ---');
+  {
+    // His hosting sleeps the service when nothing has talked to it. The
+    // first request afterwards is the one that pays for waking it. He read
+    // one of those as a fault on 2026-09-16, and so did I.
+    const { p, errors, seen, asks, close } = await phone({
+      asleepForFirst: true, shots: [{id:'e1', timestamp: entryMs, image: img}] });
+    await p.evaluate(() => matchPendingScreenshots());
+    await p.waitForTimeout(6000); // past the retry and the fetch
+    const t = await seen();
+    check(`it asked twice (${asks()})`, asks() >= 2);
+    check('and reports the picture, not a failure: ' + t, !!t && /1 waiting/.test(t));
+    check('nothing is reported as unreachable', !!t && !/could not reach/i.test(t));
+    check('the picture really landed', await p.evaluate(() => typeof loadTrades()[0].shotEntry === 'string'));
+    check('nothing threw', errors.length === 0);
+    await close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n--- a key that is refused is settled: asking again cannot change it ---');
+  {
+    const { p, errors, seen, asks, close } = await phone({ refuseKey: true });
+    await p.evaluate(() => matchPendingScreenshots());
+    await p.waitForTimeout(500);
+    check(`it asks once, not twice (${asks()})`, asks() === 1);
+    const t = await seen();
+    check('and says so straight away: ' + t, !!t && /App Key was not accepted/i.test(t));
     check('nothing threw', errors.length === 0);
     await close();
   }
