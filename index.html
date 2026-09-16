@@ -358,6 +358,10 @@
 
   .conn-dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px;}
   .conn-dot.on{background:var(--bull);} .conn-dot.off{background:var(--bear);}
+  /* A sign-in that has run out needs ONE tap from him. A service that
+     cannot be reached needs nothing from him at all. Two faults, two
+     fixes -- they must not share a colour or a word. */
+  .conn-dot.needsyou{background:var(--gold);}
   .sync-log{max-height:160px; overflow-y:auto; font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:8px;}
   .sync-log div{padding:4px 0; border-bottom:1px solid var(--border);}
   .close-x{position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.6); color:#fff; border-radius:50%; width:18px; height:18px; text-align:center; line-height:18px; font-size:11px;}
@@ -4545,10 +4549,37 @@ function serverBehind(){
   return Number(srv.ftfcRuleVersion) < FTFC_RULE_VERSION;
 }
 
+// Rewritten on every open, and kept up to date while it stays open.
+//
+// It used to be baked into the page the moment the Checks page was drawn
+// and then never touched again -- so a line reading "not checked yet" went
+// on saying that for as long as the page stayed put, however many checks
+// had run since. I have already read one of those and started reasoning
+// from it. A report that is out of date is a report that lies, which is
+// the fault that once had me printing "server up 0m" whatever the service
+// actually said.
+let techTimer = null;
+function refreshTechDetails(){
+  const el = document.getElementById('techDetails');
+  if(!el || el.style.display !== 'block'){
+    if(techTimer){ clearInterval(techTimer); techTimer = null; }
+    return;
+  }
+  try{ el.textContent = techText(); }
+  catch(e){ el.textContent = 'The details could not be worked out: ' + e.message; }
+}
+
 function toggleTechDetails(){
   const el = document.getElementById('techDetails');
   if(!el) return;
-  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  const opening = el.style.display !== 'block';
+  el.style.display = opening ? 'block' : 'none';
+  if(opening){
+    refreshTechDetails();
+    if(!techTimer) techTimer = setInterval(refreshTechDetails, 5000);
+  } else if(techTimer){
+    clearInterval(techTimer); techTimer = null;
+  }
 }
 
 // The ONE line at the top. Three states, no jargon, no numbers he did not
@@ -6783,7 +6814,7 @@ async function autoCollectOnOpen(){
     const auth = await fetchSchwabAuthState(url);
     if(auth && auth.needsReconnect){
       showReconnect(true);
-      setConnState(false, `Schwab sign-in has run out · ${n} trade${n===1?'':'s'} saved here`);
+      setConnState(false, `Schwab sign-in has run out · ${n} trade${n===1?'':'s'} saved here`, 'signin');
       showStatus('err', 'Your Schwab sign-in has run out — Schwab makes you sign in again every 7 days. Your saved trades are fine, but no new ones can come in until you tap "Reconnect to Schwab" above.');
     } else if(auth && auth.signInExpiringSoon){
       // Warned BEFORE it lapses, not after. Finding out because a day of
@@ -6807,13 +6838,29 @@ async function autoCollectOnOpen(){
 // the badge in the corner and the line on the Journal card — driven by
 // different things, so the corner could read "Not connected" while the
 // card read "Connected". Two contradicting answers is worse than one.
-function setConnState(connected, text){
+// The badge in the corner used to reduce every unhappy state to the same
+// two words. A Schwab sign-in that has run out -- which needs ONE tap from
+// him and is the reason trades stop arriving every seventh day -- looked
+// exactly like a service that could not be reached, which needs nothing
+// from him at all. He would have had to open the Journal tab to tell them
+// apart, and the whole point of this app is that he does not open it.
+//
+// Three states now, and the badge says which. Same rule as the alignment
+// badge: the words are coloured by what they SAY.
+function setConnState(connected, text, kind){
   const dot = document.getElementById('connStateDot');
   const label = document.getElementById('connStateText');
-  if(dot) dot.className = 'conn-dot ' + (connected ? 'on' : 'off');
+  const cls = connected ? 'on' : (kind === 'signin' ? 'needsyou' : 'off');
+  if(dot) dot.className = 'conn-dot ' + cls;
   if(label) label.textContent = text;
   const badge = document.getElementById('connBadge');
-  if(badge) badge.innerHTML = `<span class="conn-dot ${connected ? 'on' : 'off'}"></span>${connected ? 'Connected' : 'Not connected'}`;
+  const words = connected ? 'Connected'
+    : kind === 'signin' ? 'Sign-in needed'
+    : 'Not connected';
+  if(badge){
+    badge.innerHTML = `<span class="conn-dot ${cls}"></span>${words}`;
+    badge.style.color = kind === 'signin' ? 'var(--gold)' : 'var(--text-dim)';
+  }
 }
 
 // A running count of what the polls have done, so the button can report
