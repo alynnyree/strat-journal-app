@@ -116,6 +116,30 @@ Backend files and what they do:
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
 `PUSHCUT_NOTIFICATION_NAME`, `PUSHCUT_API_KEY`, `GEMINI_API_KEY`.
 
+**CORRECTED 2026-09-16 — that list was wrong about Pushcut, and it mattered.**
+His own Render settings, read off his screen, hold exactly two Pushcut
+values: `PUSHCUT_NOTIFICATION_NAME_OPENED` and
+`PUSHCUT_NOTIFICATION_NAME_STILL_OPEN`. There is **no `PUSHCUT_API_KEY` at
+all**, and no plain `PUSHCUT_NOTIFICATION_NAME`.
+
+`sendPushcut` begins `if (!notificationName || !apiKey) return;` — so with
+no key, **all three phone alerts have been returning immediately and
+silently since the day they were built.** Not one has ever fired, and
+nothing anywhere says so. The comment above it calls this deliberate ("a
+nice-to-have... never something that should block the sync"), which is right
+about not breaking the sync and wrong about saying nothing: he has no way to
+learn that the whole phone path is inert.
+
+So "the phone picture pipeline needs two pieces set up on his phone" was
+itself too generous. It needs those two AND two settings that do not exist.
+Never describe that pipeline as one-step-from-working again without reading
+his actual settings.
+
+The code reads FOUR names, one per moment: `..._OPENED` (trade opens),
+`..._STILL_OPEN` (fifteen-minute mark), `PUSHCUT_NOTIFICATION_NAME` (trade
+closes), and `..._SIGNIN` (weekly Schwab sign-in, falling back to the plain
+one).
+
 AI features use **Google Gemini's free tier** (gemini-2.5-flash, schema-
 enforced JSON), not Anthropic's API — chosen to avoid ongoing API cost.
 Browsers cannot call these APIs directly (CORS), so all AI calls are
