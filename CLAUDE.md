@@ -154,6 +154,23 @@ enforced JSON), not Anthropic's API — chosen to avoid ongoing API cost.
 Browsers cannot call these APIs directly (CORS), so all AI calls are
 server-side.
 
+**NO MONTHLY COSTS. This is a standing constraint, not a preference**
+(his words, 2026-09-16, when Pushcut pushed him toward its paid tier:
+*"When we started this project it was supposed to be free with no financial
+attachments, especially on a monthly basis."*). He is right, and the same
+instruction already exists for market data below. Before any feature
+depends on a paid service, check its free limits and design inside them —
+and if the feature cannot fit, say so and let him decide rather than
+letting him discover it at a paywall.
+
+**What that meant in practice for Pushcut:** its free tier allows THREE
+notifications. The code sends to four names, which read as needing four
+slots — but the phone only ever needed ONE, the trade-closed one, because
+the other two (`..._OPENED`, `..._STILL_OPEN`) exist to switch between
+video and stills and **his phone cannot record video at all**. Counting
+what a feature genuinely needs, rather than what the code happens to
+reference, is what kept this free.
+
 Market data comes from **Alpaca's free plan** (his instruction,
 2026-09-07: *"I don't want to pay for data from Alpaca"*). That plan gives
 IEX in REAL TIME and the full consolidated tape delayed by 15 minutes.
