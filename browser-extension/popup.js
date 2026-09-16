@@ -118,6 +118,9 @@ document.getElementById('recordToggle').addEventListener('click', async () => {
     out.className = 'row err';
     out.textContent = err.message || 'It did not work.';
   }
+  // The mark on the icon is refreshed straight away rather than left
+  // stale until the next check a minute later.
+  try { await chrome.runtime.sendMessage({ type: 'nudgeNow' }); } catch (e) {}
   btn.disabled = false;
   renderRecording();
 });

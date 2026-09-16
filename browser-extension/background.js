@@ -10,6 +10,11 @@
 // chrome.* glue around them can only be verified by actually running this
 // in a real browser — see TASKS.md.
 
+// The decisions about WHEN to tell him live next door, so they can be
+// exercised in Node. This pulls them in; in Node the test requires that
+// file directly instead.
+if (typeof importScripts === 'function') importScripts('recorder-core.js');
+
 const POLL_ALARM_NAME = 'strat-journal-poll';
 const POLL_PERIOD_MINUTES = 1; // Chrome's minimum alarm granularity
 
@@ -286,6 +291,61 @@ async function noteMomentsForRecording(events, backendUrl, appKey, now = Date.no
   return { clipped, refused, lastReason };
 }
 
+// ==== Telling him the recording is off ====
+//
+// He asked for this outright: "The point is to make this as automatic as
+// possible so i don't forget to take videos and or pictures of my trades."
+//
+// It cannot be made to start by itself -- Chrome requires a press, and no
+// amount of code removes that. So this removes the REMEMBERING instead,
+// which is the part that actually loses him a trade.
+//
+// Three signals, loudest last: a mark on the icon the whole time it is off,
+// one quiet box at the start of a trading day, and a louder box the moment
+// a trade opens unrecorded.
+const NUDGE_ID = 'strat-journal-not-recording';
+
+// A mark he can see at a glance without opening anything. Red means his
+// trades are not being filmed; nothing means they are.
+async function showBadge(recording) {
+  try {
+    await chrome.action.setBadgeText({ text: recording ? '' : '!' });
+    if (!recording) await chrome.action.setBadgeBackgroundColor({ color: '#C62828' });
+  } catch (e) { /* an older Chrome without badges is not a reason to fail the check */ }
+}
+
+async function maybeNudge(recording, tradeOpened) {
+  await showBadge(recording);
+  const { nudgeQuietAt, nudgeUrgentAt } = await chrome.storage.local.get(['nudgeQuietAt', 'nudgeUrgentAt']);
+  const now = Date.now();
+  const say = self.RecorderCore.nudgeToShow({
+    recording, tradeOpened, now,
+    lastQuietAt: nudgeQuietAt || 0, lastUrgentAt: nudgeUrgentAt || 0,
+  });
+  if (!say) return null;
+
+  try {
+    await chrome.notifications.create(NUDGE_ID, {
+      type: 'basic',
+      iconUrl: 'icons/icon-128.png',
+      title: say.title,
+      message: say.message,
+      priority: say.kind === 'urgent' ? 2 : 1,
+      requireInteraction: say.kind === 'urgent',
+    });
+  } catch (e) {
+    // Notifications turned off at the system level is his choice, not a
+    // fault -- the mark on the icon still stands, and this says why rather
+    // than leaving a silence.
+    await setStatus({ lastNudgeFault: 'Could not show a reminder on screen: ' + e.message });
+    return null;
+  }
+  await chrome.storage.local.set(
+    say.kind === 'urgent' ? { nudgeUrgentAt: now, lastNudgeFault: null }
+                          : { nudgeQuietAt: now, lastNudgeFault: null });
+  return say.kind;
+}
+
 async function pollAndCapture() {
   const { backendUrl, appKey } = await getSettings();
   if (!backendUrl || !appKey) {
@@ -303,6 +363,14 @@ async function pollAndCapture() {
     // once it has been deleted the recorder can never see it.
     let recorderNote = { clipped: 0, refused: 0, lastReason: null };
     const rec = await recorderState();
+
+    // Told BEFORE anything else this round, and told whether or not a trade
+    // is involved -- the reminder that matters is the one that reaches him
+    // before he trades, because a recording has to already be running to
+    // catch an entry.
+    const opened = (events || []).some(e => e && e.type === 'opened' && !e.test);
+    await maybeNudge(!!(rec && rec.recording), opened).catch(() => {});
+
     if (rec && rec.recording) {
       recorderNote = await noteMomentsForRecording(events, backendUrl, appKey)
         .catch(err => ({ clipped: 0, refused: 1, lastReason: err.message }));
@@ -400,6 +468,15 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
         .catch(err => sendResponse({ ok: false, error: err.message }));
       return true;
     }
+    if (msg && msg.type === 'nudgeNow') {
+      // Used by the small window to refresh the mark the moment he starts
+      // or stops, rather than leaving it stale until the next check.
+      recorderState()
+        .then(st => showBadge(!!(st && st.recording)))
+        .then(() => sendResponse({ ok: true }))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
     if (msg && msg.type === 'recorderState') {
       recorderState().then(sendResponse).catch(err => sendResponse({ recording: false, lastFault: err.message }));
       return true;
@@ -421,6 +498,15 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === POLL_ALARM_NAME) pollAndCapture();
   });
+  // Clicking the box is him acting on it, so open the window he needs
+  // rather than making him hunt for the icon he was just told about.
+  if (chrome.notifications && chrome.notifications.onClicked) {
+    chrome.notifications.onClicked.addListener((id) => {
+      if (id !== NUDGE_ID) return;
+      chrome.notifications.clear(id).catch(() => {});
+      if (chrome.action.openPopup) chrome.action.openPopup().catch(() => {});
+    });
+  }
   // Belt and braces. The two listeners above only fire on install and on
   // the browser starting; if the once-a-minute check is ever missing for
   // any other reason, nothing above would ever put it back and the whole
