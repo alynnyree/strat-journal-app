@@ -5232,6 +5232,17 @@ function techText(){
     sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
     vp ? `recording problem: ${vp.text} (${when(vp)})` : 'no recording problem',
     `pictures ${all.filter(t => t.shotEntry || t.shotMid || t.shotExit).length} · recordings ${all.filter(t => t.video && t.video.r2Key).length}`,
+    // Every phone alert failed silently for months and nothing anywhere
+    // said so. Four outcomes that must never share one answer: never
+    // asked, accepted, refused by name, or unreachable.
+    (() => {
+      if(!techNotes.checked) return 'phone alert: not checked yet';
+      const a = srv.lastPhoneAlert;
+      if(a === null || a === undefined) return 'phone alert: none recorded yet (or this server is an older build)';
+      const head = `phone alert: ${a.ok ? 'ACCEPTED' : a.asked ? 'REFUSED' : 'NEVER SENT'}`;
+      return `${head} · ${a.moment || '?'} · name "${a.name || 'none set'}" · ${when(a)}`
+        + (a.reason ? ` · ${a.reason}` : '');
+    })(),
   ].join('\n');
 }
 
