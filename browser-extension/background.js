@@ -348,8 +348,9 @@ async function showBadge(recording) {
   } catch (e) { /* an older Chrome without badges is not a reason to fail the check */ }
 }
 
+// The badge is NOT set here any more -- it is set at the very top of the
+// check, before anything that can fail. See pollAndCapture.
 async function maybeNudge(recording, tradeOpened) {
-  await showBadge(recording);
   const { nudgeQuietAt, nudgeUrgentAt } = await chrome.storage.local.get(['nudgeQuietAt', 'nudgeUrgentAt']);
   const now = Date.now();
   const say = self.RecorderCore.nudgeToShow({
@@ -381,31 +382,63 @@ async function maybeNudge(recording, tradeOpened) {
 }
 
 async function pollAndCapture() {
+  // THE MARK ON THE ICON IS THE ONE THING THAT MUST NOT DEPEND ON ANYTHING
+  // ELSE WORKING.
+  //
+  // It used to be set inside maybeNudge, which is only reached after the
+  // settings have been read AND the server has answered. So the one thing
+  // whose whole job is to say "your trades are not being filmed" went
+  // silent exactly when something else was wrong too -- an address not
+  // filled in, a service asleep, no connection. He reported seeing no mark
+  // and he was right to.
+  //
+  // Whether the recording is running is a purely local fact. It needs no
+  // address, no key and no server, so it is answered first, and every way
+  // out of this function below it has already set the mark.
+  let rec = { recording: false };
+  try { rec = await recorderState(); } catch (e) { /* no recorder is not recording */ }
+  const recording = !!(rec && rec.recording);
+  await showBadge(recording).catch(() => {});
+
   const { backendUrl, appKey } = await getSettings();
   if (!backendUrl || !appKey) {
+    // The quiet start-of-day reminder does not need the server either: it
+    // only needs to know that nothing is recording and that the market is
+    // open. Only the URGENT one -- a trade has actually opened -- does.
+    await maybeNudge(recording, false).catch(() => {});
     await setStatus({ lastError: 'Not configured yet — set Backend URL and App Key in the extension options.', lastPollAt: Date.now() });
     return;
   }
 
   try {
-    const res = await fetch(buildEventsUrl(backendUrl, appKey));
-    if (!res.ok) throw new Error(`Could not check for trade events (${res.status}).`);
+    let res;
+    try {
+      res = await fetch(buildEventsUrl(backendUrl, appKey));
+    } catch (netErr) {
+      // Same again: unreachable is not a reason to stop telling him the
+      // recording is off.
+      await maybeNudge(recording, false).catch(() => {});
+      throw netErr;
+    }
+    if (!res.ok) {
+      await maybeNudge(recording, false).catch(() => {});
+      throw new Error(`Could not check for trade events (${res.status}).`);
+    }
     const { events } = await res.json();
 
     // FIRST, before the picture side clears anything. A moment the picture
     // side discards as too old is still the moment a clip is cut from, and
     // once it has been deleted the recorder can never see it.
     let recorderNote = { clipped: 0, refused: 0, lastReason: null };
-    const rec = await recorderState();
 
     // Told BEFORE anything else this round, and told whether or not a trade
     // is involved -- the reminder that matters is the one that reaches him
     // before he trades, because a recording has to already be running to
     // catch an entry.
     const opened = (events || []).some(e => e && e.type === 'opened' && !e.test);
-    await maybeNudge(!!(rec && rec.recording), opened).catch(() => {});
+    await maybeNudge(recording, opened).catch(() => {});
 
-    if (rec && rec.recording) {
+    if (recording) {
       recorderNote = await noteMomentsForRecording(events, backendUrl, appKey)
         .catch(err => ({ clipped: 0, refused: 1, lastReason: err.message }));
     }
