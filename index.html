@@ -1319,7 +1319,50 @@ let editingTradeId = null; // set when editing an existing saved trade instead o
 let editingSourceValue = null; // preserves the original trade's source ('schwab-auto' or 'manual') across an edit
 
 function loadTrades(){ try{ return JSON.parse(localStorage.getItem('strat_trades')||'[]'); }catch(e){ return []; } }
-function saveTrades(t){ localStorage.setItem('strat_trades', JSON.stringify(t)); }
+// A JOURNAL THAT IS FULL MUST NOT BECOME A JOURNAL THAT IS GONE.
+//
+// This was a bare write with nothing around it. Measured in a real browser:
+// one site is given about 4.9MB, a chart picture costs 35-67KB, and three
+// pictures a trade means the wall arrives within weeks of the pictures
+// starting to work. When it does, the write THROWS -- and this app has
+// already shown him a blank Journal holding 233 trades once.
+//
+// A refused write leaves what is already stored untouched, so his trades
+// survive. What is lost is the change being made, and that must never be
+// lost in silence: it is reported, and the caller is told so it can decide
+// whether to undo what it was about to do.
+function saveTrades(t){
+  try{
+    localStorage.setItem('strat_trades', JSON.stringify(t));
+    return { ok:true, reason:null };
+  }catch(e){
+    const full = e && (e.name === 'QuotaExceededError'
+      || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || /quota/i.test(e.message || ''));
+    const reason = full
+      ? 'There is no room left on this phone for the journal, so that change was not saved. Your trades already saved are safe.'
+      : 'That change could not be saved to this phone. Your trades already saved are safe.';
+    noteProblem('saving', reason);
+    return { ok:false, reason, full };
+  }
+}
+
+// How much room the journal is using, and how much is left. Behind the
+// Details tap -- a number he did not ask for, that exists so neither of us
+// is surprised by a wall we can already see coming.
+function storageLine(){
+  let used = 0;
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      used += (k.length + (localStorage.getItem(k) || '').length);
+    }
+  }catch(e){ return 'room used: not reported by this browser'; }
+  const kb = n => Math.round(n / 1024) + 'k';
+  let journal = 0;
+  try{ journal = (localStorage.getItem('strat_trades') || '').length; }catch(e){}
+  const pics = loadTrades().filter(t => t.shotEntry || t.shotMid || t.shotExit).length;
+  return `room used ${kb(used)} · journal ${kb(journal)} · trades with a picture ${pics}`;
+}
 
 function showView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -3949,7 +3992,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-16 18:50';
+const APP_BUILD = '2026-09-16 19:40';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -5300,6 +5343,11 @@ function techText(){
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
     sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
+    storageLine(),
+    (() => {
+      const w = readProblem('saving');
+      return w ? `saving problem: ${w.text} (${when(w)})` : 'no saving problem';
+    })(),
     // The receiving end's own account of what turned up. "It sent" and
     // "it arrived" are different claims, and only the second one settles
     // whether a picture from his phone actually made it.
@@ -8055,6 +8103,19 @@ async function matchPendingScreenshots(){
         continue;
       }
       best.trade[best.field] = got.image;
+      // SAVED BEFORE IT IS CLEARED FROM THE QUEUE, never after. The picture
+      // used to be deleted from the service the moment it was put on the
+      // trade -- and the journal was only written at the end of the loop.
+      // So a write refused for want of room would have thrown the picture
+      // away at both ends at once, with nothing anywhere saying so.
+      const wrote = saveTrades(trades);
+      if(!wrote.ok){
+        // Left exactly where it was, so it is offered again once there is
+        // room. Undone on the trade too, or it would look attached.
+        delete best.trade[best.field];
+        noteProblem('shots', wrote.reason);
+        break;
+      }
       changed = true;
       try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* worst case it's offered again and just gets re-matched harmlessly */ }
       log('syncLog', `Auto-attached ${SHOT_LABEL[SLOT_OF_FIELD[best.field]].toLowerCase()} picture to ${best.trade.ticker} (${best.trade.entryDate}).`);
