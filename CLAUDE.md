@@ -116,11 +116,20 @@ Backend files and what they do:
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
 `PUSHCUT_NOTIFICATION_NAME`, `PUSHCUT_API_KEY`, `GEMINI_API_KEY`.
 
-**CORRECTED 2026-09-16 — that list was wrong about Pushcut, and it mattered.**
-His own Render settings, read off his screen, hold exactly two Pushcut
-values: `PUSHCUT_NOTIFICATION_NAME_OPENED` and
-`PUSHCUT_NOTIFICATION_NAME_STILL_OPEN`. There is **no `PUSHCUT_API_KEY` at
-all**, and no plain `PUSHCUT_NOTIFICATION_NAME`.
+**CORRECTED 2026-09-16, then RESOLVED the same day.**
+That list was wrong about Pushcut. His Render settings, read off his screen,
+held exactly two Pushcut values — `PUSHCUT_NOTIFICATION_NAME_OPENED` and
+`PUSHCUT_NOTIFICATION_NAME_STILL_OPEN` — with **no `PUSHCUT_API_KEY` at
+all** and no plain `PUSHCUT_NOTIFICATION_NAME`. He added both that
+afternoon and the deploy succeeded, so all four now exist.
+
+**What that does and does not mean.** The server CAN now reach Pushcut. Not
+one alert has reached his phone: each name must ALSO exist as a
+notification inside the Pushcut app, and none has been created.
+`sendPushcut` only checks that it HAS a name and a key, never that the far
+end knows the name — so a name Pushcut has never heard of fails at Pushcut
+and is caught and logged where nobody reads. Nothing here is proven until a
+real trade makes his phone buzz.
 
 `sendPushcut` begins `if (!notificationName || !apiKey) return;` — so with
 no key, **all three phone alerts have been returning immediately and
