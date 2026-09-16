@@ -46,6 +46,38 @@ for(const r of [...refs].sort()){
   check(`${r} is in the folder`, fs.existsSync(path.join(EXT, r)));
 }
 
+console.log('\n--- every permission has a reason written for it ---');
+// THE STORE REFUSED TO LET HIM SUBMIT OVER THIS, and it was the third
+// round lost to the same shape of mistake: a requirement only the far end
+// knew, which I had not checked.
+//
+// Adding the notifications permission left an empty required box on the
+// store's own form -- "A justification for notifications is required" --
+// and the Submit button simply stayed grey with nothing saying why until he
+// found the link that explains it. I had written reasons for the other six
+// permissions and not for the one I had just added.
+//
+// So the reasons live in store-listing/LISTING.md and this checks that
+// every permission the manifest asks for actually has one. A permission
+// added without its reason now fails here instead of on his screen.
+{
+  const listing = fs.readFileSync(path.join(__dirname, '..', 'store-listing', 'LISTING.md'), 'utf8');
+  const wanted = [...m.permissions];
+  for (const p of wanted) {
+    const heading = new RegExp('^### ' + p + '\\s*$', 'm');
+    check(`${p} has a written reason`, heading.test(listing));
+  }
+  check('the TradingView permission has one too', /^### Host permission/m.test(listing));
+  // A heading with nothing under it would pass the test above and fail on
+  // the store, which is the same fault one level down.
+  for (const p of wanted) {
+    const body = listing.split(new RegExp('^### ' + p + '\\s*$', 'm'))[1] || '';
+    const first = (body.split('```')[1] || '').trim();
+    check(`${p}'s reason is actually written, not an empty box (${first.length} characters)`,
+      first.length > 60);
+  }
+}
+
 console.log('\n--- and nothing in it that gets a package refused ---');
 const walk = (dir, out = []) => {
   for(const e of fs.readdirSync(dir, { withFileTypes: true })){

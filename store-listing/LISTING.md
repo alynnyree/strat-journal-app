@@ -116,6 +116,11 @@ offscreen document is the documented way to run a MediaRecorder, and is used for
 nothing else.
 ```
 
+### notifications
+```
+Reminds the installer to switch recording on at the start of a trading day, and again if one of their own trades opens while recording is off. Without it a trade goes unrecorded silently. No notification contains any user data — only a prompt to press the extension's own button.
+```
+
 ### Host permission — https://*.tradingview.com/*
 ```
 The chart being captured is on TradingView. This is the only site the extension
