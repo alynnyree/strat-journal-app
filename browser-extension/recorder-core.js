@@ -90,11 +90,79 @@ function coverage(pieces, from, to){
   return { ok: true, coveredFrom, coveredTo, lateBy, reason: null };
 }
 
+// ==== When he needs telling ====
+//
+// Chrome will not let anything start recording without a press from him --
+// the same wall Apple has. So the press cannot be removed. What CAN be
+// removed is having to REMEMBER it, which is the thing that actually costs
+// him a trade's video.
+//
+// Nudged BEFORE the bell rather than at it: a recording has to already be
+// running when he enters, because it works by reaching backwards.
+const NUDGE_FROM_MINUTE = 9 * 60;        // 09:00 in New York
+const NUDGE_UNTIL_MINUTE = 16 * 60;      // 16:00, the close
+
+// Built ONCE. Building an Intl formatter inside anything that runs
+// repeatedly is on this project's own record as the cause of half a
+// gigabyte of churned memory.
+const NY_TIME = (typeof Intl !== 'undefined')
+  ? new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', hour12: false,
+      weekday: 'short', hour: '2-digit', minute: '2-digit',
+    })
+  : null;
+
+// Trading hours in NEW YORK, whatever his laptop's clock is set to. A
+// laptop on the wrong timezone would otherwise nudge him at midnight or
+// not at all.
+function isTradingTime(now, formatter){
+  const f = formatter || NY_TIME;
+  if (!f) return true; // cannot tell: better to nudge than to stay silent
+  const parts = {};
+  for (const p of f.formatToParts(new Date(now))) parts[p.type] = p.value;
+  if (parts.weekday === 'Sat' || parts.weekday === 'Sun') return false;
+  const minute = Number(parts.hour) * 60 + Number(parts.minute);
+  return minute >= NUDGE_FROM_MINUTE && minute < NUDGE_UNTIL_MINUTE;
+}
+
+// What, if anything, to say -- and it must not become wallpaper.
+//
+// Three outcomes, never one blank: nothing to say; the quiet start-of-day
+// reminder, at most once a day; and the urgent one, when a trade has
+// ACTUALLY opened and is going unrecorded. The urgent one is allowed
+// through even if the quiet one already went, because it means a real
+// trade is being lost right now.
+function nudgeToShow({ recording, tradeOpened, now, lastQuietAt, lastUrgentAt }, formatter){
+  if (recording) return null;
+  if (!isTradingTime(now, formatter)) return null;
+
+  const DAY = 24 * 60 * 60 * 1000;
+  if (tradeOpened) {
+    // Not more than once every twenty minutes, so a run of trades does not
+    // produce a run of boxes he starts swiping away without reading.
+    if (lastUrgentAt && (now - lastUrgentAt) < 20 * 60 * 1000) return null;
+    return {
+      kind: 'urgent',
+      title: 'A trade just opened and is not being recorded',
+      message: 'Click the Strat Journal icon and press Start recording. You will still catch the exit.',
+    };
+  }
+  if (lastQuietAt && (now - lastQuietAt) < DAY) return null;
+  return {
+    kind: 'quiet',
+    title: 'Your charts are not being recorded',
+    message: 'Click the Strat Journal icon and press Start recording. One press covers every trade today.',
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { clipWindow, piecesInWindow, prunePieces, coverage,
+    isTradingTime, nudgeToShow,
+    NUDGE_FROM_MINUTE, NUDGE_UNTIL_MINUTE,
     HOLD_MS, PRE_ROLL_MS, POST_ROLL_MS, CLIP_CAP_MS, MAX_LATE_START_MS };
 }
 if (typeof self !== 'undefined') {
   self.RecorderCore = { clipWindow, piecesInWindow, prunePieces, coverage,
+    isTradingTime, nudgeToShow,
     HOLD_MS, PRE_ROLL_MS, POST_ROLL_MS, CLIP_CAP_MS, MAX_LATE_START_MS };
 }
