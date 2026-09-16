@@ -22,6 +22,12 @@ let pieces = [];      // {blob, at} -- `at` is the moment the piece arrived, whi
 let sliceMs = 1000;
 let startedAt = null;
 let lastFault = null;
+// Stills, kept beside the recording so a picture can be taken from the
+// CHART rather than from whatever tab is on top of his screen.
+let frames = [];          // {at, dataUrl, bytes}
+let frameTimer = null;
+let frameVideo = null;
+let frameCanvas = null;
 
 function pickMime(){
   const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
@@ -59,9 +65,55 @@ async function startRecording(streamId){
   // than going on claiming it is recording.
   stream.getVideoTracks().forEach(t => { t.onended = () => { stopRecording(); }; });
   recorder.start(sliceMs);
+  startFrames(stream);
   startedAt = Date.now();
   lastFault = null;
   return { ok: true };
+}
+
+// A still every couple of seconds, taken from the same tab the recording is
+// watching. This is what makes a picture of his chart possible while he is
+// looking at Schwab.
+function startFrames(src){
+  frames = [];
+  frameVideo = document.createElement('video');
+  frameVideo.muted = true;
+  frameVideo.playsInline = true;
+  frameVideo.srcObject = src;
+  frameVideo.play().catch(() => {});
+  frameCanvas = document.createElement('canvas');
+  frameTimer = setInterval(() => {
+    try{
+      const w = frameVideo.videoWidth, h = frameVideo.videoHeight;
+      if(!w || !h) return; // nothing decoded yet; not a fault, just early
+      frameCanvas.width = w; frameCanvas.height = h;
+      frameCanvas.getContext('2d').drawImage(frameVideo, 0, 0, w, h);
+      // A chart is flat colour and thin lines, which JPEG handles well at
+      // this quality -- a picture he can read, without the weight of a
+      // lossless one held two hundred times over.
+      const dataUrl = frameCanvas.toDataURL('image/jpeg', 0.7);
+      frames.push({ at: Date.now(), dataUrl, bytes: dataUrl.length });
+      frames = C.pruneFrames(frames, Date.now());
+    }catch(e){
+      lastFault = 'A still could not be taken from the recording: ' + e.message;
+    }
+  }, C.FRAME_EVERY_MS);
+}
+
+function stopFrames(){
+  if(frameTimer) clearInterval(frameTimer);
+  frameTimer = null;
+  if(frameVideo){ try{ frameVideo.pause(); }catch(e){} frameVideo.srcObject = null; }
+  frameVideo = null; frameCanvas = null; frames = [];
+}
+
+// The chart as it was at one particular moment. Answers with a reason
+// rather than an empty hand, and refuses a still too far from the moment
+// instead of passing it off as the chart at his entry.
+function pictureAt(atMs){
+  const got = C.frameNearest(frames, atMs);
+  if(!got.frame) return { image: null, reason: got.reason };
+  return { image: got.frame.dataUrl, takenAt: got.frame.at, driftMs: got.drift, reason: null };
 }
 
 function stopTracks(){
@@ -72,6 +124,7 @@ function stopTracks(){
 function stopRecording(){
   try{ if(recorder && recorder.state !== 'inactive') recorder.stop(); }catch(e){}
   recorder = null;
+  stopFrames();
   stopTracks();
   startedAt = null;
   pieces = [];
@@ -124,6 +177,8 @@ function state(){
     startedAt,
     heldSeconds: body.length ? Math.round((body[body.length-1].at - (body[0].at - sliceMs)) / 1000) : 0,
     heldBytes: pieces.reduce((n, p) => n + p.blob.size, 0),
+    frameCount: frames.length,
+    frameBytes: frames.reduce((n, f) => n + f.bytes, 0),
     lastFault,
   };
 }
@@ -133,6 +188,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if(msg.type === 'start'){ startRecording(msg.streamId).then(sendResponse); return true; }
   if(msg.type === 'stop'){ sendResponse(stopRecording()); return false; }
   if(msg.type === 'clip'){ clipAndUpload(msg).then(sendResponse); return true; }
+  if(msg.type === 'pictureAt'){ sendResponse(pictureAt(msg.atMs)); return false; }
   if(msg.type === 'state'){ sendResponse(state()); return false; }
   return false;
 });

@@ -90,6 +90,65 @@ function coverage(pieces, from, to){
   return { ok: true, coveredFrom, coveredTo, lateBy, reason: null };
 }
 
+// ==== Stills kept alongside the recording ====
+//
+// He executes on Schwab and THEN switches to TradingView. So at the instant
+// the picture is taken -- up to a minute after his fill -- Schwab is what is
+// on screen, and photographing the screen either refuses (now) or files a
+// picture of his order ticket as his chart (before). Both are wrong.
+//
+// The recording does not have this problem: it follows the TradingView TAB,
+// not his screen, so it is watching the chart the whole time he is on
+// Schwab. So the picture is taken FROM the recording.
+//
+// A still every two seconds, held four minutes. Four minutes because the
+// picture is asked for within a minute of the fill and given up on at three;
+// holding the full twenty-five would be twelve times the memory for nothing.
+const FRAME_EVERY_MS = 2000;
+const FRAME_HOLD_MS = 4 * 60 * 1000;
+// A ceiling on what accumulates, not only on how long it is kept -- a
+// higher-resolution screen makes each still bigger and the count alone would
+// not notice. This project has already had a process killed for churning
+// memory nobody was counting.
+const FRAME_MAX_BYTES = 12 * 1024 * 1024;
+
+function pruneFrames(frames, now){
+  const cutoff = now - FRAME_HOLD_MS;
+  const kept = frames.filter(f => f.at > cutoff);
+  let total = kept.reduce((n, f) => n + f.bytes, 0);
+  // Oldest first if it is still too heavy.
+  while (kept.length > 1 && total > FRAME_MAX_BYTES) total -= kept.shift().bytes;
+  return kept;
+}
+
+// The still closest to the moment asked about -- and a REASON when there
+// isn't one, never an empty hand.
+//
+// A still too far from the moment is refused rather than passed off as the
+// chart at his entry. That is the same rule as the capture-taken-late guard:
+// a missing picture is recoverable, a wrong one looks real for ever.
+const FRAME_MAX_DRIFT_MS = 20 * 1000;
+
+function frameNearest(frames, atMs){
+  if(!frames.length){
+    return { frame: null, reason: 'Nothing was being recorded at that moment, so there is no picture of the chart to take.' };
+  }
+  let best = null;
+  for(const f of frames){
+    const drift = Math.abs(f.at - atMs);
+    if(!best || drift < best.drift) best = { frame: f, drift };
+  }
+  if(best.drift > FRAME_MAX_DRIFT_MS){
+    return {
+      frame: null, drift: best.drift,
+      reason: 'The recording holds nothing from within ' + Math.round(FRAME_MAX_DRIFT_MS / 1000)
+            + ' seconds of that moment — the closest is ' + Math.round(best.drift / 1000)
+            + ' seconds away, which is not a picture of the chart at that moment.',
+    };
+  }
+  return { frame: best.frame, drift: best.drift, reason: null };
+}
+
 // ==== When he needs telling ====
 //
 // Chrome will not let anything start recording without a press from him --
@@ -157,12 +216,14 @@ function nudgeToShow({ recording, tradeOpened, now, lastQuietAt, lastUrgentAt },
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { clipWindow, piecesInWindow, prunePieces, coverage,
-    isTradingTime, nudgeToShow,
+    isTradingTime, nudgeToShow, pruneFrames, frameNearest,
+    FRAME_EVERY_MS, FRAME_HOLD_MS, FRAME_MAX_BYTES, FRAME_MAX_DRIFT_MS,
     NUDGE_FROM_MINUTE, NUDGE_UNTIL_MINUTE,
     HOLD_MS, PRE_ROLL_MS, POST_ROLL_MS, CLIP_CAP_MS, MAX_LATE_START_MS };
 }
 if (typeof self !== 'undefined') {
   self.RecorderCore = { clipWindow, piecesInWindow, prunePieces, coverage,
-    isTradingTime, nudgeToShow,
+    isTradingTime, nudgeToShow, pruneFrames, frameNearest,
+    FRAME_EVERY_MS, FRAME_HOLD_MS, FRAME_MAX_DRIFT_MS,
     HOLD_MS, PRE_ROLL_MS, POST_ROLL_MS, CLIP_CAP_MS, MAX_LATE_START_MS };
 }

@@ -107,7 +107,8 @@ console.log('\n--- and it must not become wallpaper ---');
 
 console.log('\n--- what the add-on asks Chrome for ---');
 check('it asks to show him notifications', manifest.permissions.includes('notifications'));
-check('the version moved so he can see it landed', manifest.version === '1.4');
+check(`the version is past the one he is running (${manifest.version} > 1.3)`,
+  manifest.version.localeCompare('1.3', undefined, { numeric: true }) > 0);
 check('it still asks for nothing beyond TradingView',
   manifest.host_permissions.length === 1 && /tradingview/.test(manifest.host_permissions[0]));
 

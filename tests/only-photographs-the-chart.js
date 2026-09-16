@@ -114,6 +114,69 @@ console.log('\n--- and it says so, rather than coming up empty ---');
   try { await live.startRecording(); ok = 'started'; } catch (e) { ok = e.message; }
   check(`recording on his chart is allowed (${ok})`, ok === 'started');
 
+  // ---------------------------------------------------------------
+  // HIS ACTUAL WORKFLOW: Schwab on screen, chart in the background
+  // ---------------------------------------------------------------
+  console.log('\n--- the picture while he is looking at Schwab ---');
+  {
+    const CHART = 'data:image/jpeg;base64,THE-CHART';
+    let recordingHas = true;
+    let screenshotted = false;
+    const sent = [];
+
+    // Schwab is what is on screen -- which is the whole situation.
+    currentTab = { id: 1, windowId: 1, url: 'https://client.schwab.com/app/trade' };
+    global.chrome.tabs.captureVisibleTab = async () => {
+      screenshotted = true;
+      return 'data:image/png;base64,THE-ORDER-TICKET';
+    };
+    global.chrome.runtime.sendMessage = async (msg) => {
+      if (msg && msg.type === 'pictureAt') {
+        return recordingHas
+          ? { image: CHART, takenAt: msg.atMs, driftMs: 400, reason: null }
+          : { image: null, reason: 'Nothing was being recorded at that moment, so there is no picture of the chart to take.' };
+      }
+      return { ok: true };
+    };
+    global.fetch = async (url, opts) => {
+      if (String(url).startsWith('data:')) {
+        // The real code turns a data address into a picture by fetching it.
+        // The stand-in must do the same, and must carry which picture it
+        // was -- otherwise this proves nothing about WHICH one got sent.
+        return { ok: true, blob: async () => ({ source: String(url) }) };
+      }
+      if (String(url).includes('/media/upload')) sent.push({ url, body: opts && opts.body });
+      return { ok: true, text: async () => '' };
+    };
+    const RealFormData = global.FormData;
+    global.FormData = class { constructor(){ this.parts = []; } append(k,v,n){ this.parts.push({k,v,n}); } };
+
+    const fromRecording = await live.pictureFromRecording(1757000000000);
+    check('with recording on, there IS a picture of the chart', fromRecording.image === CHART);
+    check('...and the screen was never photographed', screenshotted === false);
+
+    await live.uploadCapture('https://x.invalid', 'k', { timestamp: 1757000000000, type: 'opened' });
+    check('THE PICTURE SENT IS THE CHART, not his Schwab order ticket',
+      sent.length === 1 && sent[0].body.parts[0].v.source === CHART);
+    check('...and the order ticket appears nowhere in what was sent',
+      !/ORDER-TICKET/.test(JSON.stringify(sent)));
+    check('...and it is named for what it is', sent[0].body.parts[0].n === 'chart.jpg');
+    check('...and his screen was still never photographed', screenshotted === false);
+
+    // With no recording running, it falls back to the screen -- and the
+    // screen is Schwab, so the guard refuses. He loses the picture, which is
+    // the right outcome: a missing one is recoverable, a wrong one is not.
+    sent.length = 0;
+    recordingHas = false;
+    let refused = null;
+    try { await live.uploadCapture('https://x.invalid', 'k', { timestamp: 1757000000000, type: 'opened' }); }
+    catch (e) { refused = e.message; }
+    check('with no recording, it falls back to the screen', refused !== null);
+    check(`...and refuses because Schwab is not his chart (${refused})`, /TradingView/.test(refused || ''));
+    check('...sending nothing rather than sending the wrong picture', sent.length === 0);
+    global.FormData = RealFormData;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

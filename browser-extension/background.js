@@ -121,11 +121,45 @@ async function captureActiveTab() {
   return dataUrl;
 }
 
+// THE PICTURE COMES OUT OF THE RECORDING WHEN THERE IS ONE.
+//
+// He executes on Schwab and switches to TradingView afterwards, so at the
+// instant a picture is due -- up to a minute after his fill -- Schwab is
+// what is on screen. Photographing the screen then either refuses, or files
+// his order ticket as his chart. Both lose him the entry.
+//
+// The recording follows the TradingView TAB rather than his screen, so it
+// is watching the chart the whole time he is on Schwab. Taking the picture
+// from it removes the timing problem altogether, and it is a picture of the
+// RIGHT MOMENT rather than of whenever the check happened to land.
+async function pictureFromRecording(atMs) {
+  try {
+    if (!(chrome.offscreen.hasDocument && await chrome.offscreen.hasDocument())) {
+      return { image: null, reason: 'Recording is not running, so there was no chart to take a picture from.' };
+    }
+    const got = await toRecorder({ type: 'pictureAt', atMs });
+    return got || { image: null, reason: 'The recording did not answer.' };
+  } catch (err) {
+    return { image: null, reason: 'Could not reach the recording: ' + err.message };
+  }
+}
+
 async function uploadCapture(backendUrl, appKey, event) {
-  const dataUrl = await captureActiveTab();
+  // The recording first, the screen second. A rehearsal keeps photographing
+  // the screen so what it proves is still the screen path.
+  let dataUrl = null;
+  let from = 'screen';
+  if (!event.test) {
+    const fromRec = await pictureFromRecording(event.timestamp);
+    if (fromRec.image) { dataUrl = fromRec.image; from = 'recording'; }
+    else { await setStatus({ lastPictureNote: fromRec.reason }); }
+  }
+  if (!dataUrl) dataUrl = await captureActiveTab();
+  await setStatus({ lastPictureFrom: from });
+
   const blob = await (await fetch(dataUrl)).blob();
   const form = new FormData();
-  form.append('image', blob, 'capture.png');
+  form.append('image', blob, from === 'recording' ? 'chart.jpg' : 'capture.png');
 
   const uploadUrl = buildUploadUrl(backendUrl, appKey, event.timestamp, { test: event.test, moment: event.type });
   const res = await fetch(uploadUrl, { method: 'POST', body: form });
@@ -523,6 +557,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 if (typeof module !== 'undefined') {
   module.exports = { buildUploadUrl, buildEventsUrl, buildDeleteEventUrl, buildTestTradeUrl,
     buildVideoUploadUrl, noteMomentsForRecording, OPEN_TRADE_HOLD_MS, isChartTab,
-    captureActiveTab, startRecording,
+    captureActiveTab, startRecording, pictureFromRecording, uploadCapture,
     isTooOldToCapture, isNotDueYet, MAX_EVENT_AGE_MS, EARLY_TOLERANCE_MS };
 }
