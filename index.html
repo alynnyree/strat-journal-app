@@ -5230,8 +5230,27 @@ function techText(){
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
     sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
+    // The receiving end's own account of what turned up. "It sent" and
+    // "it arrived" are different claims, and only the second one settles
+    // whether a picture from his phone actually made it.
+    (() => {
+      const ss = readProblem('shotsSeen');
+      return ss ? `pictures waiting: ${ss.text} (${when(ss)})`
+                : 'pictures waiting: not checked yet';
+    })(),
     vp ? `recording problem: ${vp.text} (${when(vp)})` : 'no recording problem',
     `pictures ${all.filter(t => t.shotEntry || t.shotMid || t.shotExit).length} · recordings ${all.filter(t => t.video && t.video.r2Key).length}`,
+    // Every phone alert failed silently for months and nothing anywhere
+    // said so. Four outcomes that must never share one answer: never
+    // asked, accepted, refused by name, or unreachable.
+    (() => {
+      if(!techNotes.checked) return 'phone alert: not checked yet';
+      const a = srv.lastPhoneAlert;
+      if(a === null || a === undefined) return 'phone alert: none recorded yet (or this server is an older build)';
+      const head = `phone alert: ${a.ok ? 'ACCEPTED' : a.asked ? 'REFUSED' : 'NEVER SENT'}`;
+      return `${head} · ${a.moment || '?'} · name "${a.name || 'none set'}" · ${when(a)}`
+        + (a.reason ? ` · ${a.reason}` : '');
+    })(),
   ].join('\n');
 }
 
@@ -7838,15 +7857,30 @@ async function matchPendingScreenshots(){
     // which still works -- each picture simply arrives with its image
     // already attached and nothing extra is asked for.
     const r = await fetch(url+'/media/pending?slim=1&key='+encodeURIComponent(appKey()));
-    if(!r.ok) return; // non-fatal — just try again next cycle
+    if(!r.ok){
+      // Both of these used to return in silence, so "my picture never
+      // arrived" and "the app never got as far as asking" looked
+      // identical. They are different faults with different fixes.
+      noteProblem('shotsSeen', r.status === 403
+        ? 'Could not ask for waiting pictures: the App Key was not accepted.'
+        : 'Could not ask for waiting pictures (' + r.status + ').');
+      return;
+    }
     screenshots = (await r.json()).screenshots || [];
-  }catch(e){ return; }
-  if(!screenshots.length) return;
+  }catch(e){
+    noteProblem('shotsSeen', 'Could not reach the service to ask for waiting pictures.');
+    return;
+  }
+  if(!screenshots.length){
+    noteProblem('shotsSeen', 'Asked, and no pictures were waiting.');
+    return;
+  }
 
   const trades = loadTrades();
   let changed = false;
   const readyToClassify = []; // trades that just gained a screenshot and are still "Needs Setup"
   const testShots = [];       // from a rehearsal -- shown, never attached
+  let attached = 0, unmatched = 0;
 
   for(const shot of screenshots){
     // A rehearsal picture never goes near a real trade. It is collected
@@ -7895,10 +7929,22 @@ async function matchPendingScreenshots(){
       try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* worst case it's offered again and just gets re-matched harmlessly */ }
       log('syncLog', `Auto-attached ${SHOT_LABEL[SLOT_OF_FIELD[best.field]].toLowerCase()} picture to ${best.trade.ticker} (${best.trade.entryDate}).`);
       if(!best.trade.strat && !readyToClassify.includes(best.trade)) readyToClassify.push(best.trade);
+      attached++;
+    } else {
+      // No match yet (e.g. the trade hasn't synced into the Journal as
+      // closed yet) — left in place on the backend, tried again next cycle.
+      unmatched++;
     }
-    // No match yet (e.g. the trade hasn't synced into the Journal as
-    // closed yet) — left in place on the backend, tried again next cycle.
   }
+
+  // What the RECEIVING end saw, which is the only honest answer to "did my
+  // picture arrive?". The sending end can only ever say it sent something.
+  // A picture that arrives and matches no trade is not a fault -- it is
+  // what a test picture, or a picture taken before its trade has synced,
+  // is supposed to look like -- so it is counted separately rather than
+  // folded in with the failures.
+  noteProblem('shotsSeen', `${screenshots.length} waiting · ${attached} attached to a trade`
+    + ` · ${unmatched} matched no trade yet · ${testShots.length} from a rehearsal`);
 
   if(changed){
     saveTrades(trades);

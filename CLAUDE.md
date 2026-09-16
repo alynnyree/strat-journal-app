@@ -116,10 +116,60 @@ Backend files and what they do:
 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
 `PUSHCUT_NOTIFICATION_NAME`, `PUSHCUT_API_KEY`, `GEMINI_API_KEY`.
 
+**CORRECTED 2026-09-16, then RESOLVED the same day.**
+That list was wrong about Pushcut. His Render settings, read off his screen,
+held exactly two Pushcut values — `PUSHCUT_NOTIFICATION_NAME_OPENED` and
+`PUSHCUT_NOTIFICATION_NAME_STILL_OPEN` — with **no `PUSHCUT_API_KEY` at
+all** and no plain `PUSHCUT_NOTIFICATION_NAME`. He added both that
+afternoon and the deploy succeeded, so all four now exist.
+
+**What that does and does not mean.** The server CAN now reach Pushcut. Not
+one alert has reached his phone: each name must ALSO exist as a
+notification inside the Pushcut app, and none has been created.
+`sendPushcut` only checks that it HAS a name and a key, never that the far
+end knows the name — so a name Pushcut has never heard of fails at Pushcut
+and is caught and logged where nobody reads. Nothing here is proven until a
+real trade makes his phone buzz.
+
+`sendPushcut` begins `if (!notificationName || !apiKey) return;` — so with
+no key, **all three phone alerts have been returning immediately and
+silently since the day they were built.** Not one has ever fired, and
+nothing anywhere says so. The comment above it calls this deliberate ("a
+nice-to-have... never something that should block the sync"), which is right
+about not breaking the sync and wrong about saying nothing: he has no way to
+learn that the whole phone path is inert.
+
+So "the phone picture pipeline needs two pieces set up on his phone" was
+itself too generous. It needs those two AND two settings that do not exist.
+Never describe that pipeline as one-step-from-working again without reading
+his actual settings.
+
+The code reads FOUR names, one per moment: `..._OPENED` (trade opens),
+`..._STILL_OPEN` (fifteen-minute mark), `PUSHCUT_NOTIFICATION_NAME` (trade
+closes), and `..._SIGNIN` (weekly Schwab sign-in, falling back to the plain
+one).
+
 AI features use **Google Gemini's free tier** (gemini-2.5-flash, schema-
 enforced JSON), not Anthropic's API — chosen to avoid ongoing API cost.
 Browsers cannot call these APIs directly (CORS), so all AI calls are
 server-side.
+
+**NO MONTHLY COSTS. This is a standing constraint, not a preference**
+(his words, 2026-09-16, when Pushcut pushed him toward its paid tier:
+*"When we started this project it was supposed to be free with no financial
+attachments, especially on a monthly basis."*). He is right, and the same
+instruction already exists for market data below. Before any feature
+depends on a paid service, check its free limits and design inside them —
+and if the feature cannot fit, say so and let him decide rather than
+letting him discover it at a paywall.
+
+**What that meant in practice for Pushcut:** its free tier allows THREE
+notifications. The code sends to four names, which read as needing four
+slots — but the phone only ever needed ONE, the trade-closed one, because
+the other two (`..._OPENED`, `..._STILL_OPEN`) exist to switch between
+video and stills and **his phone cannot record video at all**. Counting
+what a feature genuinely needs, rather than what the code happens to
+reference, is what kept this free.
 
 Market data comes from **Alpaca's free plan** (his instruction,
 2026-09-07: *"I don't want to pay for data from Alpaca"*). That plan gives
