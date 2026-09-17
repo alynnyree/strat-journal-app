@@ -4037,7 +4037,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-17 01:20';
+const APP_BUILD = '2026-09-17 02:10';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -5554,6 +5554,11 @@ function techText(){
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
     sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
     storageLine(),
+    (() => {
+      const tr = readProblem('trim');
+      const w = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
+      return `journal starts ${JOURNAL_FLOOR} · ` + (tr ? `${tr.text} (${w(tr)})` : 'not trimmed yet');
+    })(),
     (() => {
       const added = readAdded();
       if(!added.length) return 'trades added as new: none recorded yet';
@@ -7199,6 +7204,35 @@ function setConnState(connected, text, kind){
 // could complete or fill in what he has, and nothing older. An empty
 // journal is the one exception -- there is nothing of his to protect and
 // that is a recovery, so it asks for the year.
+// ---- AND THE FLOOR UNDER ALL OF IT -----------------------------------
+//
+// HIS INSTRUCTION, repeated (2026-09-17): "all these months in the journal
+// was unnecessary and to build it out for only 3 months back starting in
+// May." May, June and July are the three months he actually traded.
+//
+// Reading the range from his own journal was a LOOP, and it is very likely
+// most of what he has been watching. His journal holds trades from 2025, so
+// the oldest was October 2025, so the app asked for eleven months, so the
+// server served eleven months -- and anything that slipped the duplicate
+// check was written down, which made the journal older still, which made
+// the next request reach further back. Nothing anywhere set a floor.
+//
+// 205 -> 248 in four hours of an evening he did not trade, and his broker's
+// own file for SEVEN months rebuilds to 254. A journal he says should hold
+// three months was within six trades of the whole year.
+//
+// So the floor is a DATE, fixed, and it binds in three places at once: what
+// is asked for, what is accepted, and what is kept. A rule enforced in only
+// one of those is a rule that leaks -- the 90-day default leaked exactly
+// that way, because the app passed its own hardcoded copy.
+const JOURNAL_FLOOR = '2026-05-01';
+const JOURNAL_FLOOR_MS = Date.parse(JOURNAL_FLOOR + 'T00:00:00');
+function beforeTheFloor(t){
+  const d = Date.parse(((t && t.entryDate) || '') + 'T00:00:00');
+  if(isNaN(d)) return false;        // no date is not a reason to throw a trade away
+  return d < JOURNAL_FLOOR_MS;
+}
+
 const HISTORY_MARGIN_DAYS = 2;
 const MAX_HISTORY_DAYS = 365;
 function historyDaysToAsk(trades){
@@ -7209,9 +7243,56 @@ function historyDaysToAsk(trades){
     if(isNaN(d)) continue;
     if(oldest === null || d < oldest) oldest = d;
   }
-  if(oldest === null) return MAX_HISTORY_DAYS;   // nothing to protect: a recovery
+  // Never reach past the floor, whatever the journal happens to contain.
+  // This is the line that breaks the loop: the journal can no longer make
+  // the request older, so the request can no longer make the journal older.
+  if(oldest === null || oldest < JOURNAL_FLOOR_MS) oldest = JOURNAL_FLOOR_MS;
   const span = Math.ceil((Date.now() - oldest) / 86400000) + HISTORY_MARGIN_DAYS;
   return Math.max(1, Math.min(MAX_HISTORY_DAYS, span));
+}
+
+// ---- Putting the journal back to the three months he asked for --------
+//
+// DESTRUCTIVE, so nothing is destroyed. Anything from before the floor is
+// moved aside, not deleted, and can be handed straight back. This project
+// has already told him to erase 304 trades without once checking the path
+// back, and left him with no way to recover them.
+//
+// Runs once. Says what it removed, over what dates, and what those trades
+// were worth -- a journal quietly getting smaller is no better than one
+// quietly getting bigger.
+const SET_ASIDE_KEY = 'strat_before_may';
+let trimDone = false;
+function trimJournalToFloor(){
+  if(trimDone) return null;
+  trimDone = true;
+  const all = loadTrades();
+  const keep = [], drop = [];
+  for(const t of all) (beforeTheFloor(t) ? drop : keep).push(t);
+  if(!drop.length){
+    noteProblem('trim', `Nothing in the journal is older than ${JOURNAL_FLOOR}.`);
+    return { removed: 0, kept: keep.length };
+  }
+  // Set aside FIRST. If there is no room to keep them, nothing is removed --
+  // losing them quietly is the one outcome that cannot be undone.
+  try{
+    const already = JSON.parse(localStorage.getItem(SET_ASIDE_KEY) || '[]');
+    localStorage.setItem(SET_ASIDE_KEY, JSON.stringify(already.concat(drop)));
+  }catch(e){
+    noteProblem('trim', 'There was no room to set the older trades aside, so none were removed.');
+    return { removed: 0, kept: all.length, reason: 'no room to set aside' };
+  }
+  const wrote = saveTrades(keep);
+  if(!wrote.ok){
+    noteProblem('trim', wrote.reason);
+    return { removed: 0, kept: all.length, reason: wrote.reason };
+  }
+  const dates = drop.map(t => t.entryDate).filter(Boolean).sort();
+  const money = drop.reduce((n, t) => n + (t.pnlNet != null ? t.pnlNet : (t.pnlDollar || 0)), 0);
+  noteProblem('trim', `${drop.length} trade${drop.length===1?'':'s'} from before ${JOURNAL_FLOOR} set aside`
+    + (dates.length ? ` (${dates[0]} to ${dates[dates.length-1]})` : '')
+    + `, worth ${money >= 0 ? '+' : '-'}$${Math.abs(money).toFixed(2)}. They are kept and can be put back.`);
+  return { removed: drop.length, kept: keep.length };
 }
 
 let pollTally = { imported: 0, refreshed: 0, seen: new Set() };
@@ -7543,7 +7624,17 @@ async function autoImportPendingTrades(url, pending){
 
   let imported = 0;
   let refreshed = 0;
+  let tooOld = 0;
   for(let t of pending){
+    // OLDER THAN THE FLOOR. Refused before anything else, because a trade
+    // that must not be in his journal must not get as far as being compared
+    // against what is. Cleared from the server too -- left there it would
+    // be offered again on every check, for ever.
+    if(beforeTheFloor(t)){
+      tooOld++;
+      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){}
+      continue;
+    }
     if(existingIds.has(t.id)){
       // Already in his journal. This used to just move on -- which left
       // the trade sitting in the server's queue for ever, and that queue
@@ -8215,6 +8306,12 @@ function startAutoPoll(){
   });
 }
 startAutoPoll();
+
+// The journal put back to the three months he asked for. Its own attempt
+// and its own catch: something that must happen cannot sit downstream of
+// something that can fail.
+try{ trimJournalToFloor(); }
+catch(e){ noteProblem('trim', 'The journal could not be trimmed to the last three months.'); }
 
 // Every picture already sitting in his journal, moved across once. It has
 // its OWN attempt and its own catch: anything that must happen regardless
