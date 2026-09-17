@@ -345,7 +345,14 @@ async function showBadge(recording) {
   try {
     await chrome.action.setBadgeText({ text: recording ? '' : '!' });
     if (!recording) await chrome.action.setBadgeBackgroundColor({ color: '#C62828' });
-  } catch (e) { /* an older Chrome without badges is not a reason to fail the check */ }
+    // What it was last asked to show, and when. If he says the icon is
+    // bare and this says it asked for a mark, the fault is not in this
+    // file -- and that is worth knowing without another round of guessing.
+    await setStatus({ lastBadge: recording ? 'clear' : '!', lastBadgeAt: Date.now(), lastBadgeFault: null });
+  } catch (e) {
+    await setStatus({ lastBadgeFault: 'The mark could not be put on the icon: ' + e.message,
+                      lastBadgeAt: Date.now() }).catch(() => {});
+  }
 }
 
 // The badge is NOT set here any more -- it is set at the very top of the
@@ -556,12 +563,29 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
     }
     return false;
   });
+  // An alarm with a period and no delay first fires ONE PERIOD LATER, so a
+  // fresh install and a fresh browser both spent their first minute with no
+  // mark on the icon at all -- the exact minute he is most likely to look,
+  // having just installed it or just sat down. The mark is put up straight
+  // away now, and the ordinary check follows a minute behind.
+  const markNow = () => {
+    recorderState()
+      .then(st => showBadge(!!(st && st.recording)))
+      .catch(() => showBadge(false));
+  };
   chrome.runtime.onInstalled.addListener(() => {
     chrome.alarms.create(POLL_ALARM_NAME, { periodInMinutes: POLL_PERIOD_MINUTES });
+    markNow();
   });
   chrome.runtime.onStartup.addListener(() => {
     chrome.alarms.create(POLL_ALARM_NAME, { periodInMinutes: POLL_PERIOD_MINUTES });
+    markNow();
   });
+  // And whenever this part of the add-on is woken for any other reason.
+  // Chrome shuts it down and starts it again constantly; the mark itself
+  // survives that, but if it was never put up in the first place nothing
+  // below would ever put it up either.
+  markNow();
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === POLL_ALARM_NAME) pollAndCapture();
   });
