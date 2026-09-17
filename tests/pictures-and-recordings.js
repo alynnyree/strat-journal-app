@@ -178,8 +178,17 @@ const { launch, serve } = require('./browser.js');
 
     check(`its picture IS fetched, once (${asked.image.length})`, asked.image.length === 1);
     check('...and it is the one that matched', asked.image[0] === 'e1');
-    const stored = await p.evaluate(() => loadTrades()[0].shotEntry);
-    check('it lands on the trade', typeof stored === 'string' && stored.length > 300000);
+    // Asserts what the READERS get, not where it happens to be kept. The
+    // picture now lives in the store with room for it and the trade keeps a
+    // mark -- so "is it on the trade object" was a check on the old design,
+    // and a test that describes the plumbing rather than the result fails
+    // the moment the plumbing is improved.
+    const marked = await p.evaluate(() => !!loadTrades()[0].shotEntry);
+    check('the trade is marked as having one', marked);
+    const stored = await p.evaluate(async () => (await pictureOn(loadTrades()[0], 'shotEntry')).image);
+    check('and the picture itself comes back whole', typeof stored === 'string' && stored.length > 300000);
+    check('while the journal itself stays small',
+      (await p.evaluate(() => (localStorage.getItem('strat_trades')||'').length)) < 5000);
     check('and is cleared from the queue', asked.deleted.includes('e1'));
 
     // Asking again must not fetch it again.
@@ -195,7 +204,7 @@ const { launch, serve } = require('./browser.js');
     const { p, asked, errors, close } = await phone([trade()], { shots: [shot], oldServer: true });
     await p.evaluate(() => matchPendingScreenshots());
     await p.waitForTimeout(300);
-    const stored = await p.evaluate(() => loadTrades()[0].shotEntry);
+    const stored = await p.evaluate(async () => (await pictureOn(loadTrades()[0], 'shotEntry')).image);
     check('the picture still lands, with the old server', typeof stored === 'string' && stored.length > 300000);
     check(`and nothing extra is asked for (${asked.image.length})`, asked.image.length === 0);
     check('nothing threw', errors.length === 0);
