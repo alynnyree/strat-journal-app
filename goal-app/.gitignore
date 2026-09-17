@@ -6,3 +6,6 @@
 # Supabase working files
 .branches
 .temp
+
+# Installed for testing only, never committed.
+node_modules/

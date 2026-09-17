@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Goal Execution</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Goals">
+<meta name="theme-color" content="#0E6B68">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  /* ---- colours, one set of tokens, defined light first so both themes resolve */
+  :root {
+    --ground:      #F1F4F3;
+    --surface:     #FFFFFF;
+    --sunk:        #E8EDEC;
+    --ink:         #131E1D;
+    --ink-soft:    #566361;
+    --ink-faint:   #8A9795;
+    --line:        #D6DEDC;
+    --line-strong: #B8C4C2;
+    --accent:      #0E6B68;
+    --accent-wash: #DCEBE9;
+    --wait:        #96600C;
+    --wait-wash:   #F6E9D2;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0D1514; --surface: #15201F; --sunk: #101A19;
+      --ink: #E2EAE8; --ink-soft: #97A7A4; --ink-faint: #6C7B79;
+      --line: #253432; --line-strong: #374846;
+      --accent: #52C0B6; --accent-wash: #10302E;
+      --wait: #D9A055; --wait-wash: #2C2317;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0D1514; --surface: #15201F; --sunk: #101A19;
+    --ink: #E2EAE8; --ink-soft: #97A7A4; --ink-faint: #6C7B79;
+    --line: #253432; --line-strong: #374846;
+    --accent: #52C0B6; --accent-wash: #10302E;
+    --wait: #D9A055; --wait-wash: #2C2317;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  /* ---- THE SHELL.
+     svh, not dvh. dvh settles on the toolbar-hidden height on a page that does
+     not scroll, so the bottom of the bar ends up underneath Safari's toolbar.
+     svh is the height with the browser's own bars at their biggest, which is the
+     smallest the screen ever gets, so nothing can hide beneath them.
+     The bar is the last row in normal flow and is NOT positioned, so there is
+     nothing for it to drift against. Learned the hard way on this same phone. */
+  .app {
+    height: 100svh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    flex: none;
+    padding: max(12px, env(safe-area-inset-top)) 18px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  header .mark {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent);
+  }
+  header h1 { margin: 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* min-height:0 or flex refuses to shrink this and pushes the bar off screen. */
+  main {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  nav {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button {
+    appearance: none; border: 0; background: none; cursor: pointer;
+    padding: 9px 2px 7px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--ink-faint);
+    font-family: var(--sans); font-size: 0.65rem; font-weight: 500;
+  }
+  nav button svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+  nav button[aria-current="page"] { color: var(--accent); }
+  nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+  /* ---- pieces */
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card h2 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+  .card p { margin: 0; color: var(--ink-soft); font-size: 0.9rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.66rem; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  .chip {
+    align-self: flex-start;
+    font-family: var(--mono); font-size: 0.64rem; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px;
+  }
+  .chip[data-t="done"] { color: var(--accent); background: var(--accent-wash); }
+  .chip[data-t="soon"] { color: var(--wait);   background: var(--wait-wash); }
+
+  label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--ink-soft); }
+  input[type="text"], input[type="password"] {
+    font-family: var(--mono); font-size: 0.9rem;
+    padding: 11px 12px; border: 1px solid var(--line-strong);
+    background: var(--sunk); color: var(--ink); border-radius: 0;
+    width: 100%; -webkit-appearance: none;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  button.action {
+    appearance: none; border: 1px solid var(--accent); background: var(--accent);
+    color: var(--surface); font-family: var(--sans); font-size: 0.92rem; font-weight: 600;
+    padding: 12px 16px; cursor: pointer; border-radius: 0; width: 100%;
+  }
+  button.action[data-style="quiet"] { background: none; color: var(--accent); }
+  button.action:active { opacity: 0.75; }
+
+  .note {
+    border-left: 2px solid var(--line-strong); padding-left: 12px;
+    font-size: 0.85rem; color: var(--ink-soft);
+  }
+  .note b { color: var(--ink); display: block; font-size: 0.8rem;
+            font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+
+  .steps { display: flex; flex-direction: column; }
+  .steps > div {
+    display: grid; grid-template-columns: 1.6rem 1fr; gap: 12px;
+    padding: 11px 0; border-bottom: 1px solid var(--line); align-items: start;
+  }
+  .steps > div:first-child { border-top: 1px solid var(--line); }
+  .steps .m { font-family: var(--mono); font-size: 0.85rem; font-weight: 600; color: var(--ink-faint); }
+  .steps .m[data-done="1"] { color: var(--accent); }
+  .steps .t { font-size: 0.88rem; }
+  .steps .t span { display: block; color: var(--ink-soft); font-size: 0.82rem; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <span class="mark">Goal</span>
+    <h1 id="screen-title">Today</h1>
+  </header>
+
+  <main id="main">
+
+    <!-- ------------------------------------------------------------ TODAY -->
+    <section data-screen="today">
+      <div class="card">
+        <span class="eyebrow">Where this app is</span>
+        <h2>Step A is done. You are looking at it.</h2>
+        <p>This is the shell: it installs to your home screen, it opens, and it remembers your password. Nothing talks to your database yet. That is step B.</p>
+      </div>
+
+      <div class="steps">
+        <div><span class="m" data-done="1">A</span><span class="t">The shell<span>An icon on your home screen that opens to this.</span></span></div>
+        <div><span class="m">B</span><span class="t">Capture<span>A big box. Speak into it, it saves.</span></span></div>
+        <div><span class="m">C</span><span class="t">Thoughts<span>Everything you have said, and searching it.</span></span></div>
+        <div><span class="m">D</span><span class="t">Goals<span>Your goal, projects, roadmap, current step.</span></span></div>
+        <div><span class="m">E</span><span class="t">Today<span>Tasks, ordered by which step they serve.</span></span></div>
+      </div>
+
+      <div class="note">
+        <b>Your morning brief is unaffected</b>
+        It still arrives on Telegram at 8:10, from your database, as it has since Monday. This app does not replace that and is not involved in it.
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- CAPTURE -->
+    <section data-screen="capture" hidden>
+      <div class="card">
+        <span class="chip" data-t="soon">Step B</span>
+        <h2>Speak a thought</h2>
+        <p>A big empty box lands here. Tap it, tap the microphone on your keyboard, speak, and it saves to your database with the time on it.</p>
+        <p>Until then, Telegram still catches everything. Nothing is lost by waiting.</p>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- THOUGHTS -->
+    <section data-screen="thoughts" hidden>
+      <div class="card">
+        <span class="chip" data-t="soon">Step C</span>
+        <h2>Everything you have said</h2>
+        <p>Newest first, with its tags, and a box to search them. Your thoughts are already being saved, so this screen will have something in it the day it arrives.</p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ GOALS -->
+    <section data-screen="goals" hidden>
+      <div class="card">
+        <span class="chip" data-t="soon">Step D</span>
+        <h2>Your goal and where you are</h2>
+        <p>Your ultimate goal at the top, your projects under it, and the roadmap with the step you are on marked. The thing a chat thread can never show you.</p>
+      </div>
+      <div class="note">
+        <b>Waiting on you</b>
+        Your goals, projects and roadmap tables are empty. Send Claude your seven roadmap steps and which one you are on, and this screen has something to show.
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- SETTINGS -->
+    <section data-screen="settings" hidden>
+      <div class="card">
+        <h2>Your password</h2>
+        <p>The one starting <span style="font-family:var(--mono)">brief-</span>, the same one your schedule uses. It is kept on this phone only and never leaves it except to talk to your own database.</p>
+        <label>
+          Password
+          <input type="password" id="key" autocomplete="off" autocapitalize="off"
+                 autocorrect="off" spellcheck="false" placeholder="brief-...">
+        </label>
+        <button class="action" id="save-key">Save it</button>
+        <button class="action" data-style="quiet" id="show-key">Show what I typed</button>
+        <p id="key-status" class="eyebrow"></p>
+      </div>
+
+      <div class="note">
+        <b>Not used yet</b>
+        Nothing on this phone talks to your database until step B. Saving it now means one less thing to do then.
+      </div>
+
+      <div class="card">
+        <h2>Install it properly</h2>
+        <p>If you opened this in Safari rather than from your home screen, tap the share button, then <b>Add to Home Screen</b>. It then opens without Safari's bars around it and behaves like an app.</p>
+        <p id="install-state" class="eyebrow"></p>
+      </div>
+    </section>
+
+  </main>
+
+  <nav id="nav">
+    <button data-go="today" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Today</button>
+    <button data-go="capture">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Capture</button>
+    <button data-go="thoughts">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h9"/><circle cx="19" cy="17" r="3"/></svg>Thoughts</button>
+    <button data-go="goals">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/></svg>Goals</button>
+    <button data-go="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Settings</button>
+  </nav>
+</div>
+
+<script>
+'use strict';
+
+// Where the password lives on this phone. Nowhere else.
+var KEY_STORE = 'goalapp.key';
+
+var TITLES = {
+  today: 'Today', capture: 'Capture', thoughts: 'Thoughts',
+  goals: 'Goals', settings: 'Settings'
+};
+
+function show(name) {
+  var screens = document.querySelectorAll('[data-screen]');
+  for (var i = 0; i < screens.length; i++) {
+    screens[i].hidden = screens[i].getAttribute('data-screen') !== name;
+  }
+  var buttons = document.querySelectorAll('#nav button');
+  for (var j = 0; j < buttons.length; j++) {
+    if (buttons[j].getAttribute('data-go') === name) {
+      buttons[j].setAttribute('aria-current', 'page');
+    } else {
+      buttons[j].removeAttribute('aria-current');
+    }
+  }
+  document.getElementById('screen-title').textContent = TITLES[name] || name;
+  document.getElementById('main').scrollTop = 0;
+}
+
+document.getElementById('nav').addEventListener('click', function (e) {
+  var button = e.target.closest('button[data-go]');
+  if (button) show(button.getAttribute('data-go'));
+});
+
+// ---- the password.
+//
+// Reading or writing storage can throw outright in a private window or with
+// site data blocked, so every touch of it is wrapped. The app has to keep
+// working without it rather than showing a blank screen.
+function readKey() {
+  try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; }
+}
+function writeKey(value) {
+  try { localStorage.setItem(KEY_STORE, value); return true; } catch (e) { return false; }
+}
+
+var keyBox = document.getElementById('key');
+var keyStatus = document.getElementById('key-status');
+
+function describeKey(value) {
+  if (!value) return 'Nothing saved yet.';
+  // Say what was saved without ever showing it back in full.
+  return 'Saved. ' + value.length + ' characters, starting "' +
+         value.slice(0, 6) + '".';
+}
+
+keyBox.value = readKey();
+keyStatus.textContent = describeKey(readKey());
+
+document.getElementById('save-key').addEventListener('click', function () {
+  var value = keyBox.value.trim();
+  if (!value) {
+    keyStatus.textContent = 'Nothing to save. The box is empty.';
+    return;
+  }
+  if (!writeKey(value)) {
+    keyStatus.textContent = 'This phone would not let the app remember it. ' +
+      'That happens in a private browsing window.';
+    return;
+  }
+  keyStatus.textContent = describeKey(value);
+});
+
+document.getElementById('show-key').addEventListener('click', function () {
+  var hidden = keyBox.type === 'password';
+  keyBox.type = hidden ? 'text' : 'password';
+  this.textContent = hidden ? 'Hide it again' : 'Show what I typed';
+});
+
+// ---- is it installed, or still sitting inside Safari?
+var installed = window.navigator.standalone === true ||
+                (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+document.getElementById('install-state').textContent = installed
+  ? 'Running from your home screen. Correct.'
+  : 'Running inside the browser. Add it to your home screen for the full thing.';
+
+show('today');
+</script>
+</body>
+</html>
