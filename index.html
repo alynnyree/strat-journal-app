@@ -4054,7 +4054,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-17 02:45';
+const APP_BUILD = '2026-09-17 03:30';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -4688,6 +4688,134 @@ function compareJournalToBroker(trades, fills){
            differences, outside, unreadable: unreadable.length, feesUnknown, everythingMatches };
 }
 
+// ---- PUTTING IT RIGHT AGAINST HIS BROKER -----------------------------
+//
+// HIS QUESTION (2026-09-17): "How do we fix the duplicate trades forever so
+// this is never a problem?"
+//
+// Every duplicate check on this project so far has been the app judging
+// ITSELF -- comparing his trades to his other trades, by rules I wrote.
+// That has now failed four separate times: blind to a copy with no contract
+// code, blind to the same fills paired twice, and once so strict it threw
+// away 24 real trades of his. Each version looked right. There is no reason
+// to believe a fifth would be the last.
+//
+// So this stops judging and starts COUNTING. His broker's file says how
+// many contracts he bought, of what, on which day. The app had no hand in
+// that number and cannot argue with it. His journal may never hold more.
+//
+// HIS OWN RULE, and it is the one that tells a real trade from a phantom
+// (2026-09-17): "for every buy there should be a sell unless I'm still in
+// the trade. There should be two trades for one card." A card is one
+// purchase and one sale. A card citing anything else is the shape of a
+// pairing that happened twice.
+//
+// Nothing is deleted. The extras are set aside exactly as the pre-May
+// trades were, and can be handed back.
+const RECONCILE_ASIDE_KEY = 'strat_set_aside_extras';
+
+// How suspect a trade is, most suspect first. Only ever used to choose
+// BETWEEN trades on a day that genuinely has too many -- it never decides
+// that a day has too many, and it can never take a day below his broker's
+// own count.
+function suspectScore(t){
+  let n = 0;
+  // His rule. One purchase and one sale is what a card IS.
+  const fills = Array.isArray(t.fills) ? t.fills.length : 0;
+  if(fills !== 2) n += 100;
+  // The phantom's own signature, measured on his real journal: the fee had
+  // already been drawn down and given to the real trade, so the copy
+  // arrived with none and could never be given one.
+  if(t.fees == null) n += 50;
+  if(!String(t.occ || '').trim()) n += 20;
+  // Everything else being equal, the one that arrived later is the copy.
+  n += Math.min(19, Math.floor((Number(t.id) || 0) / 1e12));
+  return n;
+}
+
+// What would be set aside, and why. Pure: it reads, decides, and returns --
+// it changes nothing. That is what lets it be checked properly.
+function reconcilePlan(trades, differences){
+  const tooMany = (differences || []).filter(d => d.kind === 'too many' || d.kind === 'not at your broker');
+  const plan = { days: [], remove: [], contracts: 0 };
+  if(!tooMany.length) return plan;
+
+  for(const d of tooMany){
+    const mine = (trades || []).filter(t =>
+      t.optExit != null && t.entryDate === d.date && occToBrokerSymbol(t.occ) === d.symbol);
+    if(!mine.length) continue;
+    // Most suspect first, so the ones kept are the ones that look most like
+    // real trades.
+    const ranked = mine.slice().sort((a, b) => suspectScore(b) - suspectScore(a));
+    let over = mine.reduce((n, t) => n + (t.contracts || 0), 0) - d.broker;
+    const drop = [];
+    for(const t of ranked){
+      if(over <= 0) break;
+      const c = t.contracts || 0;
+      if(c <= 0) continue;
+      // NEVER below his broker's own count. Removing a trade bigger than
+      // the excess would take away contracts he really did buy.
+      if(c > over) continue;
+      drop.push(t); over -= c;
+    }
+    if(!drop.length) continue;
+    plan.days.push({
+      date: d.date, symbol: d.symbol, broker: d.broker, journal: d.journal,
+      removing: drop.length,
+      contracts: drop.reduce((n, t) => n + (t.contracts || 0), 0),
+      stillOver: over,
+      why: drop.map(t => {
+        const fills = Array.isArray(t.fills) ? t.fills.length : 0;
+        if(fills !== 2) return fills === 0 ? 'no purchase or sale recorded against it'
+                                           : `${fills} fills on one card, not a purchase and a sale`;
+        if(t.fees == null) return 'no fee was ever charged for it';
+        if(!String(t.occ || '').trim()) return 'no contract code';
+        return 'the later of two that look the same';
+      }),
+    });
+    plan.remove.push(...drop.map(t => t.id));
+    plan.contracts += drop.reduce((n, t) => n + (t.contracts || 0), 0);
+  }
+  return plan;
+}
+
+// Carries it out. Set aside BEFORE anything is removed -- if there is no
+// room to keep them, nothing is removed at all.
+function applyReconcilePlan(plan){
+  if(!plan || !plan.remove.length) return { ok:false, reason:'There was nothing to put right.' };
+  const ids = new Set(plan.remove);
+  const all = loadTrades();
+  const keep = all.filter(t => !ids.has(t.id));
+  const drop = all.filter(t => ids.has(t.id));
+  if(!drop.length) return { ok:false, reason:'Those trades are no longer in your journal.' };
+  try{
+    const already = JSON.parse(localStorage.getItem(RECONCILE_ASIDE_KEY) || '[]');
+    localStorage.setItem(RECONCILE_ASIDE_KEY, JSON.stringify(already.concat(drop)));
+  }catch(e){
+    return { ok:false, reason:'There was no room to set those trades aside, so none were removed.' };
+  }
+  const wrote = saveTrades(keep);
+  if(!wrote.ok) return { ok:false, reason: wrote.reason };
+  const money = drop.reduce((n, t) => n + (t.pnlNet != null ? t.pnlNet : (t.pnlDollar || 0)), 0);
+  noteProblem('reconcile', `${drop.length} trade${drop.length===1?'':'s'} set aside to match Schwab`
+    + ` (${plan.contracts} contract${plan.contracts===1?'':'s'}, ${money >= 0 ? '+' : '-'}$${Math.abs(money).toFixed(2)}).`
+    + ' They are kept and can be put back.');
+  return { ok:true, removed: drop.length, contracts: plan.contracts, money };
+}
+
+let lastReconcilePlan = null;
+function putItRight(){
+  const res = applyReconcilePlan(lastReconcilePlan);
+  const box = document.getElementById('reconcileResult');
+  if(box){
+    box.style.color = res.ok ? 'var(--bull)' : 'var(--bear)';
+    box.textContent = res.ok
+      ? `Done. ${res.removed} trade${res.removed===1?'':'s'} set aside — ${res.contracts} contract${res.contracts===1?'':'s'}. Choose your file again to check it now matches.`
+      : res.reason;
+  }
+  if(res.ok){ lastReconcilePlan = null; renderDashboard(); renderJournal(); }
+}
+
 // Reads the chosen file in the browser and shows the answer. Nothing is
 // uploaded: the file never leaves the phone.
 function runBrokerCheck(input){
@@ -4818,10 +4946,32 @@ function renderBrokerCheck(r){
       ${r.feesUnknown ? ` ${r.feesUnknown} of your trades have no fee worked out yet, so their after-fee figure is still short.` : ''}
     </div>`;
 
+  // ONE BUTTON, and only when there is genuinely something to put right.
+  // He asked for this outright: "How do we fix the duplicate trades forever
+  // so this is never a problem?" It says what it would remove, and why,
+  // BEFORE he presses anything -- a button that acts on his journal without
+  // first showing its working is not a fix, it is another thing to trust.
+  lastReconcilePlan = reconcilePlan(loadTrades(), r.differences);
+  const fix = !lastReconcilePlan.remove.length ? '' : `
+    <div style="margin-top:14px; padding:12px 14px; border-radius:10px; border:1px solid var(--gold); background:var(--panel);">
+      <div style="font-size:13px; font-weight:600; color:var(--gold);">Your journal holds ${lastReconcilePlan.contracts} contract${lastReconcilePlan.contracts===1?'':'s'} Schwab never charged you for.</div>
+      <div style="font-size:12px; color:var(--text-dim); margin-top:6px; line-height:1.55;">
+        ${lastReconcilePlan.days.slice(0, 8).map(d => `
+          <div style="margin-top:5px;">${escapeHtml(niceDate(d.date))} — you have ${d.journal}, Schwab charged you for ${d.broker}.
+          Removing ${d.removing}: ${escapeHtml(d.why.slice(0, 2).join('; '))}.</div>`).join('')}
+        ${lastReconcilePlan.days.length > 8 ? `<div style="margin-top:5px;">…and ${lastReconcilePlan.days.length - 8} more days.</div>` : ''}
+      </div>
+      <button class="secondary" style="margin-top:10px; width:100%;" onclick="putItRight()">Put this right</button>
+      <div id="reconcileResult" style="font-size:12px; margin-top:8px; line-height:1.5;"></div>
+      <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.5;">
+        Nothing is deleted. They are set aside and can be put back.
+      </div>
+    </div>`;
+
   return headline + scope + heads
     + moneyRows
     + row('Contracts bought', r.contracts.journal, r.contracts.broker, r.contracts.ok, false)
-    + diffs + caveat;
+    + diffs + fix + caveat;
 }
 
 // ---- The Checks page ------------------------------------------------
