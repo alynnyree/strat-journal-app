@@ -176,6 +176,36 @@
   .steps .t { font-size: 0.88rem; }
   .steps .t span { display: block; color: var(--ink-soft); font-size: 0.82rem; }
 
+  textarea {
+    font-family: var(--sans); font-size: 1.05rem; line-height: 1.5;
+    padding: 13px 13px; border: 1px solid var(--line-strong);
+    background: var(--sunk); color: var(--ink); border-radius: 0;
+    width: 100%; min-height: 40svh; resize: vertical; -webkit-appearance: none;
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+
+  /* One line telling him where he stands. Nothing else at the top of a screen. */
+  .verdict { font-size: 0.92rem; font-weight: 500; margin: 0; }
+  .verdict[data-t="good"] { color: var(--accent); }
+  .verdict[data-t="bad"]  { color: var(--wait); }
+  .verdict[data-t="busy"] { color: var(--ink-soft); }
+
+  /* Mine, not his. Folded away unless he is asked to open it. */
+  details.detail { border-top: 1px solid var(--line); padding-top: 9px; }
+  details.detail summary {
+    cursor: pointer; list-style: none;
+    font-family: var(--mono); font-size: 0.66rem; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  details.detail summary::-webkit-details-marker { display: none; }
+  details.detail pre {
+    margin: 9px 0 0; white-space: pre-wrap; word-break: break-word;
+    font-family: var(--mono); font-size: 0.72rem; line-height: 1.5; color: var(--ink-soft);
+  }
+
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -193,13 +223,13 @@
     <section data-screen="today">
       <div class="card">
         <span class="eyebrow">Where this app is</span>
-        <h2>Step A is done. You are looking at it.</h2>
-        <p>This is the shell: it installs to your home screen, it opens, and it remembers your password. Nothing talks to your database yet. That is step B.</p>
+        <h2>Step B is done. Capture works.</h2>
+        <p>Tap Capture at the bottom, tap the microphone on your keyboard, speak, and it saves to your database with the time on it. The same place your Telegram thoughts go.</p>
       </div>
 
       <div class="steps">
         <div><span class="m" data-done="1">A</span><span class="t">The shell<span>An icon on your home screen that opens to this.</span></span></div>
-        <div><span class="m">B</span><span class="t">Capture<span>A big box. Speak into it, it saves.</span></span></div>
+        <div><span class="m" data-done="1">B</span><span class="t">Capture<span>A big box. Speak into it, it saves.</span></span></div>
         <div><span class="m">C</span><span class="t">Thoughts<span>Everything you have said, and searching it.</span></span></div>
         <div><span class="m">D</span><span class="t">Goals<span>Your goal, projects, roadmap, current step.</span></span></div>
         <div><span class="m">E</span><span class="t">Today<span>Tasks, ordered by which step they serve.</span></span></div>
@@ -214,10 +244,20 @@
     <!-- ---------------------------------------------------------- CAPTURE -->
     <section data-screen="capture" hidden>
       <div class="card">
-        <span class="chip" data-t="soon">Step B</span>
-        <h2>Speak a thought</h2>
-        <p>A big empty box lands here. Tap it, tap the microphone on your keyboard, speak, and it saves to your database with the time on it.</p>
-        <p>Until then, Telegram still catches everything. Nothing is lost by waiting.</p>
+        <p id="capture-verdict" class="verdict" data-t="busy">Speak or type, then tap Save.</p>
+        <textarea id="capture-text" placeholder="Tap here, then tap the microphone on your keyboard."
+                  autocapitalize="sentences" autocorrect="on" spellcheck="true"></textarea>
+        <button class="action" id="capture-save">Save it</button>
+        <button class="action" data-style="quiet" id="capture-clear">Clear the box</button>
+        <details class="detail" id="capture-detail" hidden>
+          <summary>Details</summary>
+          <pre id="capture-steps"></pre>
+        </details>
+      </div>
+
+      <div class="note">
+        <b>Marks you can use</b>
+        Start with <b style="display:inline">!</b> to mark it private, and put # in front of words at the very start to tag it, like <span style="font-family:var(--mono)">#biz #pos</span>. Both stay in the text. The same marks the bot understands.
       </div>
     </section>
 
@@ -254,13 +294,15 @@
                  autocorrect="off" spellcheck="false" placeholder="brief-...">
         </label>
         <button class="action" id="save-key">Save it</button>
-        <button class="action" data-style="quiet" id="show-key">Show what I typed</button>
-        <p id="key-status" class="eyebrow"></p>
-      </div>
-
-      <div class="note">
-        <b>Not used yet</b>
-        Nothing on this phone talks to your database until step B. Saving it now means one less thing to do then.
+        <div class="row">
+          <button class="action" data-style="quiet" id="show-key">Show it</button>
+          <button class="action" data-style="quiet" id="test-key">Test it</button>
+        </div>
+        <p id="key-status" class="verdict" data-t="busy"></p>
+        <details class="detail" id="key-detail" hidden>
+          <summary>Details</summary>
+          <pre id="key-steps"></pre>
+        </details>
       </div>
 
       <div class="card">
@@ -361,7 +403,182 @@ document.getElementById('save-key').addEventListener('click', function () {
 document.getElementById('show-key').addEventListener('click', function () {
   var hidden = keyBox.type === 'password';
   keyBox.type = hidden ? 'text' : 'password';
-  this.textContent = hidden ? 'Hide it again' : 'Show what I typed';
+  this.textContent = hidden ? 'Hide it' : 'Show it';
+});
+
+// ---------------------------------------------------------------------------
+// Talking to his own server.
+//
+// One address, one password, one shape of answer. Nothing here talks to any AI
+// service, and there is no code in this app that could.
+// ---------------------------------------------------------------------------
+
+var API = 'https://wphtwymnarfvthdqlzbo.supabase.co/functions/v1/app-api';
+
+/**
+ * Ask the server to do one thing.
+ *
+ * ALWAYS answers with the same four pieces, so nothing that reads this has to
+ * guess what it got. A failure carries its own reason in plain words. A bare
+ * "it did not work" is never returned, because that is the dead end that costs
+ * a round of guessing every time.
+ *
+ * The three faults it can see are kept apart on purpose:
+ *   no password on this phone
+ *   could not reach the server at all
+ *   reached it, and it answered with something unreadable
+ * Those have three different fixes and must never share one message.
+ */
+function ask(action, extra) {
+  var key = readKey();
+  if (!key) {
+    return Promise.resolve({
+      ok: false,
+      message: 'No password saved on this phone. Open Settings and save yours.',
+      steps: [{ step: 'this phone', ok: false, detail: 'no password in storage' }],
+      data: null
+    });
+  }
+
+  var body = { action: action };
+  for (var name in extra) { if (Object.prototype.hasOwnProperty.call(extra, name)) body[name] = extra[name]; }
+
+  return fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-app-key': key },
+    body: JSON.stringify(body)
+  }).then(function (response) {
+    return response.text().then(function (text) {
+      var parsed = null;
+      try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+
+      if (parsed === null) {
+        return {
+          ok: false,
+          message: 'Your server answered, but with something this app could not read.',
+          steps: [{
+            step: 'the answer',
+            ok: false,
+            detail: 'status ' + response.status + ', first 300 characters: ' + text.slice(0, 300)
+          }],
+          data: null
+        };
+      }
+
+      // It answered properly. Pass its own words through unchanged. Inventing a
+      // cause here would hide the real one.
+      return {
+        ok: parsed.ok === true,
+        message: typeof parsed.message === 'string' && parsed.message
+          ? parsed.message
+          : 'Your server answered without saying what happened. That silence is itself the fault worth reporting.',
+        steps: Array.isArray(parsed.steps) ? parsed.steps : [],
+        data: parsed.data === undefined ? null : parsed.data
+      };
+    });
+  }).catch(function (cause) {
+    return {
+      ok: false,
+      message: 'Could not reach your server at all. Check you have signal, then try again.',
+      steps: [{ step: 'reaching the server', ok: false, detail: String(cause) }],
+      data: null
+    };
+  });
+}
+
+/** Put an answer on screen: one line for him, the working folded away for me. */
+function report(verdictEl, detailEl, stepsEl, answer, busy) {
+  verdictEl.textContent = answer.message;
+  verdictEl.setAttribute('data-t', busy ? 'busy' : (answer.ok ? 'good' : 'bad'));
+
+  var lines = [];
+  for (var i = 0; i < answer.steps.length; i++) {
+    var step = answer.steps[i];
+    lines.push((step.ok ? 'ok   ' : 'FAIL ') + step.step + ': ' + step.detail);
+  }
+  stepsEl.textContent = lines.length ? lines.join('\n') : 'The server sent no working back.';
+
+  // Open by itself when something went wrong, so a fault is never one tap away
+  // from being missed. Closed again the moment it works.
+  detailEl.hidden = answer.ok;
+  detailEl.open = !answer.ok;
+}
+
+// ---- Settings: does this password actually work?
+
+var keyDetail = document.getElementById('key-detail');
+var keySteps = document.getElementById('key-steps');
+
+document.getElementById('test-key').addEventListener('click', function () {
+  var button = this;
+  button.disabled = true;
+  keyStatus.textContent = 'Asking your server...';
+  keyStatus.setAttribute('data-t', 'busy');
+  ask('ping', {}).then(function (answer) {
+    report(keyStatus, keyDetail, keySteps, answer, false);
+    button.disabled = false;
+  });
+});
+
+// ---- Capture: the whole point of the app.
+
+var captureText = document.getElementById('capture-text');
+var captureVerdict = document.getElementById('capture-verdict');
+var captureDetail = document.getElementById('capture-detail');
+var captureSteps = document.getElementById('capture-steps');
+var DRAFT_STORE = 'goalapp.draft';
+
+// A half-spoken thought must survive a phone call, a locked screen or a tab
+// the phone decided to throw away. Kept on this phone only, and cleared the
+// moment it is safely in the database.
+function saveDraft(value) { try { localStorage.setItem(DRAFT_STORE, value); } catch (e) {} }
+function clearDraft() { try { localStorage.removeItem(DRAFT_STORE); } catch (e) {} }
+try {
+  var draft = localStorage.getItem(DRAFT_STORE);
+  if (draft) {
+    captureText.value = draft;
+    captureVerdict.textContent = 'This was still in the box from last time. It has not been saved yet.';
+  }
+} catch (e) {}
+
+captureText.addEventListener('input', function () { saveDraft(captureText.value); });
+
+document.getElementById('capture-clear').addEventListener('click', function () {
+  captureText.value = '';
+  clearDraft();
+  captureVerdict.textContent = 'Cleared. Nothing was saved.';
+  captureVerdict.setAttribute('data-t', 'busy');
+  captureDetail.hidden = true;
+});
+
+document.getElementById('capture-save').addEventListener('click', function () {
+  var button = this;
+  var text = captureText.value;
+
+  if (!text.trim()) {
+    captureVerdict.textContent = 'There is nothing in the box.';
+    captureVerdict.setAttribute('data-t', 'bad');
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Saving...';
+  captureVerdict.textContent = 'Saving...';
+  captureVerdict.setAttribute('data-t', 'busy');
+
+  ask('capture', { text: text }).then(function (answer) {
+    report(captureVerdict, captureDetail, captureSteps, answer, false);
+    button.disabled = false;
+    button.textContent = 'Save it';
+
+    // The box is emptied ONLY once the database has it. Anything else risks
+    // losing a thought to a moment of no signal, which is the one failure this
+    // app cannot afford.
+    if (answer.ok) {
+      captureText.value = '';
+      clearDraft();
+    }
+  });
 });
 
 // ---- is it installed, or still sitting inside Safari?

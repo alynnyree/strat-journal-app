@@ -15,6 +15,8 @@ $R goal-app/tests/morning-brief.test.ts
 $R goal-app/tests/morning-brief.test.ts goal-app/dist/morning-brief.single.ts
 $R goal-app/tests/telegram-webhook.test.ts
 $R goal-app/tests/telegram-webhook.test.ts goal-app/dist/telegram-webhook.single.ts
+$R goal-app/tests/app-api.test.ts
+$R goal-app/tests/app-api.test.ts goal-app/dist/app-api.single.ts
 
 node goal-app/tools/build-single-file.mjs --check
 echo "all checks passed"

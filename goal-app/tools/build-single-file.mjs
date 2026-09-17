@@ -23,6 +23,7 @@ const root = path.join(here, "..");
 const FUNCTIONS = [
   { name: "morning-brief", shared: ["brief.ts"], marker: "x-scheduled" },
   { name: "telegram-webhook", shared: ["db.ts", "thought.ts"], marker: "x-telegram-bot-api-secret-token" },
+  { name: "app-api", shared: ["db.ts", "thought.ts"], marker: "x-app-key" },
 ];
 
 const SHARED_IMPORT = /import\s*\{[\s\S]*?\}\s*from\s*["']\.\.\/_shared\/[A-Za-z0-9_.-]+["'];\r?\n/g;

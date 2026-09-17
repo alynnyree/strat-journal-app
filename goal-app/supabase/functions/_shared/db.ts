@@ -206,3 +206,97 @@ export function secretsMatch(expected: string, offered: string): boolean {
   }
   return difference === 0;
 }
+
+/**
+ * Read rows with a query of your own, rather than the whole table.
+ *
+ * `readTable` above is frozen: it has to stay character for character identical
+ * to the copy inside morning-brief, which is deployed and working, and
+ * tests/no-drift.test.ts fails if it ever stops matching. So the general
+ * version lives here beside it rather than replacing it. When morning-brief is
+ * next changed for its own reasons, that copy goes and this becomes the only
+ * one.
+ *
+ * `query` is everything after the question mark, for example
+ * "select=*&order=created_at.desc&limit=50".
+ *
+ * A refusal comes back as readable words, never as a bare empty list. "Could
+ * not reach it", "it answered with nothing" and "it refused me" are three
+ * different faults and have to stay three different answers.
+ */
+export async function readQuery(
+  baseUrl: string,
+  serviceKey: string,
+  table: string,
+  query: string,
+  wantTotal = false,
+): Promise<TableRead & { total: number | null }> {
+  const url = `${baseUrl.replace(/\/+$/, "")}/rest/v1/${table}?${query}`;
+  const headers: Record<string, string> = {
+    apikey: serviceKey,
+    Authorization: `Bearer ${serviceKey}`,
+    Accept: "application/json",
+  };
+  // Asking for the total is opt-in. It makes the database count the whole table
+  // as well as hand back the page, so it is not free and is not always wanted.
+  if (wantTotal) headers.Prefer = "count=exact";
+
+  let response: Response;
+  try {
+    response = await fetch(url, { headers });
+  } catch (cause) {
+    return { rows: [], total: null, error: `could not reach the database at all (${String(cause)})` };
+  }
+
+  const body = await response.text();
+  if (!response.ok) {
+    return {
+      rows: [],
+      total: null,
+      error: `the database refused to hand over "${table}" (status ${response.status}): ${body.slice(0, 400)}`,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { rows: [], total: null, error: `"${table}" answered with something that was not readable data` };
+  }
+  if (!Array.isArray(parsed)) {
+    return { rows: [], total: null, error: `"${table}" answered with a single value where a list was expected` };
+  }
+
+  return { rows: parsed as Row[], total: totalFromRange(response.headers.get("content-range")), error: null };
+}
+
+/**
+ * Pull the total out of the "0-24/317" the database sends back when asked to
+ * count. An unknown total is null, never 0, because 0 is a real answer meaning
+ * the table is empty and the two must never share one value.
+ */
+export function totalFromRange(range: string | null): number | null {
+  if (range === null) return null;
+  const after = range.split("/")[1] ?? "";
+  if (!/^\d+$/.test(after)) return null;
+  return Number(after);
+}
+
+/**
+ * Turn what he typed into something safe to search for.
+ *
+ * The database reads "*" as "anything at all" and "," as the end of this
+ * filter, so both would quietly change what he asked for. Everything that
+ * carries a meaning is encoded, which leaves the search looking for exactly the
+ * characters he typed. The stars on the outside are ours, and mean "anywhere in
+ * the text".
+ */
+export function likePattern(term: string): string {
+  const encoded = encodeURIComponent(term.trim())
+    .replace(/\*/g, "%2A")
+    .replace(/\(/g, "%28")
+    .replace(/\)/g, "%29")
+    .replace(/'/g, "%27")
+    .replace(/!/g, "%21");
+  return `*${encoded}*`;
+}
