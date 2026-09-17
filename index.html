@@ -1158,6 +1158,11 @@
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
         <span><span class="dot" style="background:var(--bear);"></span>Exit</span>
       </div>
+      <!-- AN EMPTY CHART MUST SAY WHY IT IS EMPTY. He has been looking at a
+           blank rectangle since 9 September and neither of us could tell
+           whether the bars never arrived, arrived unreadable, or arrived and
+           failed to draw. Hidden entirely when there is nothing wrong. -->
+      <div id="replayWhyEmpty" style="display:none; margin-top:6px; padding:9px 11px; border-radius:8px; border:1px solid var(--gold); background:var(--panel); color:var(--text-dim); font-size:12px; line-height:1.5;"></div>
       <input type="range" class="replay-scrub" id="replayScrub" min="0" max="0" value="0" oninput="replayScrubTo(this.value)">
       <div class="replay-controls">
         <div class="replay-btn" onclick="replayGoToStart()">⏮</div>
@@ -1991,17 +1996,51 @@ function aggregateReplayCandles(candles, groupSize) {
   }
   return groups;
 }
+// What the chart was actually handed, and what it refused. Read by the
+// replay screen so an empty chart can say why instead of being a blank
+// nobody can diagnose -- which is exactly what he has been looking at since
+// 9 September.
+let lastChartFormat = { got: 0, used: 0, noTime: 0, first: null, last: null, ms: null };
+
 function toChartFormat(candles){
   // Lightweight Charts wants unix seconds, not ms, and needs strictly
   // increasing unique times — de-dupe just in case aggregation ever
   // produces a collision.
+  //
+  // A CANDLE WITH NO USABLE TIME USED TO FREEZE THE WHOLE APP.
+  //
+  // Math.floor(undefined/1000) is NaN. The first such candle was stored as
+  // NaN; the second found NaN already taken, and `t++` on NaN is NaN -- so
+  // the de-dupe loop below spun for ever and the page died. Proven directly:
+  // ten million turns and no escape. My own attempt to reproduce his empty
+  // chart hit it and hung, which is how it was found.
+  //
+  // Refused now, and COUNTED, because a candle the chart cannot place is
+  // not a candle and pretending otherwise is what produced a white screen
+  // with no explanation.
   const seen = new Set();
-  return candles.map(c=>{
-    let t = Math.floor(c.datetime/1000);
+  const out = [];
+  let noTime = 0;
+  for(const c of candles){
+    // Accepts milliseconds under either name, and seconds, because the one
+    // thing worse than a missing time is silently reading the wrong field.
+    const rawMs = typeof c.datetime === 'number' ? c.datetime
+                : typeof c.time === 'number' ? (c.time > 1e11 ? c.time : c.time * 1000)
+                : NaN;
+    let t = Math.floor(rawMs / 1000);
+    if(!Number.isFinite(t)){ noTime++; continue; }
     while(seen.has(t)) t++;
     seen.add(t);
-    return { time: t, open: c.open, high: c.high, low: c.low, close: c.close };
-  });
+    out.push({ time: t, open: c.open, high: c.high, low: c.low, close: c.close });
+  }
+  lastChartFormat = {
+    got: candles.length, used: out.length, noTime,
+    first: out.length ? new Date(out[0].time * 1000).toISOString() : null,
+    last: out.length ? new Date(out[out.length-1].time * 1000).toISOString() : null,
+    ms: candles.length ? (typeof candles[0].datetime === 'number' ? 'datetime'
+        : typeof candles[0].time === 'number' ? 'time' : 'neither') : 'no candles',
+  };
+  return out;
 }
 function ensureReplayChart(){
   if(replayChart) return;
@@ -2170,6 +2209,43 @@ function openReplay(trade){
   buildReplayDrawRow();
   buildReplaySpeedRow();
   setReplayTimeframe(1);
+  reportReplayState();
+}
+
+// Says what the chart was handed and what it did with it -- but ONLY when
+// something is actually wrong. A chart that is working says nothing.
+function reportReplayState(){
+  const box = document.getElementById('replayWhyEmpty');
+  if(!box) return;
+  const f = lastChartFormat || {};
+  const lines = [];
+
+  if(!f.got){
+    lines.push('No bars reached this chart at all.');
+  } else if(!f.used){
+    lines.push(`All ${f.got} bars were refused: none of them carried a time the chart can place.`);
+    lines.push(`They arrived with "${f.ms}".`);
+  } else if(f.noTime){
+    lines.push(`${f.noTime} of ${f.got} bars had no usable time and were left out. ${f.used} are being shown.`);
+  }
+
+  // A chart with no room to draw in is the other way this ends up blank,
+  // and it looks identical from the outside.
+  const cont = document.getElementById('replayChartContainer');
+  if(cont && (cont.clientWidth < 50 || cont.clientHeight < 50)){
+    lines.push(`The chart has almost no room to draw in (${cont.clientWidth} by ${cont.clientHeight}).`);
+  }
+  // And the version actually loaded, because a cached older copy ignores
+  // the colours this app asks for -- which is what a white chart looks like.
+  try{
+    const v = LightweightCharts && LightweightCharts.version ? LightweightCharts.version() : null;
+    if(v && !String(v).startsWith('4.')) lines.push(`The chart drawing code on this device is version ${v}; this app expects 4.`);
+  }catch(e){ /* older copies have no version() at all */ }
+
+  if(!lines.length){ box.style.display = 'none'; box.textContent = ''; return; }
+  lines.push('Send me this line and I can fix it without guessing.');
+  box.textContent = lines.join(' ');
+  box.style.display = 'block';
 }
 function closeReplay(){
   replayPause();
@@ -4054,7 +4130,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-17 03:30';
+const APP_BUILD = '2026-09-17 04:20';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
