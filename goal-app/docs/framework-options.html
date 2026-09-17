@@ -1,0 +1,554 @@
+<title>Framework Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+  :root {
+    --ground:      #F1F4F3;
+    --surface:     #FFFFFF;
+    --surface-sunk:#E8EDEC;
+    --ink:         #131E1D;
+    --ink-soft:    #566361;
+    --ink-faint:   #8A9795;
+    --line:        #D6DEDC;
+    --line-strong: #B8C4C2;
+    --accent:      #0E6B68;
+    --accent-wash: #DCEBE9;
+    --wait:        #96600C;
+    --wait-wash:   #F6E9D2;
+
+    --step-0: 0.78rem;
+    --step-1: 0.875rem;
+    --step-2: 1rem;
+    --step-3: 1.25rem;
+    --step-4: 1.6rem;
+    --step-5: 2.1rem;
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0D1514;
+      --surface:     #15201F;
+      --surface-sunk:#101A19;
+      --ink:         #E2EAE8;
+      --ink-soft:    #97A7A4;
+      --ink-faint:   #6C7B79;
+      --line:        #253432;
+      --line-strong: #374846;
+      --accent:      #52C0B6;
+      --accent-wash: #10302E;
+      --wait:        #D9A055;
+      --wait-wash:   #2C2317;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0D1514;
+    --surface:     #15201F;
+    --surface-sunk:#101A19;
+    --ink:         #E2EAE8;
+    --ink-soft:    #97A7A4;
+    --ink-faint:   #6C7B79;
+    --line:        #253432;
+    --line-strong: #374846;
+    --accent:      #52C0B6;
+    --accent-wash: #10302E;
+    --wait:        #D9A055;
+    --wait-wash:   #2C2317;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--step-2);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead { display: flex; flex-direction: column; gap: 14px; }
+
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: var(--step-5);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+  }
+
+  .standfirst {
+    font-family: var(--serif);
+    font-size: var(--step-3);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 34ch;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    color: var(--ink-faint);
+  }
+
+  /* ------------------------------------------------------------- now */
+
+  .now {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--wait);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .now h2 {
+    font-size: var(--step-3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .now p { margin: 0; color: var(--ink-soft); }
+  .now strong { color: var(--ink); font-weight: 600; }
+
+  .asks {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .asks li {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 10px;
+    align-items: start;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .asks li::before {
+    content: counter(list-item);
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 600;
+    color: var(--wait);
+    background: var(--wait-wash);
+    text-align: center;
+    line-height: 1.5rem;
+    height: 1.5rem;
+  }
+
+  /* ------------------------------------------------------------ steps */
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+
+  .section-head { display: flex; flex-direction: column; gap: 6px; }
+
+  .section-head h2 {
+    font-size: var(--step-4);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .section-head p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: var(--step-1);
+    max-width: 62ch;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 2px; }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: 2.25rem 1fr;
+    gap: 4px 16px;
+  }
+
+  .step + .step { border-top: none; }
+
+  .step[data-state="current"] {
+    border-color: var(--line-strong);
+    border-left: 3px solid var(--wait);
+    padding-left: 20px;
+  }
+
+  .step[data-state="later"] { background: var(--surface-sunk); }
+
+  .step-num {
+    grid-row: 1 / span 3;
+    font-family: var(--mono);
+    font-size: var(--step-1);
+    font-weight: 600;
+    color: var(--ink-faint);
+    padding-top: 0.15em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step[data-state="current"] .step-num { color: var(--wait); }
+
+  .step-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+  }
+
+  .step-head h3 {
+    font-size: var(--step-3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .chip[data-tone="done"]    { color: var(--accent); background: var(--accent-wash); }
+  .chip[data-tone="waiting"] { color: var(--wait);   background: var(--wait-wash); }
+  .chip[data-tone="idle"]    { color: var(--ink-faint); border-color: var(--line); }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 8px;
+  }
+
+  .step-body p { margin: 0; color: var(--ink-soft); max-width: 62ch; }
+
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .facts > div {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: 4px 14px;
+    align-items: start;
+  }
+
+  .facts dt {
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-top: 0.25em;
+  }
+
+  .facts dd {
+    margin: 0;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .facts dd strong { color: var(--ink); font-weight: 600; }
+
+  .heads-up {
+    background: var(--surface-sunk);
+    border-left: 2px solid var(--line-strong);
+    padding: 12px 14px;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  .heads-up b {
+    display: block;
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--surface-sunk);
+    padding: 1px 5px;
+    color: var(--ink);
+  }
+
+  .step[data-state="later"] code { background: var(--surface); }
+
+  /* -------------------------------------------------------- plain lists */
+
+  .rows { display: flex; flex-direction: column; gap: 0; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1.4rem 1fr;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+
+  .row:first-child { border-top: 1px solid var(--line); }
+
+  .tick {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: var(--step-1);
+    color: var(--accent);
+    line-height: 1.55;
+  }
+
+  .row-text { font-size: var(--step-1); }
+  .row-text b { font-weight: 600; }
+  .row-text span { display: block; color: var(--ink-soft); }
+
+  .locked .tick { color: var(--ink-faint); }
+
+  /* ------------------------------------------------------------ pull */
+
+  .pull {
+    font-family: var(--serif);
+    font-size: var(--step-3);
+    line-height: 1.5;
+    color: var(--ink);
+    border-top: 2px solid var(--accent);
+    border-bottom: 1px solid var(--line);
+    padding-block: 18px;
+    margin: 0;
+    max-width: 44ch;
+  }
+
+  /* --------------------------------------------------------- glossary */
+
+  .glossary {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .glossary > div {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 4px 16px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .glossary > div:first-child { border-top: 1px solid var(--line); }
+
+  .glossary dt {
+    font-family: var(--mono);
+    font-size: var(--step-1);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .glossary dd {
+    margin: 0;
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: var(--step-0);
+    color: var(--ink-faint);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 560px) {
+    :root { --step-5: 1.75rem; --step-4: 1.4rem; --step-3: 1.1rem; }
+    .page { padding-block: 30px 56px; gap: 38px; }
+    .step { grid-template-columns: 1.75rem 1fr; padding: 18px 16px; gap: 4px 12px; }
+    .step[data-state="current"] { padding-left: 14px; }
+    .facts > div { grid-template-columns: 1fr; gap: 2px; }
+    .glossary > div { grid-template-columns: 1fr; gap: 2px; }
+    .now { padding: 18px 16px; }
+  }
+</style>
+<style>
+  .opt { background: var(--surface); border: 1px solid var(--line); padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; }
+  .opt + .opt { border-top: none; }
+  .opt[data-pick="yes"] { border-left: 3px solid var(--accent); padding-left: 21px; }
+  .opt[data-pick="no"] { background: var(--surface-sunk); }
+  .opt-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+  .opt-head h3 { font-size: var(--step-3); font-weight: 600; letter-spacing: -0.01em; }
+  .opt-head .letter { font-family: var(--mono); font-size: var(--step-1); font-weight: 600; color: var(--ink-faint); }
+  .opt[data-pick="yes"] .letter { color: var(--accent); }
+  .grade { display: grid; grid-template-columns: 7.5rem 1fr; gap: 8px 14px; align-items: start; margin: 0; }
+  .grade dt { font-family: var(--mono); font-size: var(--step-0); font-weight: 500; letter-spacing: 0.04em;
+              text-transform: uppercase; color: var(--ink-faint); padding-top: 0.2em; }
+  .grade dd { margin: 0; font-size: var(--step-1); color: var(--ink-soft); }
+  .grade dd b { color: var(--ink); font-weight: 600; }
+  .keeps { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 2px; }
+  .keeps > div { background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; font-size: var(--step-1); }
+  .keeps b { display: block; font-family: var(--mono); font-size: var(--step-0); letter-spacing: 0.05em;
+             text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  @media (max-width: 560px) { .grade { grid-template-columns: 1fr; gap: 2px; } .opt { padding: 18px 16px; } }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Goal Execution App</p>
+    <h1>Framework Options</h1>
+    <p class="standfirst">Four ways this app could reach you. What each is good at, what it is bad at, and what it costs.</p>
+    <div class="masthead-meta">
+      <span>17 Sep 2026</span>
+      <span>Your database does not change</span>
+    </div>
+  </header>
+
+  <div class="now">
+    <p class="eyebrow">Before anything else</p>
+    <h2>Changing the framework throws away almost nothing.</h2>
+    <p>Two days of work went into the database, the schema, the message building, the timing, the locks and 93 checks. <strong>All of it survives every option below.</strong> What changes is only the last few inches: how a thought gets in, and how something reaches you.</p>
+  </div>
+
+  <section>
+    <div class="section-head"><h2>What carries over regardless</h2></div>
+    <div class="keeps">
+      <div><b>Kept</b>Nine tables, your rules, your checklist, your chat id</div>
+      <div><b>Kept</b>The morning brief logic and its 8:10 timing</div>
+      <div><b>Kept</b>Reading a message into tags and private</div>
+      <div><b>Kept</b>Supabase, the schedule, the locks, every test</div>
+      <div><b>Changes</b>How you put a thought in</div>
+      <div><b>Changes</b>How a reminder reaches you</div>
+      <div><b>Changes</b>Whether you can SEE your goals on a screen</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>The three things driving this</h2>
+      <p>Judge every option against these, not against how modern it sounds.</p>
+    </div>
+    <div class="rows">
+      <div class="row"><span class="tick">1</span><span class="row-text"><b>Capture without thinking</b><span>One gesture, speak, done. No deciding what it is about first.</span></span></div>
+      <div class="row"><span class="tick">2</span><span class="row-text"><b>Notifications you actually get</b><span>A reminder that does not arrive is worse than no reminder.</span></span></div>
+      <div class="row"><span class="tick">3</span><span class="row-text"><b>Somewhere to SEE it</b><span>Your goal, your projects, where you are on the roadmap, today's list. A chat thread is the wrong shape for this and always will be.</span></span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>The four options</h2></div>
+    <div class="steps">
+
+      <article class="opt">
+        <div class="opt-head"><span class="letter">A</span><h3>Stay with Telegram</h3><span class="chip" data-tone="idle">Built already</span></div>
+        <dl class="grade">
+          <div><dt>Capture</dt><dd><b>Good.</b> Double tap, keyboard mic, speak, send. Works today.</dd></div>
+          <div><dt>Notifications</dt><dd><b>Adequate.</b> Telegram's own. They arrive among your other chats rather than standing out, and a muted chat or a Focus mode silences them without telling you.</dd></div>
+          <div><dt>Seeing things</dt><dd><b>Poor, permanently.</b> A roadmap and a task list in a chat thread scroll away. This does not improve with effort.</dd></div>
+          <div><dt>Reminders</dt><dd>Possible, but they arrive as chat messages.</dd></div>
+          <div><dt>Costs you</dt><dd>Nothing. It exists.</dd></div>
+        </dl>
+      </article>
+
+      <article class="opt" data-pick="yes">
+        <div class="opt-head"><span class="letter">B</span><h3>A web app on your home screen, plus Shortcuts</h3><span class="chip" data-tone="done">Recommended</span></div>
+        <dl class="grade">
+          <div><dt>Capture</dt><dd><b>Best of the four.</b> Double tap the back of your phone, speak, done. It goes straight to your database. No app opens, nothing to tap after.</dd></div>
+          <div><dt>Notifications</dt><dd><b>Good.</b> Its own alerts, with its own name and icon, separate from your chats. Pushcut is a fallback if Apple's web alerts prove unreliable, and you already use it.</dd></div>
+          <div><dt>Seeing things</dt><dd><b>Proper screens.</b> Your goal at the top, your roadmap with the current step marked, today's list, your thoughts. The thing a chat can never be.</dd></div>
+          <div><dt>Reminders</dt><dd>Its own, or written into Apple Reminders so they behave like any other reminder.</dd></div>
+          <div><dt>Costs you</dt><dd>Installing it once, the way you installed your trading journal. Nothing on the Mac, no fee, no store.</dd></div>
+          <div><dt>Why this one</dt><dd><b>You already run one of these every day.</b> Your trading journal is exactly this, on this phone, and it works. Nothing here is new ground for either of us.</dd></div>
+        </dl>
+      </article>
+
+      <article class="opt">
+        <div class="opt-head"><span class="letter">C</span><h3>Let Apple Reminders be the front</h3><span class="chip" data-tone="idle">Partial</span></div>
+        <dl class="grade">
+          <div><dt>Capture</dt><dd><b>Excellent, and free.</b> "Hey Siri, remind me to call the accountant at three." Already works, nothing to build.</dd></div>
+          <div><dt>Notifications</dt><dd><b>The best there is.</b> Apple's own, on every device, impossible to miss.</dd></div>
+          <div><dt>Seeing things</dt><dd><b>Wrong shape.</b> Reminders has lists. It has no notion of an ultimate goal, a roadmap, or how far along you are.</dd></div>
+          <div><dt>Reminders</dt><dd>Perfect, obviously.</dd></div>
+          <div><dt>Costs you</dt><dd>Very little. But on its own it is a to-do app, which your brief says outright this is not.</dd></div>
+          <div><dt>Best use</dt><dd><b>Take the good half.</b> Let the app write its time-based reminders into Apple Reminders, and keep the goals, roadmap and thoughts in option B. That combination is genuinely better than either alone.</dd></div>
+        </dl>
+      </article>
+
+      <article class="opt" data-pick="no">
+        <div class="opt-head"><span class="letter">D</span><h3>A real iPhone app</h3><span class="chip" data-tone="waiting">Not now</span></div>
+        <dl class="grade">
+          <div><dt>Capture</dt><dd>Best possible. Siri, widgets, the lot.</dd></div>
+          <div><dt>Notifications</dt><dd>Best possible.</dd></div>
+          <div><dt>Seeing things</dt><dd>Best possible.</dd></div>
+          <div><dt>Costs you</dt><dd><b>A great deal.</b> Xcode on the Mac, an Apple developer account, and on the free tier it stops working roughly every seven days until you plug in and re-sign it. That is 99 dollars a year to avoid.</dd></div>
+          <div><dt>The real problem</dt><dd><b>I cannot test it.</b> Everything else here I run and check before you see it. An iPhone app I would be writing blind and you would be the one finding the faults. After the last three days, neither of us wants that.</dd></div>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>What I would do</h2></div>
+    <blockquote class="pull">Option B, with C's reminders borrowed. Keep Telegram for now and drop it when you stop reaching for it.</blockquote>
+    <div class="rows">
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Nothing built so far is wasted</b><span>The database, the brief, the timing, the tests. All of it is behind whichever front you choose.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>You have run this exact shape for months</b><span>Your trading journal is a web app on your home screen. Same pattern, same phone, already proven.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Capture gets better, not worse</b><span>Double tap, speak, done. No app opening, no send button, no chat.</span></span></div>
+      <div class="row"><span class="tick">&check;</span><span class="row-text"><b>Telegram can stay as long as it is useful</b><span>Two ways in is fine. They write to the same place. Drop it when you notice you have stopped using it.</span></span></div>
+    </div>
+  </section>
+
+  <footer>
+    Private project. No AI request leaves this app today, and a test fails if one is ever added.<br>
+    Source: goal-app/docs/framework-options.html
+  </footer>
+
+</div>
