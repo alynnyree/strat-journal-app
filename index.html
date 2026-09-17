@@ -2802,7 +2802,24 @@ function editTrade(id){
 
   currentReplayData = trade.replayData || null;
 
-  currentShots = { entry: trade.shotEntry||null, mid: trade.shotMid||null, exit: trade.shotExit||null };
+  // The pictures no longer sit on the trade, so the boxes are filled in as
+  // they come back. Set empty FIRST, or a slow read would leave the
+  // previous trade's pictures on screen against this one -- which is the
+  // same class of fault as a picture attached to the wrong trade.
+  currentShots = { entry:null, mid:null, exit:null };
+  const shotsForTradeId = trade.id;
+  ['entry','mid','exit'].forEach(slot => {
+    const field = SHOT_FIELD[slot];
+    if(!trade[field]) return;
+    pictureOn(trade, field).then(got => {
+      // He may have moved on while that was fetched.
+      if(!got.image || shotsForTradeId !== (window.editingTradeId || shotsForTradeId)) return;
+      currentShots[slot] = got.image;
+      const box = document.getElementById(shotBoxId(slot));
+      if(!box) return;
+      box.innerHTML = `<img src="${got.image}"><div class="close-x" onclick="event.stopPropagation(); clearShot('${slot}')">×</div>`;
+    }).catch(() => {});
+  });
   SHOT_SLOTS.forEach(slot => {
     const box = document.getElementById(shotBoxId(slot));
     if(!box) return;
@@ -2888,7 +2905,12 @@ function saveTrade(){
     pnlDollar, pnlPercent,
     winLoss: hasExit ? (pnlDollar>=0 ? 'Win':'Loss') : 'Open',
     notes: document.getElementById('f_notes').value,
-    shotEntry: currentShots.entry, shotMid: currentShots.mid, shotExit: currentShots.exit,
+    // Marks, not pictures. The pictures themselves are put away just below,
+    // where a refusal can be reported instead of silently bloating the
+    // journal back to where it started.
+    shotEntry: currentShots.entry ? PIC_KEPT : null,
+    shotMid: currentShots.mid ? PIC_KEPT : null,
+    shotExit: currentShots.exit ? PIC_KEPT : null,
     source: editingTradeId ? (editingSourceValue || 'manual') : 'manual'
   };
 
@@ -2931,6 +2953,29 @@ function saveTrade(){
   } else {
     trades.unshift(trade);
   }
+
+  // Put the pictures away BEFORE the journal is written, so a trade never
+  // carries a mark pointing at a picture that was never kept. A slot he
+  // cleared is removed at both ends.
+  SHOT_SLOTS.forEach(slot => {
+    const field = SHOT_FIELD[slot];
+    const pic = currentShots[slot];
+    if(pic && typeof pic === 'string' && pic.startsWith('data:')){
+      putPicture(trade.id, slot, pic).then(put => {
+        if(!put.ok){
+          // The mark is taken back off, so the card cannot promise a
+          // picture this phone does not hold.
+          const list = loadTrades();
+          const t = list.find(x => x.id === trade.id);
+          if(t){ t[field] = null; saveTrades(list); }
+          noteProblem('shots', put.reason);
+        }
+      }).catch(() => {});
+    } else if(!pic){
+      dropPicture(trade.id, slot);
+    }
+  });
+
   saveTrades(trades);
 
   ['f_ticker','f_occ','f_optEntry','f_optExit','f_undEntry','f_undExit','f_stop','f_rr','f_notes','f_entryDate','f_entryTime','f_exitDate','f_exitTime'].forEach(id=>document.getElementById(id).value='');
@@ -3992,7 +4037,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-16 19:40';
+const APP_BUILD = '2026-09-17 00:40';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -4000,6 +4045,147 @@ function appBuildLine(){
     if(!isNaN(d.getTime())) fileDate = d.toLocaleString();
   }catch(e){}
   return `app build ${APP_BUILD} · file dated ${fileDate}`;
+}
+
+// ---- Where the pictures live -------------------------------------------
+//
+// MEASURED, not assumed. The journal's own store gives one site about
+// 4.9MB in total, and a chart picture costs 35-67KB. Three a trade over
+// 234 trades is far past that -- his journal would have stopped being able
+// to save within weeks, and the wall arrives silently.
+//
+// The 4.9MB is a limit of THAT STORE, not of his phone. The other one his
+// browser offers was measured on the same machine at 829MB offered and
+// 195MB of real picture-sized pieces written without a complaint. Roughly
+// a hundred and seventy times the room, still on the phone, still with no
+// signal, and nothing kept on a service that could be asleep when he looks.
+//
+// So the picture itself moves there, and the TRADE keeps only a mark. That
+// matters more than it sounds: twenty-five places ask "has this trade got a
+// picture?", and a mark that is simply truthy leaves every one of them
+// working exactly as written. Only the three places that actually SHOW a
+// picture had to change.
+const SLOT_OF_FIELD = { shotEntry:'entry', shotMid:'mid', shotExit:'exit' };
+const PIC_DB = 'strat_pictures';
+const PIC_STORE = 'pics';
+const PIC_KEPT = 'kept';            // the mark left on the trade
+let picDbPromise = null;
+
+function picDb(){
+  if(picDbPromise) return picDbPromise;
+  picDbPromise = new Promise((ok, no) => {
+    let req;
+    try{ req = indexedDB.open(PIC_DB, 1); }
+    catch(e){ return no(e); }
+    req.onupgradeneeded = () => { req.result.createObjectStore(PIC_STORE); };
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => no(req.error || new Error('the picture store would not open'));
+  }).catch(err => { picDbPromise = null; throw err; });
+  return picDbPromise;
+}
+
+function picKey(tradeId, slot){ return String(tradeId) + ':' + slot; }
+
+// Answers with a REASON rather than an empty hand. "there is no picture",
+// "the store would not open" and "it is there but would not come back" are
+// three different faults and must never share one blank.
+async function getPicture(tradeId, slot){
+  try{
+    const db = await picDb();
+    return await new Promise((ok, no) => {
+      const t = db.transaction(PIC_STORE, 'readonly');
+      const r = t.objectStore(PIC_STORE).get(picKey(tradeId, slot));
+      r.onsuccess = () => ok({ image: r.result || null,
+        reason: r.result ? null : 'No picture is kept on this phone for that moment.' });
+      r.onerror = () => no(r.error || new Error('unreadable'));
+    });
+  }catch(e){
+    noteProblem('pictureStore', 'The pictures kept on this phone could not be read.');
+    return { image: null, reason: 'The pictures kept on this phone could not be read.' };
+  }
+}
+
+async function putPicture(tradeId, slot, dataUrl){
+  try{
+    const db = await picDb();
+    await new Promise((ok, no) => {
+      const t = db.transaction(PIC_STORE, 'readwrite');
+      t.objectStore(PIC_STORE).put(dataUrl, picKey(tradeId, slot));
+      t.oncomplete = ok;
+      t.onerror = () => no(t.error || new Error('refused'));
+      t.onabort = () => no(t.error || new Error('refused'));
+    });
+    return { ok:true, reason:null };
+  }catch(e){
+    const reason = 'There was no room on this phone to keep that picture.';
+    noteProblem('pictureStore', reason);
+    return { ok:false, reason };
+  }
+}
+
+async function dropPicture(tradeId, slot){
+  try{
+    const db = await picDb();
+    await new Promise((ok) => {
+      const t = db.transaction(PIC_STORE, 'readwrite');
+      t.objectStore(PIC_STORE).delete(picKey(tradeId, slot));
+      t.oncomplete = ok; t.onerror = ok; t.onabort = ok;
+    });
+  }catch(e){ /* a picture that cannot be removed is not worth failing over */ }
+}
+
+// A picture arriving from anywhere: put it away, and leave the mark on the
+// trade. The trade is NOT saved here -- the caller owns that, because it
+// alone knows whether the rest of what it was doing succeeded.
+async function keepPicture(trade, field, dataUrl){
+  const slot = SLOT_OF_FIELD[field] || field;
+  const put = await putPicture(trade.id, slot, dataUrl);
+  if(!put.ok) return put;
+  trade[field] = PIC_KEPT;
+  return { ok:true, reason:null };
+}
+
+// Whatever is on the trade, turned back into something that can be shown.
+// An older trade still carries the picture itself, so both are handled and
+// neither caller needs to know which it has.
+async function pictureOn(trade, field){
+  const v = trade && trade[field];
+  if(!v) return { image:null, reason:'There is no picture for that moment.' };
+  if(typeof v === 'string' && v.startsWith('data:')) return { image:v, reason:null };
+  return await getPicture(trade.id, SLOT_OF_FIELD[field] || field);
+}
+
+// EVERY PICTURE ALREADY IN HIS JOURNAL, MOVED ACROSS ONCE.
+//
+// Left where they are they would go on counting against the small store,
+// which is the whole problem. Bounded on every side: it runs once, it stops
+// the moment anything refuses, and a picture that cannot be moved is left
+// exactly where it is rather than lost.
+let picMoveDone = false;
+async function movePicturesOffTheJournal(){
+  if(picMoveDone) return { moved:0, left:0, reason:'already done' };
+  picMoveDone = true;
+  const trades = loadTrades();
+  let moved = 0, left = 0, stopped = null;
+  for(const t of trades){
+    for(const field of ['shotEntry','shotMid','shotExit']){
+      const v = t[field];
+      if(typeof v !== 'string' || !v.startsWith('data:')) continue;
+      const put = await putPicture(t.id, SLOT_OF_FIELD[field], v);
+      if(!put.ok){ left++; stopped = put.reason; break; }
+      t[field] = PIC_KEPT;
+      moved++;
+    }
+    if(stopped) break;
+  }
+  if(moved){
+    const wrote = saveTrades(trades);
+    if(!wrote.ok) return { moved:0, left, reason:wrote.reason };
+  }
+  noteProblem('pictureMove', moved
+    ? `${moved} picture${moved===1?'':'s'} moved off the journal${left?`, ${left} could not be`:''}.`
+    : 'no pictures needed moving');
+  return { moved, left, reason:stopped };
 }
 
 const lastProblems = {};          // name -> {text, at}
@@ -4024,11 +4210,20 @@ function readProblem(which){
 // "Could not reach the server: Load failed" is.
 //
 // The screenshots stay: those genuinely are used as evidence.
-function tradeForClassifying(t){
+// The pictures no longer travel on the trade, and the classifier genuinely
+// reads them -- so they are fetched back and put on the copy that is sent.
+// Nothing is written back to his journal here; this object is thrown away
+// the moment the request is made.
+async function tradeForClassifying(t){
   const trimmed = { ...t };
   const candles = (t.replayData && t.replayData.candles) || [];
   trimmed.replayData = candles.length ? { candles: candles.slice(-15) } : null;
   delete trimmed.chartDrawings;   // his own drawings, never read by the classifier
+  for(const field of ['shotEntry','shotMid','shotExit']){
+    if(!t[field]){ trimmed[field] = null; continue; }
+    const got = await pictureOn(t, field);
+    trimmed[field] = got.image || null;
+  }
   return trimmed;
 }
 
@@ -4048,7 +4243,7 @@ async function classifyOneTrade(trade){
   try{
     const r = await fetch(url+'/ai/classify?key='+encodeURIComponent(appKey()), {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ trade: tradeForClassifying(trade) })
+      body: JSON.stringify({ trade: await tradeForClassifying(trade) })
     });
     if(r.status === 403) return 'authFailed';
     if(r.status === 429) return 'rateLimited';
@@ -5344,6 +5539,12 @@ function techText(){
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
     sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
     storageLine(),
+    (() => {
+      const m = readProblem('pictureMove'), st = readProblem('pictureStore');
+      const w = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
+      return `pictures moved: ${m ? m.text + ' (' + w(m) + ')' : 'not checked yet'}`
+        + (st ? ` · picture store problem: ${st.text} (${w(st)})` : '');
+    })(),
     (() => {
       const w = readProblem('saving');
       return w ? `saving problem: ${w.text} (${when(w)})` : 'no saving problem';
@@ -7950,6 +8151,14 @@ function startAutoPoll(){
 }
 startAutoPoll();
 
+// Every picture already sitting in his journal, moved across once. It has
+// its OWN attempt and its own catch: anything that must happen regardless
+// cannot sit downstream of something that can fail, which is on this
+// project's own record.
+movePicturesOffTheJournal().catch(() => {
+  noteProblem('pictureMove', 'The pictures already in the journal could not be moved.');
+});
+
 // Claims automatically-captured screenshots (from the Pushcut-triggered
 // Shortcut) and attaches each one to whichever saved trade it actually
 // belongs to. A screenshot has no trade ID attached at capture time — it's
@@ -7958,7 +8167,7 @@ startAutoPoll();
 // Fifteen minutes in: the moment a trade stops being recorded and starts
 // being photographed. Matches the same fifteen minutes on the server.
 const MID_SHOT_OFFSET_MS = 15 * 60 * 1000;
-const SLOT_OF_FIELD = { shotEntry:'entry', shotMid:'mid', shotExit:'exit' };
+// (declared up with the picture store, which needs it)
 const SCREENSHOT_MATCH_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes — generous enough for Pushcut/Shortcut latency, tight enough not to misattach
 // One picture's actual image, fetched only once this app has decided to
 // keep it.
@@ -8102,7 +8311,10 @@ async function matchPendingScreenshots(){
         noteProblem('shots', 'A picture could not be collected: ' + got.reason);
         continue;
       }
-      best.trade[best.field] = got.image;
+      // The picture goes to the store that has room for it; the trade
+      // keeps only a mark.
+      const kept = await keepPicture(best.trade, best.field, got.image);
+      if(!kept.ok){ noteProblem('shots', kept.reason); break; }
       // SAVED BEFORE IT IS CLEARED FROM THE QUEUE, never after. The picture
       // used to be deleted from the service the moment it was put on the
       // trade -- and the journal was only written at the end of the loop.
@@ -8111,8 +8323,9 @@ async function matchPendingScreenshots(){
       const wrote = saveTrades(trades);
       if(!wrote.ok){
         // Left exactly where it was, so it is offered again once there is
-        // room. Undone on the trade too, or it would look attached.
+        // room. Undone at both ends, or it would look attached.
         delete best.trade[best.field];
+        await dropPicture(best.trade.id, SLOT_OF_FIELD[best.field]);
         noteProblem('shots', wrote.reason);
         break;
       }
@@ -8842,8 +9055,30 @@ function exportData(){
   // trade closed. An export in storage order opens with four-month-old
   // trades at the top, which is the same fault the Journal and the Home
   // tab both had.
+  exportDataAsync().catch(() => {});
+}
+
+// HIS ONE WAY BACK, so it must still carry the pictures themselves.
+//
+// Now that a trade keeps only a mark, an export of the trades alone would
+// have been an export with every picture missing -- and he would have found
+// that out on the day he needed it. This project has already left his
+// journal unrecoverable once.
+async function exportDataAsync(){
   const trades = tradesNewestFirst();
-  const blob = new Blob([JSON.stringify(trades,null,2)], {type:'application/json'});
+  const out = [];
+  let missing = 0;
+  for(const t of trades){
+    const copy = { ...t };
+    for(const field of ['shotEntry','shotMid','shotExit']){
+      if(!t[field]) continue;
+      const got = await pictureOn(t, field);
+      if(got.image) copy[field] = got.image; else { copy[field] = null; missing++; }
+    }
+    out.push(copy);
+  }
+  if(missing) noteProblem('shots', `${missing} picture${missing===1?'':'s'} could not be included in the export.`);
+  const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'strat-journal-export.json';
