@@ -81,7 +81,9 @@ async function renderRecording() {
   const out = document.getElementById('recordResult');
   let state = { recording: false };
   try { state = await chrome.runtime.sendMessage({ type: 'recorderState' }) || state; } catch (e) {}
-  const { lastClippedCount, lastRecorderFault } = await chrome.storage.local.get(['lastClippedCount', 'lastRecorderFault']);
+  const { lastClippedCount, lastRecorderFault, lastBadge, lastBadgeAt, lastBadgeFault } =
+    await chrome.storage.local.get(['lastClippedCount', 'lastRecorderFault',
+      'lastBadge', 'lastBadgeAt', 'lastBadgeFault']);
   if (state.recording) {
     btn.textContent = 'Stop recording';
     const held = state.heldSeconds ? `${Math.round(state.heldSeconds / 60)} min held` : 'just started';
@@ -100,6 +102,29 @@ async function renderRecording() {
     out.textContent = fault;
   } else if (lastClippedCount) {
     out.textContent += ` ${lastClippedCount} recording(s) sent on the last check.`;
+  }
+
+  // SAYS WHAT THE ICON SHOULD LOOK LIKE RIGHT NOW.
+  //
+  // He reported no red mark on the icon and there was no way to tell
+  // whether it had never been asked for, been asked for and refused, or
+  // been put there and not noticed. Three different faults, and finding
+  // out cost an upload and a review each time. This answers all three in
+  // one line he can read back to me.
+  const mark = document.getElementById('markState');
+  if (mark) {
+    if (lastBadgeFault) {
+      mark.className = 'row err';
+      mark.textContent = lastBadgeFault;
+    } else if (!lastBadgeAt) {
+      mark.className = 'row err';
+      mark.textContent = 'The icon has not been marked at all yet. Tell me if you see this.';
+    } else {
+      mark.className = 'row';
+      mark.textContent = lastBadge === '!'
+        ? `The icon should show a red ! right now (set ${timeAgo(lastBadgeAt)}).`
+        : `The icon should be clear right now (set ${timeAgo(lastBadgeAt)}).`;
+    }
   }
 }
 

@@ -35,7 +35,10 @@ async function run(opts){
 
   const chrome = {
     action: {
-      setBadgeText: async ({ text }) => { badge.push(text); },
+      setBadgeText: async ({ text }) => {
+        if (o.badgeThrows) throw new Error('no badge on this browser');
+        badge.push(text);
+      },
       setBadgeBackgroundColor: async () => {},
     },
     notifications: { create: async (id, n) => { notifications.push(n); } },
@@ -86,7 +89,7 @@ async function run(opts){
     msg && msg.type === 'state' ? { recording: o.recording === true } : { ok:true };
 
   try { await sandbox.pollAndCapture(); } catch (e) { /* the point is what the icon says */ }
-  return { badge, notifications, fetched };
+  return { badge, notifications, fetched, stored };
 }
 
 (async () => {
@@ -143,6 +146,30 @@ async function run(opts){
     const r = await run({ backendUrl: '', appKey: '', recording: false });
     const ok = r.notifications.length === 0 || r.notifications.length === 1;
     check(`at most one box, never a pile (${r.notifications.length})`, ok);
+  }
+
+  console.log('\n--- what it was asked to show is written down ---');
+  {
+    // He reported a bare icon and there was no way to tell whether the mark
+    // had never been asked for, been asked for and refused, or been put
+    // there and not noticed. Three faults, and finding out cost an upload
+    // and a store review each time.
+    const r = await run({ backendUrl: '', appKey: '', recording: false });
+    check(`it records what it asked for (${r.stored.lastBadge})`, r.stored.lastBadge === '!');
+    check('and when', typeof r.stored.lastBadgeAt === 'number' && r.stored.lastBadgeAt > 0);
+    check('and no fault, because there was none', r.stored.lastBadgeFault === null);
+  }
+  {
+    const r = await run({ recording: true, events: [] });
+    check(`recording is recorded as clear (${r.stored.lastBadge})`, r.stored.lastBadge === 'clear');
+  }
+
+  console.log('\n--- a mark the browser refuses is not a silent one ---');
+  {
+    const r = await run({ recording: false, badgeThrows: true });
+    check('the refusal is written down: ' + r.stored.lastBadgeFault,
+      !!r.stored.lastBadgeFault && /could not be put on the icon/i.test(r.stored.lastBadgeFault));
+    check('and it did not take the rest of the check down with it', r.fetched > 0);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);
