@@ -4037,7 +4037,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-17 00:40';
+const APP_BUILD = '2026-09-17 01:20';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -4186,6 +4186,21 @@ async function movePicturesOffTheJournal(){
     ? `${moved} picture${moved===1?'':'s'} moved off the journal${left?`, ${left} could not be`:''}.`
     : 'no pictures needed moving');
   return { moved, left, reason:stopped };
+}
+
+// Every trade that landed as BRAND NEW, and what it was compared against.
+// Bounded: the last 30, nothing more. He asked whether his numbers can be
+// trusted and the honest answer was that nothing recorded enough to say.
+const ADDED_KEY = 'strat_added_log';
+function noteAdded(entry){
+  try{
+    const list = JSON.parse(localStorage.getItem(ADDED_KEY) || '[]');
+    list.unshift(entry);
+    localStorage.setItem(ADDED_KEY, JSON.stringify(list.slice(0, 30)));
+  }catch(e){ /* a diary that cannot be written must not stop an import */ }
+}
+function readAdded(){
+  try{ return JSON.parse(localStorage.getItem(ADDED_KEY) || '[]'); }catch(e){ return []; }
 }
 
 const lastProblems = {};          // name -> {text, at}
@@ -5539,6 +5554,16 @@ function techText(){
     cp ? `read problem: ${cp.text} (${when(cp)})` : 'no read problem',
     sp ? `picture problem: ${sp.text} (${when(sp)})` : 'no picture problem',
     storageLine(),
+    (() => {
+      const added = readAdded();
+      if(!added.length) return 'trades added as new: none recorded yet';
+      const when = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
+      return `trades added as new (last ${added.length}):\n` + added.slice(0, 6).map(a =>
+        `  ${when(a)} ${a.what} · code ${a.code} · fills ${a.fills}`
+        + ` · same day+ticker on file ${a.sameDaySameTicker}`
+        + (a.nearMisses && a.nearMisses.length ? `\n      NEAR: ` + a.nearMisses.join('\n      NEAR: ') : ' · no near miss')
+      ).join('\n');
+    })(),
     (() => {
       const m = readProblem('pictureMove'), st = readProblem('pictureStore');
       const w = e => e && e.at ? new Date(e.at).toLocaleString() : '—';
@@ -7611,6 +7636,46 @@ async function autoImportPendingTrades(url, pending){
         continue;
       }
     }
+    // ---- WHY WAS THIS TREATED AS A BRAND NEW TRADE? ----------------------
+    //
+    // He reported his P&L growing on every update and asked outright whether
+    // the numbers can be trusted. His journal went 205 -> 211 -> 215 -> 234
+    // -> 248 in four hours of an evening he did not trade. That is real, and
+    // it is the same shape as the fault that once put 161 contracts in his
+    // journal he never bought.
+    //
+    // Reading the checks above cannot settle it -- they look right, and they
+    // looked right the last three times too. What is missing is the one
+    // thing this project keeps learning: an arrival that lands as NEW must
+    // say what it looked like and what it was compared against, AT THE
+    // MOMENT it lands. Without that, the only evidence is a number going up.
+    //
+    // So every addition is written down with the near-misses that did not
+    // match it. If the fault is an identity with a hole in it, the near-miss
+    // is the saved trade it should have recognised, and the difference
+    // between the two names the hole outright.
+    {
+      const id = tradeIdentity(t);
+      const sameDay = trades.filter(x =>
+        x.entryDate === t.entryDate && (x.ticker || '') === (t.ticker || ''));
+      const nearly = sameDay.filter(x => {
+        const xi = tradeIdentity(x);
+        return xi.loose === id.loose || (String(x.occ||'').trim() && String(x.occ||'').trim() === id.code);
+      });
+      noteAdded({
+        at: Date.now(),
+        what: `${t.ticker||'?'} ${t.entryDate||'?'} ${t.entryTime||'--'}->${t.exitTime||'--'} ${t.optEntry}->${t.optExit} x${t.contracts||1}`,
+        code: id.code || 'none',
+        fills: Array.isArray(t.fills) && t.fills.length ? t.fills.length : 0,
+        sameDaySameTicker: sameDay.length,
+        nearMisses: nearly.slice(0, 3).map(x => {
+          const xi = tradeIdentity(x);
+          return `${x.entryTime||'--'}->${x.exitTime||'--'} ${x.optEntry}->${x.optExit} x${x.contracts||1}`
+            + ` code ${xi.code || 'none'} fills ${Array.isArray(x.fills) ? x.fills.length : 0}`;
+        }),
+      });
+    }
+
     // Kept, so this is where the chart bars are worth their weight.
     t = await withBars(t);
     remember(t, true); // claimed by this batch
