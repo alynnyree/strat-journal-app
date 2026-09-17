@@ -3569,7 +3569,24 @@ function renderDashboard(){
           <div class="t">${t.ticker} <span class="badge ${String(t.dir||'').toLowerCase()}" style="vertical-align:middle;">${escapeHtml(t.dir||'')}</span></div>
           <div class="s">${t.strat || 'Needs setup'}${closedOn(t)}</div>
         </div>
-        <div class="v ${t.pnlDollar==null?'':(t.pnlDollar>=0?'pos':'neg')}">${t.pnlDollar==null?'Open':fmtMoney(t.pnlDollar)}</div>
+        <!-- THE SAME TRADE READ $12.00 HERE AND $8.01 IN THE JOURNAL, and
+             he spotted it. This showed the profit BEFORE fees; the Journal
+             card shows it AFTER, labelled. Neither is wrong on its own --
+             but two lists showing one trade with two different figures, and
+             only one of them saying which, is how he ends up unable to
+             trust either. Same fault as the two cards that both broke his
+             trades into three groups and disagreed about which were wins.
+             The money that actually arrived is the one that counts, so this
+             now matches the Journal. A fee that is NOT KNOWN is never
+             quietly swapped for the before-fee figure -- that mixture is
+             what made his headline total drift for weeks. It says so. -->
+        <div class="v ${(t.pnlNet ?? t.pnlDollar)==null?'':((t.pnlNet ?? t.pnlDollar)>=0?'pos':'neg')}">${
+          t.pnlDollar == null ? 'Open'
+            : t.pnlNet != null ? fmtMoney(t.pnlNet)
+            : fmtMoney(t.pnlDollar)
+        }<div style="font-size:9.5px; color:var(--text-dim); font-weight:400; letter-spacing:.04em; margin-top:1px;">${
+          t.pnlDollar == null ? '' : (t.pnlNet != null ? 'after fees' : 'fee not known')
+        }</div></div>
       </div>`).join('');
   }
 }
@@ -4037,7 +4054,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-17 02:10';
+const APP_BUILD = '2026-09-17 02:45';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -4564,6 +4581,24 @@ function readBrokerFile(text){
 // contract by contract and day by day, as well as the money.
 function compareJournalToBroker(trades, fills){
   const cents = n => Math.round(n * 100) / 100;
+
+  // NEVER COMPARE A FIGURE AGAINST A SET THAT IS NOT THE SAME SET.
+  //
+  // His journal now starts on 1 May, by his own instruction. His broker's
+  // file covers 2 January to 23 July. Compared whole, the file contributes
+  // four months of fills his journal is not supposed to hold -- and this
+  // card reported that, in red, as "Your journal does not match Schwab",
+  // with rows of April days showing 0 against 4.
+  //
+  // Every one of those was the trim doing exactly what he asked for. The
+  // card was measuring my own change and calling it his fault, at the very
+  // moment he was asking whether he could trust any of it.
+  //
+  // So the file is cut to the same window his journal keeps, and what was
+  // left out is said plainly rather than left to look like a difference.
+  const beforeFloor = fills.filter(f => f.date < JOURNAL_FLOOR).length;
+  if(beforeFloor) fills = fills.filter(f => f.date >= JOURNAL_FLOOR);
+
   const buys = fills.filter(f => f.isBuy);
 
   // What the file covers. A journal trade outside it cannot be checked
@@ -4580,7 +4615,7 @@ function compareJournalToBroker(trades, fills){
   const unpaired = sold - bought;
 
   const broker = {
-    from, to, unpaired,
+    from, to, unpaired, beforeFloor,
     contracts: bought,
     fees: cents(fills.reduce((s, f) => s + f.fees, 0)),
     afterFees: cents(fills.reduce((s, f) => s + f.amount, 0)),
@@ -4752,6 +4787,7 @@ function renderBrokerCheck(r){
   const scope = `<div style="font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.5;">
       Covering ${escapeHtml(niceDate(r.from))} to ${escapeHtml(niceDate(r.to))} — ${r.journal.trades} of your trades against ${r.broker.fills} fills from Schwab.
       ${r.outside ? `${r.outside} trade${r.outside===1?'':'s'} sit outside those dates and were left out — that is not a fault.` : ''}
+      ${r.broker.beforeFloor ? `<b>${r.broker.beforeFloor} fills in the file are from before ${escapeHtml(niceDate(JOURNAL_FLOOR))} and were left out</b>, because your journal only keeps trades from then on. That is not a difference. For a clean comparison, export from Schwab starting ${escapeHtml(niceDate(JOURNAL_FLOOR))}.` : ''}
       ${r.nonTrading ? `${r.nonTrading} rows in the file were transfers and account fees, not trades.` : ''}
     </div>`;
 
