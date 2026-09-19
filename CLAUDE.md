@@ -81,6 +81,20 @@ not a fix.
    The cost of skipping this is not a tidier codebase — it is him running
    the same test three times and me guessing three times.
 
+8. **Never say "open the app" without the link.** His instruction,
+   2026-09-19: *"Every time you tell me to open the app, provide the link
+   moving forward."* Every single instruction to open, reload, check or
+   test the app carries the address inline, on that step:
+
+       https://alynnyree.github.io/strat-journal-app/
+
+   Not once at the top, not "as before", not in a footer — on the step
+   itself, every time, however many times it appears in one reply. He
+   reads these on a phone; telling him to go somewhere and making him
+   find his own way there is the same fault as a failure that names no
+   cause. The bare domain 404s, so the address always includes the
+   `/strat-journal-app/` part.
+
 ## Architecture
 
 **Frontend** — repo `alynnyree/strat-journal-app`, hosted on GitHub Pages at
