@@ -1312,7 +1312,13 @@
 </div>
 </div><!-- /.app -->
 
-<script src="lightweight-charts.standalone.production.js"></script>
+<!-- THE VERSION IS PART OF THE ADDRESS ON PURPOSE. Without it this file
+     has its own cache entry that a fresh page does not touch, so a
+     browser holding an older copy keeps using it however many times he
+     reloads. An older copy ignores the colours this app asks for -- and
+     a chart that comes up WHITE is exactly what that looks like. Bump
+     this whenever the file changes. -->
+<script src="lightweight-charts.standalone.production.js?v=4.1.3"></script>
 <script>
 const TIMEFRAMES = ['6M','3M','1M','1W','1D','4H','2H','1H','30m','15m','5m','3m','1m'];
 let currentTf = {}; // {tf: 'bull'|'bear'|'neutral'}
@@ -2214,6 +2220,33 @@ function openReplay(trade){
 
 // Says what the chart was handed and what it did with it -- but ONLY when
 // something is actually wrong. A chart that is working says nothing.
+// Is anything actually painted? Every check before this asked whether the
+// DATA looked right, and his came back clean while the chart stayed white.
+// That is the same mistake as marking a function by what it hands back
+// instead of what the caller receives: the only honest question is whether
+// pixels reached the screen.
+function replayPaintedAnything(){
+  try{
+    const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
+      .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+    const big = cs[0];
+    if(!big || !big.width || !big.height) return { painted:null, why:'no drawing surface' };
+    const c2 = document.createElement('canvas');
+    c2.width = big.width; c2.height = big.height;
+    c2.getContext('2d').drawImage(big, 0, 0);
+    const d = c2.getContext('2d').getImageData(0, 0, big.width, big.height).data;
+    let dark = 0, pale = 0, colour = 0, n = 0;
+    for(let i = 0; i < d.length; i += 4 * 101){
+      n++;
+      const r = d[i], g = d[i+1], b = d[i+2];
+      if(r < 25 && g < 25 && b < 30) dark++;
+      else if(r > 235 && g > 235 && b > 235) pale++;
+      if((g > 100 && g > r + 40) || (r > 150 && r > g + 40)) colour++;
+    }
+    return { painted: colour > 0, dark, pale, colour, n };
+  }catch(e){ return { painted:null, why:'the screen could not be read' }; }
+}
+
 function reportReplayState(){
   const box = document.getElementById('replayWhyEmpty');
   if(!box) return;
@@ -2239,12 +2272,53 @@ function reportReplayState(){
   // the colours this app asks for -- which is what a white chart looks like.
   try{
     const v = LightweightCharts && LightweightCharts.version ? LightweightCharts.version() : null;
-    if(v && !String(v).startsWith('4.')) lines.push(`The chart drawing code on this device is version ${v}; this app expects 4.`);
+    if(v && !String(v).startsWith('4.')) lines.push(`The drawing code on this device is version ${v}; this app expects 4. That is almost certainly an older copy your browser kept.`);
   }catch(e){ /* older copies have no version() at all */ }
 
+  show(box, lines, f);
+
+  // THE CHECK THAT MATTERS, and it must WAIT. A chart paints on the
+  // browser's own schedule, so sampling it the instant the screen opens
+  // reads a working chart as blank -- my first version did exactly that and
+  // cried wolf on a chart that was drawing perfectly. A false alarm here is
+  // worse than none: he would learn to ignore the one box meant to tell him
+  // what is wrong.
+  //
+  // Two frames and a moment, then look. Everything above has already been
+  // said, so nothing waits on this.
+  if(f.used){
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
+      // He may have closed it, or opened another trade, in the meantime.
+      const still = document.getElementById('replayWhyEmpty');
+      const modal = document.getElementById('replayModal');
+      if(!still || !modal || !modal.classList.contains('show')) return;
+      const paint = replayPaintedAnything();
+      if(paint.painted === false){
+        lines.push(`${f.used} bars were handed to the chart and NOTHING was drawn.`);
+        lines.push(paint.pale > paint.dark
+          ? 'The chart is showing as white, which is what an older copy of the drawing code looks like.'
+          : 'The chart is the right colour but no candles were drawn.');
+        show(still, lines, f);
+      } else if(paint.painted === null){
+        lines.push('The chart could not be checked for what it drew: ' + (paint.why || 'no reason given') + '.');
+        show(still, lines, f);
+      }
+    }, 450)));
+  }
+}
+
+// Draws the box, or hides it when there is nothing to say. Which version is
+// loaded goes on the end whenever it speaks at all: it is the first thing I
+// need and the last thing he could find on his own.
+function show(box, lines, f){
+  if(!box) return;
   if(!lines.length){ box.style.display = 'none'; box.textContent = ''; return; }
-  lines.push('Send me this line and I can fix it without guessing.');
-  box.textContent = lines.join(' ');
+  let v = 'unknown';
+  try{ v = (LightweightCharts && LightweightCharts.version) ? LightweightCharts.version() : 'too old to say'; }
+  catch(e){ v = 'too old to say'; }
+  box.textContent = lines.join(' ')
+    + ` Drawing code on this device: ${v}. Bars: ${(f && f.used) || 0} of ${(f && f.got) || 0}.`
+    + ' Send me this line and I can fix it without guessing.';
   box.style.display = 'block';
 }
 function closeReplay(){
@@ -4130,7 +4204,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-17 04:20';
+const APP_BUILD = '2026-09-19 10:15';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{

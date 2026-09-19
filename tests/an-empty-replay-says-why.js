@@ -58,7 +58,7 @@ const { launch, serve } = require('./browser.js');
       if(el){ el.style.display = 'none'; el.textContent = ''; }
       openReplay(t);
     }, trade(candles));
-    await p.waitForTimeout(900);
+    await p.waitForTimeout(1400);   // the paint verdict arrives after a deliberate wait
     return await p.evaluate(() => {
       const el = document.getElementById('replayWhyEmpty');
       return { why: el && el.style.display !== 'none' ? el.textContent : null,
@@ -143,6 +143,64 @@ const { launch, serve } = require('./browser.js');
       !!r.why && /10 of 60 bars had no usable time/.test(r.why));
     check('nothing threw', errors.length === 0);
     await close();
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n--- HIS CASE: good bars, right version, and NOTHING drawn ---');
+  {
+    // Every check I added came back clean on his machine and the chart was
+    // still white. So the box now asks the only honest question -- did
+    // pixels reach the screen -- and this proves it can answer it even when
+    // the data is perfect. The chart is blanked deliberately here.
+    await open(bars(200, 'datetime'));
+    const r = await p.evaluate(() => {
+      // Wipe what was drawn, exactly as a broken drawing library would.
+      document.querySelectorAll('#replayModal canvas').forEach(c => {
+        const g = c.getContext('2d');
+        if(g){ g.clearRect(0,0,c.width,c.height); g.fillStyle='#ffffff'; g.fillRect(0,0,c.width,c.height); }
+      });
+      reportReplayState();
+      return null;
+    });
+    await p.waitForTimeout(1200);   // the paint verdict is deliberately late
+    const r2 = await p.evaluate(() => {
+      const el = document.getElementById('replayWhyEmpty');
+      return el && el.style.display !== 'none' ? el.textContent : null;
+    });
+    check('it notices nothing was drawn: ' + (r2 || '').slice(0, 60),
+      !!r2 && /NOTHING was drawn/.test(r2));
+    check('and says the chart is showing as white',
+      !!r2 && /showing as white/.test(r2));
+    check('and names the drawing code version, which is what I need',
+      !!r2 && /Drawing code on this device: 4\./.test(r2));
+    check('and how many bars it had', !!r2 && /Bars: 200 of 200/.test(r2));
+    check('nothing threw', errors.length === 0);
+    await close();
+  }
+
+  console.log('\n--- a chart that IS drawing still says nothing ---');
+  {
+    // A FRESH PAGE. The case above deliberately wiped the shared chart's
+    // drawing surface, and reusing it here would test my vandalism rather
+    // than the app -- a harness carrying state between cases has already
+    // produced two false failures on this project.
+    await p.reload(); await p.waitForTimeout(600);
+    const r = await open(bars(200, 'datetime'));
+    check('silent when it works: ' + (r.why || 'silent'), r.why === null);
+    check('nothing threw', errors.length === 0);
+    await close();
+  }
+
+  console.log('\n--- the drawing code cannot be served from an old copy ---');
+  {
+    const tagged = await p.evaluate(() => {
+      const el = Array.from(document.querySelectorAll('script'))
+        .find(s => (s.src || '').includes('lightweight-charts'));
+      return el ? el.getAttribute('src') : null;
+    });
+    // A page refresh does not touch this file's own cache entry, so without
+    // a version in the address a browser keeps an old copy for ever.
+    check('its address carries a version: ' + tagged, !!tagged && /\?v=/.test(tagged));
   }
 
   await ctx.close(); await b.close(); await site.stop();
