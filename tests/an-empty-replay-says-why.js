@@ -95,8 +95,22 @@ const { launch, serve } = require('./browser.js');
     check('the box stays hidden — a working chart says nothing', r.why === null);
 
     // And it really is painting, not just claiming to.
+    //
+    // TWO THINGS THIS CHECK GOT WRONG, and they hid each other. It took the
+    // BIGGEST surface -- which, once the runaway overlay was cut back down
+    // to size, is the overlay his trend lines go on. That one is
+    // deliberately see-through, so it has no candles on it and the check
+    // read a perfectly good chart as blank. And an untouched pixel is
+    // see-through, not black, yet this counted it as "dark background" --
+    // so the background test PASSED on the very surface that had nothing on
+    // it at all. Sampling the wrong thing and mistaking blank for dark
+    // cancelled out into one failure instead of two.
+    //
+    // So: the lines overlay is left out, and a pixel only counts as
+    // background once something has actually been put there.
     const painted = await p.evaluate(() => {
       const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
+        .filter(c => c.id !== 'replayDrawCanvas')
         .sort((a,b) => (b.width*b.height)-(a.width*a.height));
       const big = cs[0];
       if(!big) return null;
@@ -104,17 +118,22 @@ const { launch, serve } = require('./browser.js');
       c2.width = big.width; c2.height = big.height;
       c2.getContext('2d').drawImage(big, 0, 0);
       const d = c2.getContext('2d').getImageData(0,0,big.width,big.height).data;
-      let dark = 0, green = 0;
+      let dark = 0, green = 0, blank = 0;
       for(let i = 0; i < d.length; i += 4*37){
+        if(d[i+3] < 8){ blank++; continue; }              // nothing put here
         if(d[i]<20 && d[i+1]<20 && d[i+2]<25) dark++;
         if(d[i+1] > 100 && d[i+1] > d[i]+40) green++;
       }
-      return { dark, green };
+      return { dark, green, blank, on: big.id || big.className || 'chart' };
     });
     check(`the background really is dark, not white (${painted && painted.dark} samples)`,
       !!painted && painted.dark > 50);
     check(`and candles really are drawn (${painted && painted.green} green samples)`,
       !!painted && painted.green > 5);
+    // The one that would have caught the mix-up on its own: an empty
+    // surface can no longer masquerade as a dark one.
+    check(`and it looked at the chart, not the see-through lines layer (${painted && painted.blank} untouched)`,
+      !!painted && painted.blank < painted.dark);
     check('nothing threw', errors.length === 0);
     await close();
   }

@@ -415,7 +415,12 @@
   /* Transparent layer painted on top of the chart where all user-drawn
      lines live. pointer-events:none so taps/drags still reach the chart
      container's own handlers underneath. */
-  .replay-draw-canvas{position:absolute; inset:0; z-index:1; pointer-events:none;}
+  /* width/height 100% are NOT decoration. A <canvas> is a replaced
+     element, so `inset:0` does NOT stretch it -- the browser uses its
+     intrinsic size and ignores the insets. Without these it took its
+     size from its own width/height attributes, which is what let it
+     grow itself. */
+  .replay-draw-canvas{position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none;}
   .replay-ohlc-overlay{
     position:absolute; top:6px; left:6px; z-index:2; pointer-events:none;
     background:rgba(8,11,9,0.75); border:1px solid var(--border); border-radius:5px;
@@ -2245,12 +2250,21 @@ function replayPaintedAnything(){
     const cont = document.getElementById('replayChartContainer');
     if(cont) out.container = cont.clientWidth + 'x' + cont.clientHeight;
 
-    const cs = Array.from(document.querySelectorAll('#replayModal canvas'));
+    // THE DRAWING OVERLAY IS NOT THE CHART. It is deliberately transparent
+    // -- it carries his trend lines and nothing else -- so sampling it
+    // always reports "nothing drawn". Once it stopped being enormous it
+    // became the LARGEST surface, and this check started accusing a
+    // perfectly good chart of being blank. A false alarm here is worse than
+    // none: he would learn to ignore the one box meant to help him.
+    const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
+      .filter(c => c.id !== 'replayDrawCanvas');
     // Its own size, the size it is STRETCHED to, and how many pixels that
     // actually is -- a surface past the browser's ceiling silently stops
     // painting while still reporting its size, which looks exactly like
     // this.
-    out.canvases = cs.map(c => {
+    // Every surface is still LISTED, overlay included -- that list is what
+    // found the runaway in the first place. Only the paint sample skips it.
+    out.canvases = Array.from(document.querySelectorAll('#replayModal canvas')).map(c => {
       const r = c.getBoundingClientRect();
       return `${c.width}x${c.height}` + (c.width*c.height > 1e6 ? `(${(c.width*c.height/1e6).toFixed(1)}M)` : '')
         + `@${Math.round(r.width)}x${Math.round(r.height)}`;
@@ -2461,12 +2475,33 @@ function redrawReplayDrawingsInner(){
   if(!cv || !replayChart || !replaySeries) return;
   const ctx = cv.getContext('2d');
   if(!ctx) return;
+  // NEVER MEASURE A CANVAS BY ITS OWN RENDERED SIZE.
+  //
+  // This read cv.clientWidth and then set cv.width to that times the screen
+  // sharpness. On a sharp screen that is a DOUBLING, and the next redraw
+  // doubles the doubled one. His laptop reported the surface as
+  // 76800x38400 -- 2.9 BILLION pixels. That is 300 x 2^8 by 150 x 2^8:
+  // the canvas's own starting size, doubled eight times.
+  //
+  // A surface that size cannot be allocated, and this one sits directly on
+  // top of the chart. That is his white screen, from 9 September to now.
+  //
+  // It never showed here because this machine's screen is not sharp --
+  // times one is no growth at all. Four theories died before the measurement
+  // that mattered was even being taken.
+  //
+  // Measured from the PARENT now, which has a size of its own that nothing
+  // here can change.
   const dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth, h = cv.clientHeight;
+  const host = cv.parentElement || cv;
+  const w = host.clientWidth, h = host.clientHeight;
   if(!w || !h) return;
-  if(cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
-    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
-  }
+  // And a ceiling regardless, because one runaway surface took the whole
+  // feature down for ten days and a belt is cheaper than a fifth round.
+  const MAX_SIDE = 8192;
+  const pw = Math.min(MAX_SIDE, Math.round(w * dpr));
+  const ph = Math.min(MAX_SIDE, Math.round(h * dpr));
+  if(cv.width !== pw || cv.height !== ph){ cv.width = pw; cv.height = ph; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   const ts = replayChart.timeScale();
@@ -4247,7 +4282,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-19 11:05';
+const APP_BUILD = '2026-09-19 14:40';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
