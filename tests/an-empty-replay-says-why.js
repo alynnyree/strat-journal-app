@@ -169,8 +169,19 @@ const { launch, serve } = require('./browser.js');
     });
     check('it notices nothing was drawn: ' + (r2 || '').slice(0, 60),
       !!r2 && /NOTHING was drawn/.test(r2));
-    check('and says the chart is showing as white',
-      !!r2 && /showing as white/.test(r2));
+    // The old wording blamed an older copy of the drawing code. His device
+    // reports 4.1.3 -- the right one -- so that was wrong and the words had
+    // to stop saying it.
+    check('and says the chart is blank where candles should be',
+      !!r2 && /blank where the candles should be/.test(r2));
+    check('and never blames an old copy, which his is not',
+      !!r2 && !/older copy/.test(r2));
+    // EVERYTHING IN ONE LOOK, so this cannot cost another round.
+    check('it reports the screen sharpness: ' + ((r2||'').match(/screen [\d.]+x/) || [''])[0],
+      !!r2 && /screen [\d.]+x/.test(r2));
+    check('the size of the box the chart sits in', !!r2 && /box \d+x\d+/.test(r2));
+    check('and every drawing surface with its size',
+      !!r2 && /surfaces \d+x\d+/.test(r2));
     check('and names the drawing code version, which is what I need',
       !!r2 && /Drawing code on this device: 4\./.test(r2));
     check('and how many bars it had', !!r2 && /Bars: 200 of 200/.test(r2));
@@ -188,6 +199,30 @@ const { launch, serve } = require('./browser.js');
     const r = await open(bars(200, 'datetime'));
     check('silent when it works: ' + (r.why || 'silent'), r.why === null);
     check('nothing threw', errors.length === 0);
+    await close();
+  }
+
+  console.log('\n--- when it cannot measure, it gives the REAL reason ---');
+  {
+    // My last version answered "the screen could not be read" and threw the
+    // exception away. That told neither of us anything and cost a round.
+    await p.reload(); await p.waitForTimeout(600);
+    await open(bars(200, 'datetime'));
+    const r = await p.evaluate(() => {
+      const real = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function(){
+        const g = real.apply(this, arguments);
+        if(g) g.getImageData = () => { throw new DOMException('Operation is insecure.', 'SecurityError'); };
+        return g;
+      };
+      const out = replayPaintedAnything();
+      HTMLCanvasElement.prototype.getContext = real;
+      return out;
+    });
+    check('it names the fault: ' + r.why, !!r.why && /SecurityError/.test(r.why));
+    check('and quotes what the browser said', !!r.why && /Operation is insecure/.test(r.why));
+    check('while still reporting the surfaces it found', Array.isArray(r.canvases) && r.canvases.length > 0);
+    check('and the screen sharpness', typeof r.dpr === 'number');
     await close();
   }
 
