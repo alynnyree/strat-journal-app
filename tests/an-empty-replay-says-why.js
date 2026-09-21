@@ -96,21 +96,17 @@ const { launch, serve } = require('./browser.js');
 
     // And it really is painting, not just claiming to.
     //
-    // TWO THINGS THIS CHECK GOT WRONG, and they hid each other. It took the
-    // BIGGEST surface -- which, once the runaway overlay was cut back down
-    // to size, is the overlay his trend lines go on. That one is
-    // deliberately see-through, so it has no candles on it and the check
-    // read a perfectly good chart as blank. And an untouched pixel is
-    // see-through, not black, yet this counted it as "dark background" --
-    // so the background test PASSED on the very surface that had nothing on
-    // it at all. Sampling the wrong thing and mistaking blank for dark
-    // cancelled out into one failure instead of two.
+    // A pixel only counts as background once something has actually been
+    // put there. An untouched pixel is SEE-THROUGH, not black, and
+    // counting it as "dark background" once let this check pass on a
+    // surface that had nothing on it at all.
     //
-    // So: the lines overlay is left out, and a pixel only counts as
-    // background once something has actually been put there.
+    // It also used to skip the see-through sheet his lines were drawn on,
+    // because that sheet was the biggest surface and had no candles. That
+    // sheet no longer exists -- the chart paints his lines itself now --
+    // so every surface here is the chart's own.
     const painted = await p.evaluate(() => {
       const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
-        .filter(c => c.id !== 'replayDrawCanvas')
         .sort((a,b) => (b.width*b.height)-(a.width*a.height));
       const big = cs[0];
       if(!big) return null;
@@ -132,7 +128,7 @@ const { launch, serve } = require('./browser.js');
       !!painted && painted.green > 5);
     // The one that would have caught the mix-up on its own: an empty
     // surface can no longer masquerade as a dark one.
-    check(`and it looked at the chart, not the see-through lines layer (${painted && painted.blank} untouched)`,
+    check(`and it looked at a surface with something on it (${painted && painted.blank} untouched)`,
       !!painted && painted.blank < painted.dark);
     check('nothing threw', errors.length === 0);
     await close();
