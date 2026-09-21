@@ -420,7 +420,6 @@
      intrinsic size and ignores the insets. Without these it took its
      size from its own width/height attributes, which is what let it
      grow itself. */
-  .replay-draw-canvas{position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none;}
   .replay-ohlc-overlay{
     position:absolute; top:6px; left:6px; z-index:2; pointer-events:none;
     background:rgba(8,11,9,0.75); border:1px solid var(--border); border-radius:5px;
@@ -1157,7 +1156,6 @@
       <div class="replay-canvas-wrap" id="replayCanvasWrap">
         <div class="replay-ohlc-overlay" id="replayOhlcOverlay">–</div>
         <div id="replayChartContainer"></div>
-        <canvas class="replay-draw-canvas" id="replayDrawCanvas"></canvas>
       </div>
       <div class="replay-legend">
         <span><span class="dot" style="background:var(--bull);"></span>Entry</span>
@@ -1982,6 +1980,9 @@ let replayPendingPoint = null; // first tap of a 2-tap trendline, waiting on the
 let replayDrawings = []; // handles for everything currently drawn on the chart, so Clear can remove them all
 let replayMagnetOn = false; // when true, new points and drags snap to the nearest candle's O/H/L/C instead of the raw tapped price
 let replayDragTarget = null; // the drawing currently being dragged (and which part of it), or null when nothing's being dragged
+let replayRequestRepaint = null; // the chart's own "draw again" handle, given to us when it takes the line painter
+let replayPainterAttached = null; // whether the chart accepted the line painter -- null until a chart has been built
+let replayPaintFault = null; // what the line painter tripped over, if it ever does -- reported in the details line rather than lost
 let replaySelectedDrawing = null; // the one drawing currently tapped/selected, shown highlighted with a Delete button available
 let replayOpenTradeId = null; // which trade's replay is currently open — needed so drawings get saved onto the right trade
 let replayLiveTrendDraw = false; // true while a trend line is being stretched out live from its anchor (click-drag-release)
@@ -2089,6 +2090,23 @@ function ensureReplayChart(){
     upColor: '#2FBF71', downColor: '#E5484D', borderVisible: false,
     wickUpColor: '#2FBF71', wickDownColor: '#E5484D',
   });
+  // HIS LINES ARE HANDED TO THE CHART, not laid over the top of it.
+  //
+  // A painter attached here is asked to draw in the SAME pass as the
+  // candles, so a line and the bar it was drawn against can never be a
+  // frame apart. It adds nothing to the chart's data, which is the trap
+  // that made all of this necessary in the first place: a line added as
+  // data collapsed into a single slot and shoved every candle sideways.
+  //
+  // If the chart is ever served by a copy too old to accept a painter,
+  // that is said out loud rather than leaving him with lines that quietly
+  // never appear.
+  if(typeof replaySeries.attachPrimitive === 'function'){
+    replaySeries.attachPrimitive(makeReplayDrawingPainter());
+    replayPainterAttached = true;
+  } else {
+    replayPainterAttached = false;
+  }
   // Volume bars, squeezed into the bottom ~18% of the chart via
   // scaleMargins rather than a separate chart — this is the same
   // approach TradingView itself uses so the volume pane shares the
@@ -2118,9 +2136,13 @@ function ensureReplayChart(){
   // box in the corner to follow it, the same way TradingView's does. When
   // the finger lifts (param.time is empty), it falls back to showing the
   // newest revealed candle instead of leaving stale numbers on screen.
-  // Any pan or zoom moves candles under the overlay — repaint the lines so
-  // they stay locked to the candles they were anchored to.
-  replayChart.timeScale().subscribeVisibleLogicalRangeChange(()=>{ redrawReplayDrawings(); });
+  // NOT what keeps the lines in place any more, and it never could be.
+  // This message covers SIDEWAYS movement only -- nothing is said when the
+  // price scale moves, which it does by itself as bars scroll in and out
+  // and every time he drags the price axis. Measured: a line that belonged
+  // at 245 was still painted at 225.3 after a price-axis drag, and stayed
+  // wrong after he let go. The chart paints the lines itself now, in the
+  // same pass as the candles, so nothing has to be told anything.
   replayChart.subscribeCrosshairMove((param) => {
     if (param && param.time && replayCandleByTime.has(param.time)) {
       renderReplayOhlc(replayCandleByTime.get(param.time));
@@ -2188,8 +2210,6 @@ function resizeReplayChartToContainer(){
   const container = document.getElementById('replayChartContainer');
   if(!container) return;
   replayChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-  // The overlay canvas has to track the chart's size exactly or drawings
-  // would land at the wrong pixels after any layout change.
   redrawReplayDrawings();
 }
 function openReplay(trade){
@@ -2250,14 +2270,13 @@ function replayPaintedAnything(){
     const cont = document.getElementById('replayChartContainer');
     if(cont) out.container = cont.clientWidth + 'x' + cont.clientHeight;
 
-    // THE DRAWING OVERLAY IS NOT THE CHART. It is deliberately transparent
-    // -- it carries his trend lines and nothing else -- so sampling it
-    // always reports "nothing drawn". Once it stopped being enormous it
-    // became the LARGEST surface, and this check started accusing a
-    // perfectly good chart of being blank. A false alarm here is worse than
-    // none: he would learn to ignore the one box meant to help him.
-    const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
-      .filter(c => c.id !== 'replayDrawCanvas');
+    // THE SEE-THROUGH OVERLAY IS GONE. His trend lines are painted by the
+    // chart itself now, so every surface in here is the chart's own and
+    // all of them are worth sampling. While the overlay existed this had
+    // to skip it -- it carried nothing but his lines, so sampling it
+    // reported a perfectly good chart as blank. Keeping that filter now
+    // would be a rule guarding against something that cannot happen.
+    const cs = Array.from(document.querySelectorAll('#replayModal canvas'));
     // Its own size, the size it is STRETCHED to, and how many pixels that
     // actually is -- a surface past the browser's ceiling silently stops
     // painting while still reporting its size, which looks exactly like
@@ -2398,7 +2417,16 @@ function buildReplayDrawRow(){
     `<div class="pill ${replayDrawMode==='ray'?'sel':''}" onclick="setReplayDrawMode('ray')">${rayLabel}</div>`+
     `<div class="pill ${replayMagnetOn?'sel':''}" onclick="toggleReplayMagnet()">🧲 Magnet</div>`+
     `<div class="pill" onclick="clearReplayDrawings()">Clear All</div>`+
-    (replaySelectedDrawing ? `<div class="pill" style="color:var(--bear); border-color:var(--bear-dim);" onclick="deleteSelectedReplayDrawing()">🗑 Delete Line</div>` : '');
+    // TAPPING A LINE OFFERS ONE SET OF BUTTONS, AND THEY MEAN ONE THING.
+    // A locked line offers Unlock and nothing else -- no Delete, because a
+    // lock that lets a stray tap destroy the line is not a lock. An
+    // unlocked one offers Lock and Delete. One state, one set of buttons.
+    (replaySelectedDrawing
+      ? (replaySelectedDrawing.drawing.locked
+          ? `<div class="pill" style="color:#9FD2FF; border-color:#3E5C77;" onclick="toggleSelectedReplayDrawingLock()">🔓 Unlock Line</div>`
+          : `<div class="pill" onclick="toggleSelectedReplayDrawingLock()">🔒 Lock Line</div>`+
+            `<div class="pill" style="color:var(--bear); border-color:var(--bear-dim);" onclick="deleteSelectedReplayDrawing()">🗑 Delete Line</div>`)
+      : '');
   // This row can wrap onto an extra line (e.g. when "Delete Line" shows
   // up), which changes how tall the toolbar is and therefore how much
   // room is actually left for the chart below it. A tiny delay lets the
@@ -2461,6 +2489,56 @@ function setReplayDrawMode(mode){
 // was the real cause of both the invisible lines and the chart jumping
 // around. Painting on top avoids the time scale entirely: we just convert
 // each saved {time, price} to pixels and draw.
+// WHERE DOES THIS MOMENT SIT ON SCREEN?
+//
+// Every line is anchored to a MOMENT -- 10:42 on 24 June -- because that is
+// what he drew it against. Asking the chart for that moment's position only
+// works when a bar STARTS at exactly that moment, and a 5-minute bar starts
+// at 10:40, not 10:42.
+//
+// Measured before it was changed: a ray and a trend line drawn on the
+// 1-minute chart, then 5m tapped -- both vanished completely, nothing
+// painted at all, and came back on 1m. Every line he drew disappeared the
+// moment he changed timeframe, which looks exactly like they were never
+// saved.
+//
+// So the moment is placed BETWEEN the two bars it falls between, in
+// proportion, and beyond the last bar it carries on at the same spacing.
+// A line then sits at the same real moment on every timeframe, which is
+// the only answer that means anything: 10:42 is 10:42.
+function replayTimeToX(time){
+  if(!replayChart) return null;
+  const ts = replayChart.timeScale();
+  const exact = ts.timeToCoordinate(time);
+  if(exact != null) return exact;
+
+  // The bars actually on screen, in order, with their own positions.
+  const times = [...replayCandleByTime.keys()].sort((a,b)=>a-b);
+  if(times.length < 2) return null;
+
+  // Between which two?
+  let lo = -1;
+  for(let i = 0; i < times.length; i++){ if(times[i] <= time) lo = i; else break; }
+
+  if(lo >= 0 && lo < times.length - 1){
+    const xa = ts.timeToCoordinate(times[lo]), xb = ts.timeToCoordinate(times[lo+1]);
+    if(xa == null || xb == null) return null;
+    const span = times[lo+1] - times[lo];
+    if(!span) return xa;
+    return xa + (xb - xa) * ((time - times[lo]) / span);
+  }
+
+  // Off one end. Carry on at the spacing of the two nearest bars rather
+  // than giving up -- a ray anchored past the last candle is an ordinary
+  // thing to draw, and refusing it is how a line silently disappears.
+  const iA = lo < 0 ? 0 : times.length - 2;
+  const iB = iA + 1;
+  const xa = ts.timeToCoordinate(times[iA]), xb = ts.timeToCoordinate(times[iB]);
+  if(xa == null || xb == null) return null;
+  const span = times[iB] - times[iA];
+  if(!span) return xa;
+  return xa + (xb - xa) * ((time - times[iA]) / span);
+}
 function redrawReplayDrawings(){
   try{ redrawReplayDrawingsInner(); }
   catch(err){
@@ -2471,90 +2549,95 @@ function redrawReplayDrawings(){
   }
 }
 function redrawReplayDrawingsInner(){
-  const cv = document.getElementById('replayDrawCanvas');
-  if(!cv || !replayChart || !replaySeries) return;
-  const ctx = cv.getContext('2d');
-  if(!ctx) return;
-  // NEVER MEASURE A CANVAS BY ITS OWN RENDERED SIZE.
+  // THE CHART PAINTS THE LINES NOW, SO THERE IS NOTHING TO CHASE.
   //
-  // This read cv.clientWidth and then set cv.width to that times the screen
-  // sharpness. On a sharp screen that is a DOUBLING, and the next redraw
-  // doubles the doubled one. His laptop reported the surface as
-  // 76800x38400 -- 2.9 BILLION pixels. That is 300 x 2^8 by 150 x 2^8:
-  // the canvas's own starting size, doubled eight times.
+  // This used to paint onto a see-through sheet laid over the chart, and
+  // repaint it whenever the chart said its left-to-right range had changed.
+  // That message only ever covers SIDEWAYS movement. Nothing at all is said
+  // when the price scale moves -- which happens by itself as bars scroll in
+  // and out, and every time he drags the price axis.
   //
-  // A surface that size cannot be allocated, and this one sits directly on
-  // top of the chart. That is his white screen, from 9 September to now.
+  // Measured before it was changed, with a ray at a fixed price: after an
+  // ordinary sideways drag the line belonged at 231 and was painted at
+  // 225.3; after dragging the price axis it belonged at 245 and was still
+  // painted at 225.3. TWENTY PIXELS out, and still out after he let go --
+  // it only jumped back once something else happened to repaint it. That is
+  // exactly what he reported: "the lines drawn move slightly and then
+  // readjust to the original position I drew them in."
   //
-  // It never showed here because this machine's screen is not sharp --
-  // times one is no growth at all. Four theories died before the measurement
-  // that mattered was even being taken.
+  // Repainting more often is the wrong shape of answer -- it is still the
+  // sheet chasing the chart, and this project has already learned once that
+  // reaching for a correction is the tell that the design is wrong (the
+  // bottom bar that was nudged on every scroll and jittered).
   //
-  // Measured from the PARENT now, which has a size of its own that nothing
-  // here can change.
-  const dpr = window.devicePixelRatio || 1;
-  const host = cv.parentElement || cv;
-  const w = host.clientWidth, h = host.clientHeight;
-  if(!w || !h) return;
-  // And a ceiling regardless, because one runaway surface took the whole
-  // feature down for ten days and a belt is cheaper than a fifth round.
-  const MAX_SIDE = 8192;
-  const pw = Math.min(MAX_SIDE, Math.round(w * dpr));
-  const ph = Math.min(MAX_SIDE, Math.round(h * dpr));
-  if(cv.width !== pw || cv.height !== ph){ cv.width = pw; cv.height = ph; }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  const ts = replayChart.timeScale();
-
-  const drawAll = (d)=>{
+  // The lines are handed to the chart itself now. It paints them in the
+  // same pass as the candles, so they move in the SAME frame, by
+  // construction. There is no gap left to be wrong. This keeps every line
+  // out of the chart's DATA -- which is the trap that started all of this,
+  // where a line added as data collapsed into one slot and shoved every
+  // candle sideways -- while still being drawn by the chart.
+  // The chart hands us a way to say "please draw again" when it takes the
+  // painter on. Used rather than nudging the chart's settings and hoping
+  // that counts as a reason to repaint -- hoping is how four theories died.
+  if(replayRequestRepaint) replayRequestRepaint();
+}
+// What the chart calls when it is drawing, every time it draws. Reads the
+// current positions at that instant, so it cannot be out of date.
+function paintReplayDrawings(ctx, width, height){
+  const drawOne = (d)=>{
     const selected = replaySelectedDrawing && replaySelectedDrawing.drawing === d;
-    ctx.strokeStyle = selected ? '#FFD666' : '#F2B94A';
+    const locked = !!d.locked;
+    // One colour, one meaning -- the same rule as the alignment badge.
+    // Amber is an ordinary line, brighter amber is the one he has tapped,
+    // and a locked line is blue-grey so he can see at a glance which ones
+    // cannot move. A colour never says two things at once.
+    ctx.strokeStyle = locked ? (selected ? '#9FD2FF' : '#6EA8DA') : (selected ? '#FFD666' : '#F2B94A');
     ctx.fillStyle = ctx.strokeStyle;
     ctx.lineWidth = selected ? 3 : 2;
 
     if(d.type === 'ray' || d.type === 'hline'){
-      const anchor = d.type === 'ray' ? d.anchor : { time: null, price: d.price };
-      const y = replaySeries.priceToCoordinate(anchor.price);
+      const price = d.type === 'ray' ? d.anchor.price : d.price;
+      const y = replaySeries.priceToCoordinate(price);
       if(y == null) return;
-      // A legacy 'hline' spans the whole width; a ray starts at its anchor
-      // candle and runs only to the right edge.
       let x0 = 0;
       if(d.type === 'ray'){
-        const ax = ts.timeToCoordinate(d.anchor.time);
+        const ax = replayTimeToX(d.anchor.time);
         if(ax == null) return;
         x0 = ax;
       }
-      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(width, y); ctx.stroke();
       if(d.type === 'ray'){
         ctx.beginPath(); ctx.arc(x0, y, selected ? 5 : 4, 0, Math.PI*2); ctx.fill();
       }
-      // Price tag on the right edge, same idea as the chart's own labels.
-      const label = anchor.price.toFixed(2);
+      const label = (locked ? '\u{1F512} ' : '') + price.toFixed(2);
       ctx.font = '11px ui-monospace, Menlo, monospace';
       const tw = ctx.measureText(label).width + 8;
-      ctx.fillRect(w - tw - 2, y - 8, tw, 16);
+      ctx.fillRect(width - tw - 2, y - 8, tw, 16);
       ctx.fillStyle = '#0B0F14';
-      ctx.fillText(label, w - tw + 2, y + 4);
+      ctx.fillText(label, width - tw + 2, y + 4);
       return;
     }
 
     if(d.type === 'trend'){
-      const x1 = ts.timeToCoordinate(d.p1.time);
+      const x1 = replayTimeToX(d.p1.time);
       const y1 = replaySeries.priceToCoordinate(d.p1.price);
-      const x2 = ts.timeToCoordinate(d.p2.time);
+      const x2 = replayTimeToX(d.p2.time);
       const y2 = replaySeries.priceToCoordinate(d.p2.price);
       if(x1==null||y1==null||x2==null||y2==null) return;
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
       ctx.beginPath(); ctx.arc(x1,y1, selected?5:4, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(x2,y2, selected?5:4, 0, Math.PI*2); ctx.fill();
+      if(locked){
+        ctx.font = '11px ui-monospace, Menlo, monospace';
+        ctx.fillText('\u{1F512}', (x1+x2)/2 + 6, (y1+y2)/2 - 6);
+      }
     }
   };
-  replayDrawings.forEach(drawAll);
 
-  // A trend line waiting on its second click — show its anchor so it's
-  // obvious the first point registered.
+  replayDrawings.forEach(drawOne);
+
   if(replayPendingPoint){
-    const px = ts.timeToCoordinate(replayPendingPoint.time);
+    const px = replayTimeToX(replayPendingPoint.time);
     const py = replaySeries.priceToCoordinate(replayPendingPoint.price);
     if(px!=null && py!=null){
       ctx.fillStyle = '#F2B94A';
@@ -2562,6 +2645,41 @@ function redrawReplayDrawingsInner(){
     }
   }
 }
+// Handed to the chart once, when the chart is built. From then on the chart
+// asks it to paint whenever it paints anything else.
+function makeReplayDrawingPainter(){
+  return {
+    attached(params){
+      // Kept so anything that changes a line -- drawing one, dragging one,
+      // locking one -- can ask for an immediate repaint. Chart MOVEMENT
+      // needs no such call: the chart repaints itself and asks the painter
+      // as it goes, which is the whole point of being painted by it.
+      replayRequestRepaint = params && params.requestUpdate ? params.requestUpdate : null;
+    },
+    detached(){ replayRequestRepaint = null; },
+    updateAllViews(){},
+    paneViews(){
+      return [{
+        renderer: () => ({
+          draw(target){
+            try{
+              target.useMediaCoordinateSpace(({ context, mediaSize }) => {
+                if(!replaySeries) return;
+                paintReplayDrawings(context, mediaSize.width, mediaSize.height);
+              });
+            }catch(err){
+              // The lines are a nice-to-have; the candles underneath are
+              // not. A fault in here must never stop the chart drawing --
+              // this app has already shown him a blank chart for ten days.
+              replayPaintFault = err && err.message ? err.message : String(err);
+            }
+          },
+        }),
+      }];
+    },
+  };
+}
+
 // Perpendicular distance from a point to a line segment — used to let you
 // grab a trend line anywhere along its length, not just at its endpoints.
 function distanceToSegment(px, py, x1, y1, x2, y2){
@@ -2574,24 +2692,26 @@ function distanceToSegment(px, py, x1, y1, x2, y2){
 }
 // Finds whichever drawing (if any) sits under a given chart-pixel point.
 // Endpoints win over line bodies so you can grab a specific end to reshape.
+// Uses replayTimeToX, exactly as the painting does. If these two ever
+// disagreed, a line would be drawn in one place and grabbable in another --
+// so they ask the same question through the same door.
 function findReplayDrawingAt(x, y){
   const HIT = 14; // pixels
-  const ts = replayChart.timeScale();
   for(let i = replayDrawings.length - 1; i >= 0; i--){
     const d = replayDrawings[i];
     if(d.type === 'hline'){
       const py = replaySeries.priceToCoordinate(d.price);
       if(py != null && Math.abs(py - y) <= HIT) return { drawing: d, part: 'hline' };
     } else if(d.type === 'ray'){
-      const ax = ts.timeToCoordinate(d.anchor.time);
+      const ax = replayTimeToX(d.anchor.time);
       const ay = replaySeries.priceToCoordinate(d.anchor.price);
       if(ax==null||ay==null) continue;
       if(Math.hypot(ax-x, ay-y) <= HIT) return { drawing: d, part: 'anchor' };
       if(x >= ax - HIT && Math.abs(ay - y) <= HIT) return { drawing: d, part: 'ray-body' };
     } else if(d.type === 'trend'){
-      const x1 = ts.timeToCoordinate(d.p1.time);
+      const x1 = replayTimeToX(d.p1.time);
       const y1 = replaySeries.priceToCoordinate(d.p1.price);
-      const x2 = ts.timeToCoordinate(d.p2.time);
+      const x2 = replayTimeToX(d.p2.time);
       const y2 = replaySeries.priceToCoordinate(d.p2.price);
       if(x1==null||y1==null||x2==null||y2==null) continue;
       if(Math.hypot(x1-x, y1-y) <= HIT) return { drawing: d, part: 'p1' };
@@ -2615,8 +2735,26 @@ function deselectReplayDrawing(){
 function deleteSelectedReplayDrawing(){
   if(!replaySelectedDrawing) return;
   const d = replaySelectedDrawing.drawing;
+  // A locked line cannot be deleted either. He asked for lines that cannot
+  // move without him unlocking them first, and a lock that still lets a
+  // stray tap destroy the line is not a lock. Getting this wrong one way
+  // costs him one extra tap; the other way costs him work he cannot get
+  // back. The button is not even shown while it is locked, so this is a
+  // floor under that, not the only guard.
+  if(d.locked) return;
   replayDrawings = replayDrawings.filter(x=>x!==d);
   replaySelectedDrawing = null;
+  redrawReplayDrawings();
+  buildReplayDrawRow();
+  persistReplayDrawings();
+}
+// HIS REQUEST, in his own words: "There should be a lock button whereas I
+// am able to lock on certain lines I draw on the chart, where they are
+// unable to move unless I unlock them and move them myself."
+function toggleSelectedReplayDrawingLock(){
+  if(!replaySelectedDrawing) return;
+  const d = replaySelectedDrawing.drawing;
+  d.locked = !d.locked;
   redrawReplayDrawings();
   buildReplayDrawRow();
   persistReplayDrawings();
@@ -2627,30 +2765,67 @@ function clearReplayDrawingsFromChart(){
   replaySelectedDrawing = null;
   redrawReplayDrawings();
 }
+// Clear All leaves the locked ones alone -- otherwise one tap undoes the
+// whole point of locking them. It says how many it kept, because a button
+// that does less than its name says must say so.
 function clearReplayDrawings(){
-  clearReplayDrawingsFromChart();
+  const kept = replayDrawings.filter(d=>d.locked);
+  const removing = replayDrawings.length - kept.length;
+  replayDrawings = kept;
+  replayPendingPoint = null;
+  replaySelectedDrawing = null;
+  redrawReplayDrawings();
+  buildReplayDrawRow();
   persistReplayDrawings();
+  if(kept.length && removing) alert(`Cleared ${removing} line${removing===1?'':'s'}. Kept ${kept.length} locked one${kept.length===1?'':'s'} \u2014 unlock them first if you want those gone too.`);
+  else if(kept.length && !removing) alert(`Nothing was cleared \u2014 all ${kept.length} line${kept.length===1?' is':'s are'} locked. Tap a line and then Unlock to remove it.`);
 }
 // Drawings are already plain data now (no live chart objects), so saving
 // is a straight copy — nothing to convert.
+// EVERY WAY THIS CAN FAIL NOW SAYS WHICH ONE IT WAS.
+//
+// It used to hand the journal to storage and ignore the answer. Storage
+// refuses a write once it is full, and a refusal looked exactly like a save
+// that worked -- his lines would simply not be there next time, with
+// nothing anywhere saying why. "Could not find the trade", "there is no
+// room" and "it saved" are three different things and must never share one
+// silence.
+let replayDrawSaveFault = null;
 function persistReplayDrawings(){
-  if(!replayOpenTradeId) return;
+  if(!replayOpenTradeId){ replayDrawSaveFault = 'no trade was open, so there was nothing to save onto'; return; }
   const trades = loadTrades();
   const trade = trades.find(t=>String(t.id)===String(replayOpenTradeId));
-  if(!trade) return;
+  if(!trade){ replayDrawSaveFault = 'the trade this chart belongs to is no longer in the journal'; return; }
   trade.chartDrawings = replayDrawings.map(d=>{
-    if(d.type==='hline') return { type:'hline', price: d.price };
-    if(d.type==='ray') return { type:'ray', anchor: {...d.anchor} };
-    return { type:'trend', p1: {...d.p1}, p2: {...d.p2} };
+    // `locked` travels with the line. A lock he set that did not survive
+    // closing the chart would be worse than no lock at all -- he would
+    // believe a line was protected when it was not.
+    const base = d.locked ? { locked:true } : {};
+    if(d.type==='hline') return { ...base, type:'hline', price: d.price };
+    if(d.type==='ray') return { ...base, type:'ray', anchor: {...d.anchor} };
+    return { ...base, type:'trend', p1: {...d.p1}, p2: {...d.p2} };
   });
-  saveTrades(trades);
+  const wrote = saveTrades(trades);
+  if(wrote && wrote.ok === false){
+    replayDrawSaveFault = wrote.reason || 'the journal refused to save and did not say why';
+    // He is looking straight at lines he has just drawn. Telling him now,
+    // once, beats him finding out when they are gone.
+    if(!replayDrawSaveWarned){
+      replayDrawSaveWarned = true;
+      alert('Your lines are on the chart but could not be kept: ' + replayDrawSaveFault);
+    }
+    return;
+  }
+  replayDrawSaveFault = null;
 }
+let replayDrawSaveWarned = false;
 function restoreReplayDrawings(trade){
   const saved = trade.chartDrawings || [];
   saved.forEach(d=>{
-    if(d.type==='hline') replayDrawings.push({ type:'hline', price: d.price });
-    else if(d.type==='ray') replayDrawings.push({ type:'ray', anchor: {...d.anchor} });
-    else if(d.type==='trend') replayDrawings.push({ type:'trend', p1: {...d.p1}, p2: {...d.p2} });
+    const lock = d.locked ? { locked:true } : {};
+    if(d.type==='hline') replayDrawings.push({ ...lock, type:'hline', price: d.price });
+    else if(d.type==='ray') replayDrawings.push({ ...lock, type:'ray', anchor: {...d.anchor} });
+    else if(d.type==='trend') replayDrawings.push({ ...lock, type:'trend', p1: {...d.p1}, p2: {...d.p2} });
   });
   redrawReplayDrawings();
 }
@@ -2692,6 +2867,15 @@ function setupReplayDragHandlers(container){
     const target = findReplayDrawingAt(x,y);
     if(target){
       selectReplayDrawing(target);
+      // A LOCKED LINE IS SELECTED BUT NEVER DRAGGED. He must still be able
+      // to tap it -- that is how he reaches Unlock -- so this stops the
+      // dragging, not the tapping. Nothing is remembered as a drag target,
+      // so every later move does nothing to it.
+      if(target.drawing.locked){
+        replayDragTarget = null;
+        e.preventDefault();
+        return;
+      }
       replayDragTarget = target;
       if(target.part === 'trend-body' || target.part === 'ray-body'){
         // Moving a whole line rather than one end — remember where the
@@ -4282,7 +4466,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-19 14:40';
+const APP_BUILD = '2026-09-21 16:20';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{

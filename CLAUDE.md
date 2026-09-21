@@ -346,9 +346,51 @@ Uses **The Strat**. Key concepts the code implements:
 - **Lightweight Charts positions by candle SLOT, not by real time.** Adding
   a drawing as a data series with a far-future timestamp does NOT stretch
   it across the chart — it collapses into one slot, and inserting a
-  non-candle timestamp physically shifts every candle. User-drawn lines are
-  therefore painted on a **separate transparent canvas overlaid on the
-  chart**, never added as chart series.
+  non-candle timestamp physically shifts every candle. So a user-drawn line
+  may never become chart DATA.
+  **CORRECTED 2026-09-21: it must still be drawn BY the chart.** The line
+  above used to end "…are therefore painted on a separate transparent
+  canvas overlaid on the chart", and that separate sheet caused three
+  distinct faults in a fortnight: it sized itself from its own size and
+  doubled on every redraw until the chart went white for ten days; it was
+  the largest surface, so the "did anything get drawn?" check sampled it
+  and called a working chart blank; and it could only be repainted by
+  chasing the chart's own movement, which it did badly (see the drift note
+  below). A **series primitive** (`attachPrimitive`, v4.1+) is the answer:
+  it is drawn inside the chart's own render pass, in the same frame as the
+  candles, and adds nothing to the chart's data. Not a series — a painter.
+  Do not reintroduce an overlay canvas.
+- **A line anchored to a MOMENT cannot be placed by asking for that
+  moment.** `timeToCoordinate` answers only when a bar STARTS exactly
+  then, and a 5-minute bar starting at 10:40 cannot answer for 10:42.
+  Measured: a ray and a trend line drawn on the 1-minute chart, then 5m
+  tapped — **both vanished completely, 0 pixels**, and returned on 1m.
+  Every line he drew disappeared the moment he changed timeframe, which
+  reads exactly like "my lines don't save" and is what he reported.
+  `replayTimeToX` places a moment BETWEEN the two bars it falls between,
+  in proportion, and carries on at the same spacing past either end. The
+  painting and the hit-testing must both go through it, or a line is drawn
+  in one place and grabbable in another.
+- **"The visible range changed" covers SIDEWAYS movement only.** The
+  drawings overlay was repainted from `subscribeVisibleLogicalRangeChange`,
+  and nothing at all is emitted when the PRICE scale moves — which it does
+  by itself as bars scroll in and out, and every time he drags the price
+  axis. Measured with a ray at a fixed price: after an ordinary sideways
+  drag it belonged at 231 and was painted at 225.3; after a price-axis drag
+  it belonged at 245 and was **still** painted at 225.3. Twenty pixels out,
+  and still out after he let go — it only jumped back when something else
+  happened to repaint it. He reported it as "the lines move slightly and
+  then readjust", and he was right. Repainting more often is the wrong
+  shape of answer: it is still the overlay chasing the chart, which is the
+  same mistake as the bottom bar that was nudged on every scroll and
+  jittered. Reaching for a correction is the tell that the design is wrong.
+- **A test must read the chart's box FRESH, never remember it.** Selecting
+  a line adds buttons to the toolbar, the row wraps, and the chart
+  correctly gives up the height — measured going from 564 tall to 530 the
+  moment the Lock button appeared. A box captured earlier is then 34 pixels
+  wrong and every tap built on it misses. That cost a round reading as
+  "unlocking a line does not work" when the app was fine and the test was
+  measuring its own earlier step.
 - **Forcing `barSpacing`/`minBarSpacing` while removing `fitContent()`
   blanked the chart entirely** (no candles, no gridlines, no price scale,
   and no console error). Candle size is fixed by limiting how much data is

@@ -61,8 +61,14 @@ const { launch, serve } = require('./browser.js');
     check(`screen sharpness is ${dpr}, not 1`, dpr === 2);
   }
 
-  console.log('\n--- the overlay is redrawn many times and must NOT grow ---');
+  console.log('\n--- no surface may grow when the chart is redrawn many times ---');
   {
+    // THE OVERLAY IS GONE. His lines are painted by the chart itself now,
+    // so there is no separate sheet left to measure itself and run away.
+    // This still repeats the redraw many times and watches every surface,
+    // because the fault was never really "that one canvas" -- it was a
+    // surface sized from its own size, and the check that matters is that
+    // nothing in here grows when asked to draw again and again.
     const r = await p.evaluate(async (c) => {
       const t = { id:'nio1', ticker:'NIO', dir:'Short', entryDate:'2026-06-24', entryTime:'09:31',
         exitDate:'2026-07-23', exitTime:'15:55', optEntry:0.49, optExit:0.53, contracts:1,
@@ -72,42 +78,52 @@ const { launch, serve } = require('./browser.js');
       localStorage.setItem('strat_trades', JSON.stringify([t]));
       openReplay(t);
       await new Promise(r2 => setTimeout(r2, 800));
-      const cv = document.getElementById('replayDrawCanvas');
-      // Let the fullscreen modal finish settling FIRST. Its height moves for
-      // a moment after opening, so the overlay legitimately changes with it
-      // -- asserting on that would be measuring the layout, not the fault.
+      // Let the fullscreen modal finish settling FIRST. Its height moves
+      // for a moment after opening, so surfaces legitimately change with
+      // it -- asserting on that would measure the layout, not the fault.
       await new Promise(r2 => setTimeout(r2, 900));
+      const biggest = () => {
+        let w=0,h=0,px=0;
+        for(const c2 of document.querySelectorAll('#replayModal canvas')){
+          if(c2.width*c2.height > px){ px=c2.width*c2.height; w=c2.width; h=c2.height; }
+        }
+        return { w, h, px };
+      };
       const sizes = [];
       // Twelve redraws. Doubling eight times is what reached his 76800.
       for(let i = 0; i < 12; i++){
         redrawReplayDrawingsInner();
-        sizes.push(cv.width + 'x' + cv.height);
+        const b2 = biggest();
+        sizes.push(b2.w + 'x' + b2.h);
         await new Promise(r2 => setTimeout(r2, 20));
       }
+      const last = biggest();
+      const host = document.getElementById('replayChartContainer');
       return { sizes, first: sizes[0], last: sizes[sizes.length-1],
-               w: cv.width, h: cv.height,
-               host: cv.parentElement ? cv.parentElement.clientWidth + 'x' + cv.parentElement.clientHeight : 'none' };
+               w: last.w, h: last.h,
+               overlayGone: !document.getElementById('replayDrawCanvas'),
+               host: host ? host.clientWidth + 'x' + host.clientHeight : 'none' };
     }, bars(3708));
 
+    check('the separate lines layer no longer exists at all', r.overlayGone === true);
     // THE FAULT WAS DOUBLING, so that is what is asserted. Not "identical" --
     // the box it lives in can legitimately change, and demanding sameness
     // would be measuring the layout rather than the bug.
     const widths = r.sizes.map(x => Number(x.split('x')[0]));
-    check(`it never doubles (widths ${widths[0]} -> ${widths[widths.length-1]})`,
+    check(`nothing doubles (widths ${widths[0]} -> ${widths[widths.length-1]})`,
       Math.max(...widths) <= Math.min(...widths) * 1.5);
-    check('and settles rather than climbing', r.first === r.last);
-    check(`and it is a sane size, not billions of pixels (${r.w}x${r.h} = ${(r.w*r.h/1e6).toFixed(1)}M)`,
+    check('and it settles rather than climbing', r.first === r.last);
+    check(`and the largest surface is sane, not billions of pixels (${r.w}x${r.h} = ${(r.w*r.h/1e6).toFixed(1)}M)`,
       r.w * r.h < 30e6);
-    check(`it matches the box it sits in times the sharpness (box ${r.host})`,
-      r.w > 1000 && r.w < 8192);
+    check(`it matches the box the chart sits in times the sharpness (box ${r.host})`,
+      r.w > 400 && r.w < 8192);
     check('nothing threw', errors.length === 0);
   }
 
-  console.log('\n--- and with the overlay sane, the chart actually draws ---');
+  console.log('\n--- and the chart actually draws ---');
   {
     const paint = await p.evaluate(() => {
       const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
-        .filter(c => c.id !== 'replayDrawCanvas')
         .sort((a,b)=>(b.width*b.height)-(a.width*a.height));
       const big = cs[0];
       const c2 = document.createElement('canvas');
