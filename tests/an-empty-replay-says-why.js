@@ -107,6 +107,7 @@ const { launch, serve } = require('./browser.js');
     // so every surface here is the chart's own.
     const painted = await p.evaluate(() => {
       const cs = Array.from(document.querySelectorAll('#replayModal canvas'))
+        .filter(c => c.id !== 'replayDrawCanvas')
         .sort((a,b) => (b.width*b.height)-(a.width*a.height));
       const big = cs[0];
       if(!big) return null;

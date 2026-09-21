@@ -2281,7 +2281,9 @@ function replayPaintedAnything(){
     // actually is -- a surface past the browser's ceiling silently stops
     // painting while still reporting its size, which looks exactly like
     // this.
-    out.canvases = cs.map(c => {
+    // Every surface is still LISTED, overlay included -- that list is what
+    // found the runaway in the first place. Only the paint sample skips it.
+    out.canvases = Array.from(document.querySelectorAll('#replayModal canvas')).map(c => {
       const r = c.getBoundingClientRect();
       return `${c.width}x${c.height}` + (c.width*c.height > 1e6 ? `(${(c.width*c.height/1e6).toFixed(1)}M)` : '')
         + `@${Math.round(r.width)}x${Math.round(r.height)}`;
