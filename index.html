@@ -397,6 +397,26 @@
     align-items:flex-end; justify-content:center;
   }
   .modal-overlay.show{display:flex;}
+  /* THE SPEED BUTTONS WENT UNDER SAFARI'S TOOLBAR, AND THIS IS WHY.
+     A position:fixed layer on an iPhone is laid out against the area the
+     page THINKS it has, which while the toolbar is on screen is taller
+     than what is actually visible. align-items:flex-end then glues the
+     panel to the bottom of that taller area -- so the panel's last row
+     sits underneath the toolbar, off screen, with no way to scroll to it
+     because the panel is overflow:hidden.
+     The panel is already the right HEIGHT (100svh -- the smallest the
+     screen ever gets). It was in the wrong PLACE. Anchored to the top
+     now, so it runs from the visible top downwards and its bottom can
+     never land below the visible bottom.
+     This is the same fault as the bottom row of buttons that floated in
+     the middle of the screen, and it is fixed the same way: by not
+     positioning against the wrong edge, NOT by measuring the gap and
+     nudging. Reaching for a correction is the tell that the design is
+     wrong -- that is on this project's record already, and it cost him a
+     round of a jittering bar.
+     Written as a plain class rather than :has(...) -- his layout must not
+     depend on how new his phone's browser happens to be. */
+  .modal-overlay.fs-overlay{align-items:flex-start;}
   .modal-box{
     background:var(--panel); border:1px solid var(--border); border-radius:16px 16px 0 0;
     width:100%; max-width:520px; max-height:88vh; overflow-y:auto; padding:16px;
@@ -1145,7 +1165,7 @@
   </div>
 
   <!-- BAR REPLAY MODAL -->
-  <div class="modal-overlay" id="replayModal">
+  <div class="modal-overlay fs-overlay" id="replayModal">
     <div class="modal-box fs">
       <div class="modal-head">
         <div class="t" id="replayTitle">Trade Replay</div>
@@ -1182,7 +1202,7 @@
        megabytes and the journal lives in the phone's own small storage,
        so holding one there would push everything else out. The trade
        keeps a POINTER, and the recording is fetched when he taps play. -->
-  <div class="modal-overlay" id="videoModal">
+  <div class="modal-overlay fs-overlay" id="videoModal">
     <div class="modal-box fs">
       <div class="modal-head">
         <div class="t" id="videoTitle">Trade Recording</div>
@@ -4466,7 +4486,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-21 16:20';
+const APP_BUILD = '2026-09-23 12:10';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
