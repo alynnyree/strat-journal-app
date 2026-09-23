@@ -1206,6 +1206,24 @@ Uses **The Strat**. Key concepts the code implements:
   it. Sitting at the bottom is not the same as being all there, so the check
   measures the BOTTOM OF THE LABELS, which is the part that disappears
   first.
+- **THE SAME "WRONG EDGE" FAULT, a third time — the speed buttons.** He
+  reported the playback-speed buttons gone (2026-09-23). Measured first: in
+  a simulated phone the row FITS at 844, 740, 664 and 600 tall, with the
+  chart shrinking to make room. The arithmetic was never wrong. What was
+  wrong is that `.modal-overlay` is `position:fixed; inset:0` with
+  `align-items:flex-end` — and a fixed layer on an iPhone is laid out
+  against the area the page THINKS it has, which while Safari's toolbar is
+  on screen is TALLER than what is visible. So the panel was glued to the
+  bottom of that taller area and its last row sat under the toolbar. The
+  panel is `overflow:hidden`, so there was no scrolling to it either.
+  The panel's HEIGHT was already right (`100svh`); its PLACE was wrong.
+  `.fs-overlay` anchors it to the top, so it runs from the visible top down
+  and its bottom can never land below the visible bottom. Written as a
+  plain class, not `:has()` — his layout must not depend on how new his
+  browser is. **A simulated browser has no toolbar that slides away, so
+  this class of fault cannot be reproduced here**; say that plainly rather
+  than dressing up a passing check as a reproduction. And never fix it by
+  measuring the gap and nudging — that is what made the bottom bar jitter.
 - **Moving the scroll INTO a box breaks everything listening to the page.**
   The fade-in effect was told about scrolling by `window`, which no longer
   scrolls — so every card below the fold would have stayed invisible for
