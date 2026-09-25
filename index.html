@@ -1980,7 +1980,21 @@ function clearShot(which){
 // site uses, so it looks and behaves like a real chart instead of a
 // hand-drawn approximation. The raw 1-minute data is fetched once and
 // re-aggregated client-side when the user switches timeframes.
-const REPLAY_TIMEFRAMES = [1, 5, 15]; // minutes per candle
+// HIS OWN LIST, as far as a four-hour recording can reach.
+//
+// The full thirteen he trades are 6M, 3M, 1M, 1W, 1D, 4H, 2H, 1H, 30m,
+// 15m, 5m, 3m and 1m. These eight are the ones that can be built from
+// what a trade actually carries -- roughly four hours of minute bars
+// around the fill. A one-DAY bar cannot be made from a four-hour
+// recording, and nor can a week, month, quarter or half-year: the app
+// would have to start keeping months of history against every trade.
+// Raised with him rather than quietly dropped, and he chose these eight
+// (2026-09-25).
+const REPLAY_TIMEFRAMES = [1, 3, 5, 15, 30, 60, 120, 240]; // minutes per candle
+// Named the way he reads them -- 1H, not 60m.
+function replayTfLabel(mins){
+  return mins < 60 ? mins + 'm' : (mins/60) + 'H';
+}
 const REPLAY_SPEEDS = [0.5, 1, 2, 4];
 let replayRaw = null;        // {candles, entryIndex, exitIndex} - the original 1m data for the open trade
 let replayAggregated = [];   // currently-displayed (possibly aggregated) candle array
@@ -2011,23 +2025,105 @@ let replayLiveTrendDraw = false; // true while a trend line is being stretched o
 // Groups consecutive 1-minute candles into a coarser synthetic candle —
 // mirrors the backend's aggregateCandles logic but also carries high/low
 // through, since this is for visual candlesticks, not just bull/bear.
+// WHICH CALENDAR DAY, IN NEW YORK, DOES THIS MOMENT BELONG TO -- and how
+// many minutes into that day's session is it?
+//
+// Built ONCE and reused. Building a date formatter inside a per-candle
+// loop is already on this project's record as the thing that churned
+// +476MB of memory reading the thirteen timeframes, and a month-long hold
+// hands this nearly four thousand candles.
+const REPLAY_NY = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', hour12: false,
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+});
+function replayNyParts(ms){
+  const parts = REPLAY_NY.formatToParts(new Date(ms));
+  const get = t => Number(parts.find(x => x.type === t).value);
+  let hour = get('hour');
+  if(hour === 24) hour = 0;             // some engines say 24 for midnight
+  return { y: get('year'), m: get('month'), d: get('day'), hour, min: get('minute') };
+}
+// The regular session opens at 09:30 New York time. Every intraday bar is
+// anchored to THAT, which is what makes a 5-minute bar here the same
+// 5-minute bar TradingView draws.
+const REPLAY_SESSION_OPEN_MIN = 9*60 + 30;
+
+// BARS ON THE CLOCK, NOT EVERY N IN THE LIST.
+//
+// This used to take candles N at a time straight out of the array and
+// stamp each group with its LAST candle's time. Two things wrong, and
+// both were measured before this was changed:
+//
+//   * A window starting at 10:17 -- which is what a window centred on a
+//     trade looks like -- produced "5-minute bars" running 10:17-10:21,
+//     10:22-10:26. Those are not the 5-minute bars on anyone else's
+//     chart, so his 10:20 candle on TradingView had no counterpart here.
+//   * Even a window starting exactly at 09:30 stamped its first bar
+//     09:34. A bar is named by when it STARTS, everywhere else in the
+//     world, so every bar was labelled one period late.
+//
+// This is the same fault the timeframe reading had on the server and it
+// was fixed there the same way: "grouping candles by position in the list
+// is not a timeframe" is already on this project's record. It was never
+// fixed here.
+//
+// Anchored to each DAY's session open, so a 4-hour bar cannot open on
+// Thursday afternoon and close on Friday morning -- exactly what the
+// server-side version did before it was corrected. His NIO hold spans a
+// month, so that is a real case, not a hypothetical.
 function aggregateReplayCandles(candles, groupSize) {
   if (groupSize <= 1) return candles;
-  const groups = [];
-  for (let i=0; i<candles.length; i+=groupSize){
-    const chunk = candles.slice(i, i+groupSize);
-    if(!chunk.length) continue;
-    groups.push({
-      open: chunk[0].open,
-      close: chunk[chunk.length-1].close,
-      high: Math.max(...chunk.map(c=>c.high)),
-      low: Math.min(...chunk.map(c=>c.low)),
-      volume: chunk.reduce((s,c)=>s+(c.volume||0),0),
-      datetime: chunk[chunk.length-1].datetime,
-    });
+  const out = [];
+  let cur = null, curKey = null;
+  for(const c of candles){
+    if(c == null || !isFinite(c.datetime)){ continue; }
+    const p = replayNyParts(c.datetime);
+    const minsIntoDay = p.hour*60 + p.min;
+    // Minutes since the session opened. Before the open (pre-market) this
+    // goes negative, and Math.floor still buckets it correctly -- a
+    // pre-market bar belongs to a bucket before the session's first one
+    // rather than being lumped in with it.
+    const sinceOpen = minsIntoDay - REPLAY_SESSION_OPEN_MIN;
+    const bucket = Math.floor(sinceOpen / groupSize);
+    const key = `${p.y}-${p.m}-${p.d}#${bucket}`;
+    if(key !== curKey){
+      // A bar is stamped with the moment it STARTS. Worked out from the
+      // candle's own time and how far into its bucket it sits, so the
+      // stamp is right even when the first minute of the bucket is
+      // missing from the data.
+      const offsetInBucket = sinceOpen - bucket*groupSize;
+      cur = {
+        open: c.open, high: c.high, low: c.low, close: c.close,
+        volume: c.volume || 0,
+        datetime: c.datetime - offsetInBucket*60000,
+      };
+      out.push(cur);
+      curKey = key;
+      continue;
+    }
+    cur.high = Math.max(cur.high, c.high);
+    cur.low = Math.min(cur.low, c.low);
+    cur.close = c.close;
+    cur.volume += (c.volume || 0);
   }
-  return groups;
+  return out;
 }
+// WHICH BAR DOES THIS MOMENT FALL IN?
+//
+// The entry and exit arrows used to be placed by dividing the minute
+// candle's POSITION by the group size -- which only ever worked because
+// the bars were themselves cut every N in the list. Now that bars sit on
+// the clock, position means nothing: the arrow is found by the moment it
+// happened at, which is what it always should have been.
+function replayBarIndexAt(bars, ms){
+  if(!bars.length || !isFinite(ms)) return null;
+  let found = null;
+  for(let i = 0; i < bars.length; i++){
+    if(bars[i].datetime <= ms) found = i; else break;
+  }
+  return found;
+}
+
 // What the chart was actually handed, and what it refused. Read by the
 // replay screen so an empty chart can say why instead of being a blank
 // nobody can diagnose -- which is exactly what he has been looking at since
@@ -2355,6 +2451,20 @@ function reportReplayState(){
     lines.push(`${f.noTime} of ${f.got} bars had no usable time and were left out. ${f.used} are being shown.`);
   }
 
+  // A FEW BARS IS NOT A FAULT, AND MUST NOT READ AS ONE.
+  //
+  // A trade carries about four hours of minute bars. Ask for 4-hour bars
+  // and four hours can only make one or two of them -- that is the
+  // recording being short, not anything broken, and he cannot tell those
+  // apart by looking. It is said in the same breath as "not a fault",
+  // the same way an empty market is, because a red cross here would send
+  // him hunting a bug that is not there.
+  if(f.used && replayAggregated && replayAggregated.length && replayAggregated.length < 5 && replayTf > 1){
+    const mins = (replayRaw && replayRaw.candles) ? replayRaw.candles.length : 0;
+    const hrs = mins ? (mins/60).toFixed(1) : '?';
+    lines.push(`This trade has about ${hrs} hours of price movement saved, so ${replayTfLabel(replayTf)} bars only make ${replayAggregated.length} of them. That is the length of the recording, not a fault \u2014 the shorter timeframes have plenty.`);
+  }
+
   // A chart with no room to draw in is the other way this ends up blank,
   // and it looks identical from the outside.
   const cont = document.getElementById('replayChartContainer');
@@ -2426,7 +2536,7 @@ function closeReplay(){
 }
 function buildReplayTfRow(){
   const row = document.getElementById('replayTfRow');
-  row.innerHTML = REPLAY_TIMEFRAMES.map(tf=>`<div class="pill ${tf===replayTf?'sel':''}" onclick="setReplayTimeframe(${tf})">${tf}m</div>`).join('');
+  row.innerHTML = REPLAY_TIMEFRAMES.map(tf=>`<div class="pill ${tf===replayTf?'sel':''}" onclick="setReplayTimeframe(${tf})">${replayTfLabel(tf)}</div>`).join('');
 }
 function buildReplayDrawRow(){
   const row = document.getElementById('replayDrawRow');
@@ -3042,8 +3152,17 @@ function setReplayTimeframe(tf){
   replayPause();
   replayTf = tf;
   replayAggregated = aggregateReplayCandles(replayRaw.candles, tf);
-  replayEntryIdx = Math.floor(replayRaw.entryIndex / tf);
-  replayExitIdx = replayRaw.exitIndex!=null ? Math.floor(replayRaw.exitIndex / tf) : null;
+  // THE ARROWS ARE PLACED BY WHEN HE TRADED, not by arithmetic on a
+  // position in the list. Dividing the minute candle's position by the
+  // group size only ever worked because the bars were themselves cut
+  // every N in the list -- now that they sit on the clock, that sum puts
+  // the arrow on the wrong bar. Looked up by the moment instead.
+  const raw = replayRaw.candles || [];
+  const entryMs = raw[replayRaw.entryIndex] ? raw[replayRaw.entryIndex].datetime : null;
+  const exitMs = (replayRaw.exitIndex != null && raw[replayRaw.exitIndex])
+    ? raw[replayRaw.exitIndex].datetime : null;
+  replayEntryIdx = entryMs != null ? replayBarIndexAt(replayAggregated, entryMs) : null;
+  replayExitIdx = exitMs != null ? replayBarIndexAt(replayAggregated, exitMs) : null;
   replayRevealCount = replayAggregated.length; // start fully revealed (static view), Play restarts from 0
   document.getElementById('replayScrub').max = replayAggregated.length;
   document.getElementById('replayScrub').value = replayRevealCount;
@@ -3054,6 +3173,12 @@ function setReplayTimeframe(tf){
   // playback from here on, so candles keep this same width instead of
   // shrinking as more get revealed.
   frameReplayView();
+  // SAID AGAIN FOR THE TIMEFRAME HE JUST TAPPED. This used to be worked out
+  // only when the screen opened, so tapping 4H -- the one timeframe a
+  // four-hour recording can barely fill -- changed the chart and left the
+  // note describing 1m. A report that describes the previous question is
+  // the same fault as a status that answers the run before.
+  reportReplayState();
 }
 function setReplaySpeed(s){
   replaySpeed = s;
@@ -4486,7 +4611,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-23 12:10';
+const APP_BUILD = '2026-09-25 15:30';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
