@@ -1549,6 +1549,45 @@ Uses **The Strat**. Key concepts the code implements:
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
 
+## Which numbers are FACTS, and which are the app's own work
+
+**Read `WHERE-EVERY-NUMBER-COMES-FROM.md` before touching any number he
+sees.** It lists every figure in the app, whether anyone outside recorded
+it, what settles a dispute, and whether that check is actually running.
+
+His instruction, 2026-09-25, after the 5 and 15 minute bars turned out to
+have been wrong for months: *"This app needs to be built off of facts. All
+the numbers that are built into the app... are FACTS and should be pulled
+from somewhere else to be validated. How do we make sure that this is
+correct..now and moving forward?"*
+
+**THE RULE: a number the app works out must be checked against the same
+number obtained a different way, or labelled as the app's own
+reconstruction. There is no third option.**
+
+Why the bars stayed wrong is the whole argument: every check the app had
+compared the app against ITSELF. Two pieces of the app can agree perfectly
+and both be wrong — and were. The money is the one figure with a real
+outside referee (his broker's own export) and it is the one figure that has
+not been wrong since.
+
+- **`barAudit.js` is the referee for bars**, and it was the missing one.
+  Alpaca serves 5, 15 and 30-minute and 1-hour bars ITSELF; the app builds
+  its own from 1-minute bars; those two must match. Proven to catch the old
+  arithmetic — fed the bars that actually shipped, it objects to 69 of 69.
+- **He listed the underlying stock price as a fact. IT IS NOT ONE.** Schwab
+  never records where SPY was at the fill; it is reconstructed from candles.
+  His realized reward-to-risk is built on it and inherits its error. Say so
+  whenever it comes up — it had been on this project's record for weeks and
+  had still never been said to him next to the things that ARE facts.
+- **An INCOMPLETE bar is a third answer, not a wrong one.** A recording
+  starting at 10:17 builds a "10:15 bar" holding only 10:17 onwards —
+  measured at 100.15 against the provider's 100.09. Counting that as a
+  disagreement would cry wolf on every trade. Counted separately.
+- **Before writing code that produces a number, ask what outside source
+  could contradict it.** If the honest answer is "nothing", it is a
+  reconstruction and must be labelled as one on screen.
+
 ## What belongs on his screen
 
 He is a discretionary trader, not a developer, and on 2026-08-31 he said
