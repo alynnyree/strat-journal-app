@@ -593,6 +593,48 @@ Uses **The Strat**. Key concepts the code implements:
   closed Friday morning, and each bar was stamped with its LAST
   sub-candle so the wrong one was selected. Intraday bars are anchored to
   that day's session open; quarters and half-years follow the calendar.
+- **THE SAME "GROUPED BY POSITION" FAULT WAS STILL IN BAR REPLAY, a month
+  after it was fixed on the server.** He reported only 1m/5m/15m being
+  offered (2026-09-25) and the answer to that uncovered a worse thing:
+  `aggregateReplayCandles` took candles N at a time straight out of the
+  array and stamped each group with its LAST candle. Measured on the real
+  code before changing it — a window starting 09:30 gave "5-minute bars"
+  at 09:34, 09:39, 09:44; a window starting 10:17, which is what a window
+  centred on a trade looks like, gave 10:21, 10:26, 10:31. **Those are not
+  the 5-minute bars on anyone else's chart**, so his TradingView candle had
+  no counterpart, and every bar was named one period late. A multi-day
+  recording merged Wednesday afternoon into Thursday morning and stamped
+  the lot with one date. Bars are anchored to each DAY's session open
+  (09:30 New York) now, and stamped with when they START. When a rule is
+  learned on one side, sweep the other side for it — this is the same
+  lesson as the sort that was fixed in the Journal and left wrong in four
+  other readers.
+- **Placing a marker by arithmetic on a position only works while the
+  grouping is positional.** The entry and exit arrows were placed with
+  `Math.floor(entryIndex / groupSize)`. The moment bars sat on the clock
+  that put the arrow on the wrong bar. Found by asking what ELSE read the
+  old grouping, not by anything failing. Look the moment up, never compute
+  it from an index.
+- **A report worked out at OPEN describes the question before.** The note
+  saying a timeframe is thin was computed only when the replay screen
+  opened, so tapping 4H — the one timeframe a four-hour recording can
+  barely fill — changed the chart and left the note describing 1m. Same
+  shape as a status endpoint answering the previous run.
+- **Bar Replay can only reach eight of his thirteen timeframes, and that
+  is a DATA limit, not a missing feature.** A trade carries roughly four
+  hours of minute bars, so 1m/3m/5m/15m/30m/1H/2H/4H can be built and
+  1D/1W/1M/3M/6M cannot — a day is longer than the whole recording. Raised
+  with him rather than quietly dropped; he chose the eight (2026-09-25).
+  A 4H chart on a day trade is two bars, and the screen says so **in the
+  same breath as "that is not a fault"**, because he cannot tell a short
+  recording from a broken feature by looking.
+- **My own test asserted the wrong answer for three of eight timeframes.**
+  The expected bar times were written as though the session began at 10:15
+  when the data began at 09:30, so working code was reported as broken.
+  Derive an expectation from first principles (session open plus a whole
+  number of periods) rather than eyeballing it — this project has had a
+  test encode the fault it was meant to prevent three times, and this is
+  the mirror image of that.
 - **Two different rules across thirteen timeframes is worse than either.**
   Six timeframes used the previous completed bar, seven used the bar
   containing the entry — so a "run of 4 consecutive" could be four
