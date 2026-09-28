@@ -4611,7 +4611,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-25 15:30';
+const APP_BUILD = '2026-09-28 11:20';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -5275,6 +5275,14 @@ const RECONCILE_ASIDE_KEY = 'strat_set_aside_extras';
 // BETWEEN trades on a day that genuinely has too many -- it never decides
 // that a day has too many, and it can never take a day below his broker's
 // own count.
+// Every reference on this trade was invented by the FILE reader, because
+// his broker's export carries no reference numbers of its own. A trade that
+// carries the broker's real ones came from the live connection.
+function referencesAreInvented(t){
+  const fills = Array.isArray(t.fills) ? t.fills : [];
+  return fills.length > 0 && fills.every(f => String(f).startsWith('csv|'));
+}
+
 function suspectScore(t){
   let n = 0;
   // His rule. One purchase and one sale is what a card IS.
@@ -5285,9 +5293,49 @@ function suspectScore(t){
   // arrived with none and could never be given one.
   if(t.fees == null) n += 50;
   if(!String(t.occ || '').trim()) n += 20;
-  // Everything else being equal, the one that arrived later is the copy.
-  n += Math.min(19, Math.floor((Number(t.id) || 0) / 1e12));
+
+  // THE COPY READ OUT OF HIS FILE, WHICH IS THE CASE THAT WAS MISSING.
+  //
+  // Measured on his own journal (2026-09-28): 160 trades, 107 from the live
+  // connection and 53 read from his broker's file, covering the SAME dates
+  // -- 4 May to 24 June, both. All 53 have no entry time and no stock
+  // price; not one live trade is missing either. On one contract on 4 June
+  // there are twelve records: five live, seven from the file.
+  //
+  // Every one of the four tests above answers the SAME for both copies --
+  // both are a purchase and a sale, both carry a fee, both carry a contract
+  // code. So the ranking could not tell them apart at all, and would have
+  // picked arbitrarily: it could just as easily have set aside the live
+  // trade, throwing away its times, its stock prices and its thirteen
+  // timeframe readings, and kept the empty one.
+  //
+  // These three say "this is the copy" and they are not guesses about it:
+  // a trade read out of the file cannot have a time (the file has no time
+  // columns), cannot have a stock price (there is no moment to look one up
+  // against), and cannot have his broker's reference numbers (the file
+  // carries none, so the reader has to invent them).
+  if(t.source === 'schwab-csv') n += 40;
+  if(referencesAreInvented(t)) n += 30;
+  if(!t.entryTime && !t.exitTime) n += 25;
+  if(t.undEntry == null && t.undExit == null) n += 10;
+
+  // THE TIE-BREAK WAS ALWAYS ZERO. A trade's reference is text --
+  // "NIO   260821P00005000-null-null-zwqhc" -- and asking for it as a
+  // number gives nothing, so this added 0 to every trade in his journal
+  // and broke no tie at all. Ordering by when the trade was WRITTEN DOWN
+  // is what was meant, and that is what the last part of the reference
+  // holds for a live trade.
+  n += Math.min(9, Math.floor((tradeWrittenAt(t) || 0) / 1e12));
   return n;
+}
+
+// When this record was written down, where that can be known. A live trade
+// carries the instant of its fill; nothing else here is a clock.
+function tradeWrittenAt(t){
+  if(!t) return 0;
+  if(Number.isFinite(t.exitTimestamp)) return t.exitTimestamp;
+  if(Number.isFinite(t.entryTimestamp)) return t.entryTimestamp;
+  return 0;
 }
 
 // What would be set aside, and why. Pure: it reads, decides, and returns --
@@ -5327,6 +5375,10 @@ function reconcilePlan(trades, differences){
                                            : `${fills} fills on one card, not a purchase and a sale`;
         if(t.fees == null) return 'no fee was ever charged for it';
         if(!String(t.occ || '').trim()) return 'no contract code';
+        // Said in his words, not the app's. This is the common case now.
+        if(t.source === 'schwab-csv' || referencesAreInvented(t)){
+          return 'read from your Schwab file, and the same trade is already here from the live connection with its times and stock prices';
+        }
         return 'the later of two that look the same';
       }),
     });
