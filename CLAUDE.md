@@ -1549,6 +1549,7 @@ Uses **The Strat**. Key concepts the code implements:
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.
 
+<<<<<<< HEAD
 ## BEFORE THIS APP GOES PUBLIC — his standing instruction
 
 **His app key is the single word `Jesus`, and it appeared in a screenshot.**
@@ -1564,6 +1565,8 @@ domain, anything leaving his own phone and laptop. At that point it
 changes in three places — the service's settings, the App Key box on the
 Journal tab, and the shortcut on his phone — and all three must match.
 
+=======
+>>>>>>> origin/main
 ## Which numbers are FACTS, and which are the app's own work
 
 **Read `WHERE-EVERY-NUMBER-COMES-FROM.md` before touching any number he
