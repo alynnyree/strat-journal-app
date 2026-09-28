@@ -5390,26 +5390,69 @@ function reconcilePlan(trades, differences){
 
 // Carries it out. Set aside BEFORE anything is removed -- if there is no
 // room to keep them, nothing is removed at all.
+// KEEPING A COPY MUST NEVER BE THE REASON THE COPY CANNOT BE REMOVED.
+//
+// He tapped "Put this right" several times and his journal came back
+// byte-for-byte identical -- 160 trades, 219 contracts, $290.02 of fees,
+// -$1,172.02, before and after. Not one trade moved.
+//
+// Reached by elimination, not by guessing: the card only appears when the
+// plan holds something, so the plan was not empty; the journal did not
+// change between it being drawn and him tapping, so the trades it names
+// were all still there. That leaves exactly one way out -- the copy could
+// not be written, so nothing was removed. Both ways that write can fail
+// end at the same message, and it is 12px of grey under a button he had
+// already scrolled past.
+//
+// Three things wrong with the old shape, all fixed here:
+//
+//  1. An UNREADABLE old list refused the whole thing. Whatever is in that
+//     list is a record of trades already taken out -- losing the ability
+//     to read it is not a reason to leave duplicates in his totals. It is
+//     started again, and he is told that it was.
+//  2. A trade set aside here is a DUPLICATE of one being kept, so its
+//     chart bars are room spent on something already held. They go.
+//  3. A refusal left no trace anywhere. Every way out now records itself,
+//     so the Details tap can say which part refused -- this project's own
+//     rule, and the reason he ran the same test three times.
+//
+// What is NOT done: the older set-aside trades are never discarded to make
+// room. That would trade a problem he can see for one he cannot.
 function applyReconcilePlan(plan){
-  if(!plan || !plan.remove.length) return { ok:false, reason:'There was nothing to put right.' };
+  const refuse = (reason) => { noteProblem('reconcile', 'Could not put it right: ' + reason); return { ok:false, reason }; };
+  if(!plan || !plan.remove.length) return refuse('There was nothing to put right.');
   const ids = new Set(plan.remove);
   const all = loadTrades();
   const keep = all.filter(t => !ids.has(t.id));
   const drop = all.filter(t => ids.has(t.id));
-  if(!drop.length) return { ok:false, reason:'Those trades are no longer in your journal.' };
+  if(!drop.length) return refuse('Those trades are no longer in your journal.');
+
+  // What was set aside before. A list that cannot be read is replaced
+  // rather than allowed to block this, and that is said out loud.
+  let already = [], restarted = false;
   try{
-    const already = JSON.parse(localStorage.getItem(RECONCILE_ASIDE_KEY) || '[]');
-    localStorage.setItem(RECONCILE_ASIDE_KEY, JSON.stringify(already.concat(drop)));
+    const raw = localStorage.getItem(RECONCILE_ASIDE_KEY);
+    already = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(already)){ already = []; restarted = true; }
+  }catch(e){ already = []; restarted = true; }
+
+  // Room enough to put a trade back, and nothing beyond it.
+  const slim = (t) => { const c = Object.assign({}, t); delete c.replayData; return c; };
+  const aside = already.concat(drop.map(slim));
+  try{
+    localStorage.setItem(RECONCILE_ASIDE_KEY, JSON.stringify(aside));
   }catch(e){
-    return { ok:false, reason:'There was no room to set those trades aside, so none were removed.' };
+    return refuse('There is no room left on this phone to keep a copy of those trades, so none were removed. Nothing in your journal has changed.');
   }
+
   const wrote = saveTrades(keep);
-  if(!wrote.ok) return { ok:false, reason: wrote.reason };
+  if(!wrote.ok) return refuse(wrote.reason);
   const money = drop.reduce((n, t) => n + (t.pnlNet != null ? t.pnlNet : (t.pnlDollar || 0)), 0);
   noteProblem('reconcile', `${drop.length} trade${drop.length===1?'':'s'} set aside to match Schwab`
     + ` (${plan.contracts} contract${plan.contracts===1?'':'s'}, ${money >= 0 ? '+' : '-'}$${Math.abs(money).toFixed(2)}).`
-    + ' They are kept and can be put back.');
-  return { ok:true, removed: drop.length, contracts: plan.contracts, money };
+    + ' They are kept and can be put back.'
+    + (restarted ? ' The earlier set-aside list could not be read and was started again.' : ''));
+  return { ok:true, removed: drop.length, contracts: plan.contracts, money, restarted };
 }
 
 let lastReconcilePlan = null;
@@ -5417,10 +5460,15 @@ function putItRight(){
   const res = applyReconcilePlan(lastReconcilePlan);
   const box = document.getElementById('reconcileResult');
   if(box){
+    // He tapped this several times and reported nothing happening. It HAD
+    // answered, every time, in small grey text under a button he had
+    // already scrolled past -- which is the same as not answering at all.
     box.style.color = res.ok ? 'var(--bull)' : 'var(--bear)';
+    box.style.fontWeight = res.ok ? '400' : '600';
     box.textContent = res.ok
       ? `Done. ${res.removed} trade${res.removed===1?'':'s'} set aside — ${res.contracts} contract${res.contracts===1?'':'s'}. Choose your file again to check it now matches.`
       : res.reason;
+    try{ box.scrollIntoView({ block:'center', behavior:'smooth' }); }catch(e){ }
   }
   if(res.ok){ lastReconcilePlan = null; renderDashboard(); renderJournal(); }
 }
