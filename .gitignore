@@ -1,0 +1,4 @@
+
+# His exported journal, for checks that need real data. NEVER committed:
+# this repository is public, and the export is his complete trading record.
+tests/fixtures/*.json
