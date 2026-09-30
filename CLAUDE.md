@@ -1551,8 +1551,12 @@ Uses **The Strat**. Key concepts the code implements:
 
 ## BEFORE THIS APP GOES PUBLIC — his standing instruction
 
-**His app key is the single word `Jesus`, and it appeared in a screenshot.**
-It is the word that lets anything talk to his journal's service.
+**His app key is a single ordinary word, and it appeared in a screenshot.**
+It is the word that lets anything talk to his journal's service. **It is
+never written into any file in this project** — this repository is PUBLIC.
+It was written here on 2026-09-28 and published for a day before it was
+noticed; it remains in the history, so it must be treated as already known
+to anyone who looks.
 
 His decision, 2026-09-28: *"I am not changing my app key, remind me to do
 that before we go public."* That is settled — do not nag him about it

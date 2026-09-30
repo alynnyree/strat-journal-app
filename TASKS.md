@@ -3139,7 +3139,7 @@ project "complete":**
       timestamp" error — reset back to ISO 8601 fixed it. Also found and
       fixed along the way: the shortcut's `key=` was still the literal
       placeholder text `YOUR_APP_KEY` rather than the owner's real App
-      Key (`Jesus`), which was silently rejected by the server as
+      Key (his real one — never written in this file), which was silently rejected by the server as
       "Forbidden" until corrected. **Lesson for building "Trade Still
       Open" and any future Pushcut-triggered shortcut:** after wiring up
       Default Action and any date-format chip, close fully out and back
