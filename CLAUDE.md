@@ -1545,6 +1545,30 @@ Uses **The Strat**. Key concepts the code implements:
   screen; he settled it in one line (*"Yes, show all nine combos the same
   way"*) and both cards now behave identically. They are ONE rule and are
   checked together in one file so they cannot drift apart.
+- **A job that waits must never save the list it read before waiting.**
+  He tapped "Put this right", 50 duplicates were set aside and contracts
+  matched Schwab at 151 — and two days later the same 50 were back, SAME
+  ids (2026-09-30). The trade collector read the whole journal, waited on
+  the server once per waiting trade, then wrote that old list back, every
+  thirty seconds, even when it had changed nothing. Anything done in the
+  wait was erased: the repair, a deleted trade, a note he typed. Four jobs
+  had the shape (trades, pictures, recordings, the one-off picture move).
+  Proven in a real browser before any change, and the check was shown to
+  fail on the old code. Two worse things turned up in the same place: the
+  collector told the server "taken" BEFORE the one save at the end, so
+  closing the app mid-run lost the trade at both ends; and a journal that
+  could not be read came back from `loadTrades()` as `[]`, so the save at
+  the end would have replaced his whole journal with one new trade. Now:
+  record each trade as it was before touching it, and hand only the
+  changed fields to `commitTradeChanges`, which writes them onto the
+  journal as it is at that moment and refuses to write onto one it cannot
+  read. The server is told "taken" only after that save succeeds. When
+  sweeping for this, look for `loadTrades()` followed by an `await` and
+  then `saveTrades` of the same list.
+- **A test of a race must prove the race happened.** The first version of
+  that check "passed" two cases because the job finished before the change
+  was made — nothing was waiting at all. Every case now records that the
+  job was still running at the moment of the change, and fails if not.
 - **The `/media` and `/ai` routes require the app key.** The frontend has an
   "App Key" field on the Journal tab that must match the backend's
   `APP_SECRET`. A 403 on `/media/pending` means these don't match.

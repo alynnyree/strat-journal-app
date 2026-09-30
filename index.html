@@ -1436,6 +1436,60 @@ function saveTrades(t){
   }
 }
 
+// A JOB THAT WAITS MUST SAVE INTO THE JOURNAL AS IT IS NOW, NOT AS IT WAS.
+//
+// Measured 2026-09-30, on his own phone and then in a real browser. He tapped
+// "Put this right", 50 duplicate trades were set aside and his contracts
+// matched Schwab at 151. Two days later all 50 were back, with the SAME ids --
+// not re-imported, restored. The trade collector read the whole journal when
+// it started, waited on the server (a reply per waiting trade), and then wrote
+// that whole list back -- every time, even when it had changed nothing. The
+// repair landed during one of those waits and was simply written over.
+// Proven: a repair made during a slow reply was undone by the collector.
+//
+// It was not only the repair. A trade he deleted, a note he typed, a
+// correction he saved: anything done to the journal while a job was waiting
+// could be put back the way it was, with nothing anywhere saying so. Four
+// jobs had the shape -- trades, pictures, recordings, and the one-off move of
+// pictures out of the journal.
+//
+// So a job that waits no longer saves its own copy of the list. It records
+// what each trade looked like BEFORE it touched it, and at the end hands over
+// only the fields it actually changed. Those are written onto the journal as
+// it is at that moment. A trade removed in the meantime stays removed -- his
+// removal wins -- and a new trade already on file is not added twice.
+function snapshotTrade(t){ return JSON.parse(JSON.stringify(t)); }
+function commitTradeChanges(updated, added){
+  updated = updated || []; added = added || [];
+  if(!updated.length && !added.length) return { ok:true, reason:null, applied:0, gone:0, added:0 };
+  // Read fresh, and never mistake an unreadable journal for an empty one:
+  // saving onto "nothing" would replace every trade he has.
+  let fresh;
+  try{
+    fresh = JSON.parse(localStorage.getItem('strat_trades') || '[]');
+    if(!Array.isArray(fresh)) throw new Error('not a list');
+  }catch(e){
+    const reason = 'The journal on this phone could not be read just now, so a background change was not saved. Nothing was lost.';
+    noteProblem('saving', reason);
+    return { ok:false, reason, applied:0, gone:0, added:0 };
+  }
+  const byId = new Map(fresh.map(t => [String(t.id), t]));
+  let applied = 0, gone = 0;
+  for(const u of updated){
+    const cur = byId.get(String(u.after.id));
+    if(!cur){ gone++; continue; }
+    const keys = new Set(Object.keys(u.before).concat(Object.keys(u.after)));
+    for(const k of keys){
+      if(JSON.stringify(u.before[k]) === JSON.stringify(u.after[k])) continue;
+      if(u.after[k] === undefined) delete cur[k]; else cur[k] = u.after[k];
+      applied++;
+    }
+  }
+  const newOnes = added.filter(t => !byId.has(String(t.id)));
+  const wrote = saveTrades(newOnes.concat(fresh));
+  return Object.assign({}, wrote, { applied, gone, added: wrote.ok ? newOnes.length : 0 });
+}
+
 // How much room the journal is using, and how much is left. Behind the
 // Details tap -- a number he did not ask for, that exists so neither of us
 // is surprised by a wall we can already see coming.
@@ -4667,7 +4721,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-30 12:00';
+const APP_BUILD = '2026-09-30 15:00';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -4796,6 +4850,7 @@ async function movePicturesOffTheJournal(){
   if(picMoveDone) return { moved:0, left:0, reason:'already done' };
   picMoveDone = true;
   const trades = loadTrades();
+  const movedFrom = new Map(); // id -> { before, after }, see commitTradeChanges
   let moved = 0, left = 0, stopped = null;
   for(const t of trades){
     for(const field of ['shotEntry','shotMid','shotExit']){
@@ -4803,13 +4858,14 @@ async function movePicturesOffTheJournal(){
       if(typeof v !== 'string' || !v.startsWith('data:')) continue;
       const put = await putPicture(t.id, SLOT_OF_FIELD[field], v);
       if(!put.ok){ left++; stopped = put.reason; break; }
+      if(!movedFrom.has(String(t.id))) movedFrom.set(String(t.id), { before: snapshotTrade(t), after: t });
       t[field] = PIC_KEPT;
       moved++;
     }
     if(stopped) break;
   }
   if(moved){
-    const wrote = saveTrades(trades);
+    const wrote = commitTradeChanges([...movedFrom.values()]);
     if(!wrote.ok) return { moved:0, left, reason:wrote.reason };
   }
   noteProblem('pictureMove', moved
@@ -8252,6 +8308,9 @@ async function pollBackendOnce(url, silent){
       const batch = data.pending||[];
       if(!batch.length) break;
       const got = await autoImportPendingTrades(url, batch);
+      // Not saved, so nothing was taken off the server: stop rather than be
+      // handed the same trades again, and say why in the message below.
+      if(got.failed) throw new Error(got.failed);
       imported += got.imported; refreshed += got.refreshed;
       collected += batch.length;
       // An older server hands back everything at once and ignores the page
@@ -8531,6 +8590,14 @@ async function autoImportPendingTrades(url, pending){
   let imported = 0;
   let refreshed = 0;
   let tooOld = 0;
+  // What this pass changed, kept apart from the list it read at the start --
+  // see commitTradeChanges. And the server is told "taken" only AFTER the
+  // journal holds it: clearing first meant a trade handed over and then lost
+  // if the phone closed the app before the one save at the end.
+  const touched = new Map();   // id -> { before, after }
+  const added = [];
+  const toClear = [];
+  const snap = (x) => { const k = String(x.id); if(!touched.has(k)) touched.set(k, { before: snapshotTrade(x), after: x }); };
   for(let t of pending){
     // OLDER THAN THE FLOOR. Refused before anything else, because a trade
     // that must not be in his journal must not get as far as being compared
@@ -8538,7 +8605,7 @@ async function autoImportPendingTrades(url, pending){
     // be offered again on every check, for ever.
     if(beforeTheFloor(t)){
       tooOld++;
-      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){}
+      toClear.push(t.id);
       continue;
     }
     if(existingIds.has(t.id)){
@@ -8551,7 +8618,7 @@ async function autoImportPendingTrades(url, pending){
       //
       // Every way out of this loop now clears the server's copy, because
       // the trade is accounted for however it got here.
-      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+      toClear.push(t.id);
       continue;
     }
     // Same broker fills as a trade already on file. Never a new trade --
@@ -8577,7 +8644,7 @@ async function autoImportPendingTrades(url, pending){
     const clash = alreadySpokenFor(t);
     const seen = findSaved(t);
     if(clash && !seen){
-      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next check will try again */ }
+      toClear.push(t.id);
       continue;
     }
     if(seen){
@@ -8587,7 +8654,7 @@ async function autoImportPendingTrades(url, pending){
         // batch. Skipping it was right; leaving it in the server's queue
         // was not -- it would be re-sent, chart bars and all, on every
         // check from then on.
-        try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+        toClear.push(t.id);
         continue;
       }
       // Same trade, arriving again. This is what "Reset & Re-import"
@@ -8600,11 +8667,12 @@ async function autoImportPendingTrades(url, pending){
       // Counted once per trade, however many times the queue serves it —
       // a delete that has not landed yet must not inflate the figure.
       if(!already.replayData) t = await withBars(t);
+      snap(already);
       if(refreshTradeFacts(already, t) && !pollTally.seen.has(already.id)){
         pollTally.seen.add(already.id);
         refreshed++;
       }
-      try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* non-fatal */ }
+      toClear.push(t.id);
       continue;
     }
     // Not on file by its references and not by its shape. Before treating it
@@ -8620,6 +8688,7 @@ async function autoImportPendingTrades(url, pending){
       const blank = claimTimeless(awaitingTimes, t);
       if(blank){
         if(!blank.trade.replayData) t = await withBars(t);
+        snap(blank.trade);
         if(refreshTradeFacts(blank.trade, t) && !pollTally.seen.has(blank.trade.id)){
           pollTally.seen.add(blank.trade.id);
           refreshed++;
@@ -8629,7 +8698,7 @@ async function autoImportPendingTrades(url, pending){
         // the ordinary checks above rather than reaching this one again.
         remember(blank.trade, true);
         { const k = fillPair(blank.trade); if(k) claimedPairs.add(k); }
-        try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* next poll will try again */ }
+        toClear.push(t.id);
         continue;
       }
     }
@@ -8724,12 +8793,18 @@ async function autoImportPendingTrades(url, pending){
       fillStatus: t.fillStatus || 'Closed', contractsOpened: t.contractsOpened || t.contracts || 1,
       source: 'schwab-auto'
     };
-    trades.unshift(trade);
+    trades.unshift(trade);   // so a repeat later in this batch is recognised
+    added.unshift(trade);
     imported++;
-    try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(t.id), {method:'DELETE'}); }catch(e){ /* non-fatal — will just re-import next poll */ }
+    toClear.push(t.id);
   }
-  saveTrades(trades);
-  return { imported, refreshed };
+  const wrote = commitTradeChanges([...touched.values()], added);
+  // Not saved: nothing is cleared, so every one of these is offered again.
+  if(!wrote.ok) return { imported:0, refreshed:0, failed: wrote.reason };
+  for(const id of toClear){
+    try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(id), {method:'DELETE'}); }catch(e){ /* offered again next check, and recognised as already on file */ }
+  }
+  return { imported: wrote.added, refreshed };
 }
 
 // Brings a saved trade up to date from a freshly rebuilt copy of itself.
@@ -9381,6 +9456,7 @@ async function matchPendingScreenshots(){
       }
       // The picture goes to the store that has room for it; the trade
       // keeps only a mark.
+      const before = snapshotTrade(best.trade);
       const kept = await keepPicture(best.trade, best.field, got.image);
       if(!kept.ok){ noteProblem('shots', kept.reason); break; }
       // SAVED BEFORE IT IS CLEARED FROM THE QUEUE, never after. The picture
@@ -9388,7 +9464,7 @@ async function matchPendingScreenshots(){
       // trade -- and the journal was only written at the end of the loop.
       // So a write refused for want of room would have thrown the picture
       // away at both ends at once, with nothing anywhere saying so.
-      const wrote = saveTrades(trades);
+      const wrote = commitTradeChanges([{ before, after: best.trade }]);
       if(!wrote.ok){
         // Left exactly where it was, so it is offered again once there is
         // room. Undone at both ends, or it would look attached.
@@ -9418,10 +9494,9 @@ async function matchPendingScreenshots(){
   noteProblem('shotsSeen', `${screenshots.length} waiting · ${attached} attached to a trade`
     + ` · ${unmatched} matched no trade yet · ${testShots.length} from a rehearsal`);
 
-  if(changed){
-    saveTrades(trades);
-    renderJournal();
-  }
+  // Each picture was saved as it was attached; writing the whole list again
+  // here is what could put back a trade removed in the meantime.
+  if(changed) renderJournal();
 
   if(testShots.length) await recordTestShots(testShots, url);
 
@@ -9515,17 +9590,22 @@ async function matchPendingVideos(){
     // again: the answer carries a pointer, not the recording.
     if(!best) continue;
 
+    const before = snapshotTrade(best.trade);
     best.trade.video = {
       id: vid.id, r2Key: vid.r2Key, takenAt: vid.timestamp,
       sizeBytes: typeof vid.sizeBytes === 'number' ? vid.sizeBytes : null,
     };
     claimed.add(best.trade.id);
+    // Saved BEFORE the server's copy is dropped, and only this trade's
+    // change -- see commitTradeChanges.
+    const wrote = commitTradeChanges([{ before, after: best.trade }]);
+    if(!wrote.ok){ delete best.trade.video; noteProblem('videos', wrote.reason); break; }
     changed = true;
     await drop(vid.id);
     log('syncLog', `Auto-attached a recording to ${best.trade.ticker} (${best.trade.entryDate}).`);
   }
 
-  if(changed){ saveTrades(trades); renderJournal(); }
+  if(changed) renderJournal();
 }
 
 // A link to actually watch one. The stored place is private, so the link
