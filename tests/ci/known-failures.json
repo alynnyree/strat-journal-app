@@ -1,0 +1,14 @@
+{
+  "_why": "Checks that were ALREADY failing on 29 Sept 2026 (Phase 0 baseline, recorded before any audit repair) and are still open. They are listed so the automatic checks can run on every change without hiding them: any failure NOT on this list fails the run, and a listed failure that starts passing also fails the run until it is taken off, so this list can never quietly go stale. Matched on how each failure's words START, because what follows (figures in brackets, ': null') depends on the date and the data. Removing an entry is how a fix is recorded; adding one needs the owner's written approval.",
+  "a-full-journal-is-not-a-lost-one": [
+    "the picture is NOT left looking attached",
+    "and it was NOT cleared from the queue",
+    "it says why, in plain words",
+    "and never shows him raw wording from the browser"
+  ],
+  "lighter-collection": [
+    "it asks back to his oldest trade, not a flat year",
+    "and the request it actually sends carries that",
+    "an empty journal still asks for a full year"
+  ]
+}
