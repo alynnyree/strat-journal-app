@@ -568,6 +568,62 @@
   <div class="skip">Tap to skip</div>
 </div>
 <script>
+  // THE APP KEY TRAVELS IN A HEADER (security repair, Phase 1, 30 Sept 2026).
+  //
+  // Every request to his trade service now carries the App Key in an
+  // "Authorization" header -- a part of the request that is not written into
+  // browser history or into the service's logs the way a web address is. The
+  // key is still ALSO in the address for now, because the service only learns
+  // to read the header in the same repair; once that is confirmed live, the
+  // address copy is removed. The Schwab sign-in link is a page, not a request,
+  // and keeps its address key for good.
+  //
+  // Done once, here, for every request, rather than at each of the forty-odd
+  // places that talk to the service -- so a request added later cannot forget
+  // it. Only requests to HIS service get the header; nothing else ever sees
+  // the key. Self-contained: it must not depend on anything set up later.
+  //
+  // A refusal is written down (Details only, never on his screen) so "the key
+  // does not match" is recorded where it happened, in its own words, and is
+  // cleared again by the next request that gets through.
+  (function(){
+    if(!window.fetch) return;
+    var realFetch = window.fetch.bind(window);
+    function read(name){ try{ return localStorage.getItem(name) || ''; }catch(e){ return ''; } }
+    function note(text){
+      try{ if(typeof noteProblem === 'function') noteProblem('appKey', text); }catch(e){}
+    }
+    function clear(){
+      try{ localStorage.removeItem('strat_last_problem_appKey'); }catch(e){}
+      try{ if(typeof lastProblems === 'object' && lastProblems) delete lastProblems.appKey; }catch(e){}
+    }
+    window.fetch = function(input, init){
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var base = read('strat_backend_url').replace(/\/$/, '');
+      var key = read('strat_app_key');
+      if(!base || !key || url.indexOf(base + '/') !== 0) return realFetch(input, init);
+      var opts = {};
+      for(var k in (init || {})) opts[k] = init[k];
+      var headers = new Headers(opts.headers || (typeof input !== 'string' && input.headers) || undefined);
+      if(!headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + key);
+      opts.headers = headers;
+      return realFetch(input, opts).then(function(r){
+        var path = url.slice(base.length).split('?')[0];
+        if(r.status === 403){
+          note('refused: the App Key on the Journal tab does not match the one the service expects (' + path + ')');
+        } else if(r.status === 503){
+          r.clone().json().then(function(b){
+            if(b && /APP_SECRET/.test(b.error || '')) note('refused: the service has no App Key set up, so it refuses everything until one is set (' + path + ')');
+          }).catch(function(){});
+        } else if(r.ok){
+          clear();
+        }
+        return r;
+      });
+    };
+  })();
+</script>
+<script>
   // Runs before the rest of the page so there is no flash of the app
   // first. Self-contained on purpose: it must not depend on anything the
   // main script sets up later, and any failure here must leave the app
@@ -4611,7 +4667,7 @@ function noteClassifyTry(id){
 // date is automatic and cannot be forgotten, but a page served without one
 // reports the time right now and so always looks fresh. Together they
 // settle it, and if they disagree THAT is worth knowing too.
-const APP_BUILD = '2026-09-28 11:20';
+const APP_BUILD = '2026-09-30 12:00';
 function appBuildLine(){
   let fileDate = 'not reported by this browser';
   try{
@@ -6422,6 +6478,10 @@ function techText(){
       const w = readProblem('saving');
       return w ? `saving problem: ${w.text} (${when(w)})` : 'no saving problem';
     })(),
+    (() => {
+      const k = readProblem('appKey');
+      return k ? `app key ${k.text} (${when(k)})` : 'app key: no refusal since the last request that got through';
+    })(),
     // The receiving end's own account of what turned up. "It sent" and
     // "it arrived" are different claims, and only the second one settles
     // whether a picture from his phone actually made it.
@@ -8186,6 +8246,7 @@ async function pollBackendOnce(url, silent){
       // A server too old to understand either of these ignores them and
       // answers exactly as it always did, which still works.
       const r = await fetch(url+'/api/trades/pending?slim=1&limit='+PENDING_BATCH);
+      if(r.status === 403) throw Object.assign(new Error('Your App Key does not match. Check it on the Journal tab.'), {keyRefused:true});
       if(!r.ok) throw new Error('Server responded with status '+r.status);
       const data = await r.json();
       const batch = data.pending||[];
@@ -8223,7 +8284,9 @@ async function pollBackendOnce(url, silent){
     renderJournal();
     renderDashboard();
   }catch(e){
-    if(!silent) showStatus('err', `Refresh failed (${e.message}). Check the backend is actually running and the URL is correct.`);
+    if(!silent) showStatus('err', e.keyRefused
+      ? `Could not collect trades: ${e.message} Nothing was changed.`
+      : `Refresh failed (${e.message}). Check the backend is actually running and the URL is correct.`);
     log('syncLog', 'Refresh failed: '+e.message);
   }
   if(!silent) setBusy('btnRefresh', false);
