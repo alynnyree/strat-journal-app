@@ -21,6 +21,14 @@ rather than passing quietly:
   used to be completely invisible, both to "Check for Duplicate Trades" and to the
   import, so it was written down again on every pass.
 
+- **turned-off-removal.js** — audit Step A (F5, 6 Oct 2026). Checks that
+  nothing on the screen can take trades out of the journal by how they look:
+  the "Check for Duplicate Trades" and "Put this right" buttons are gone, no
+  tap anywhere in the page names either action, and an old page still
+  showing a button changes nothing -- the journal and the set-aside list are
+  left exactly as they were and the save is never called. Shown to fail on
+  the code before the change.
+
 - **bottom-bar-stays-put.js** — scrolls a long trade list the way he does
   and checks the bottom row of buttons does not move a single pixel through
   any of it, on every tab; that the page itself cannot scroll (which is what

@@ -931,8 +931,6 @@
 
     <div class="card">
       <h3>Data</h3>
-      <button class="secondary" onclick="findDuplicateTrades()">Check for Duplicate Trades</button>
-      <div id="dupeOut" style="font-size:12.5px; color:var(--text-dim); margin-top:8px; line-height:1.5;"></div>
       <button class="secondary" onclick="exportData()">Export All Trades (JSON)</button>
       <button class="secondary" onclick="exportCsvSheet()">Export Journal (CSV)</button>
       <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="wipeData()">Erase All Trades</button>
@@ -5568,7 +5566,26 @@ function applyReconcilePlan(plan){
 }
 
 let lastReconcilePlan = null;
+
+// AUDIT STEP A (F5), authorized by the owner on 6 Oct 2026. The two ways the
+// screen could take trades out of his journal by how they LOOK -- "Remove
+// the N extra copies" and "Put this right" -- are switched off until the
+// journal is rebuilt from his broker's own records. Their buttons are gone;
+// these two actions also refuse on their own, so a page opened before the
+// update and still showing an old button cannot use it. Nothing is read or
+// written. Checked by tests/turned-off-removal.js.
+const F5_TURNED_OFF = 'This is turned off for now. Nothing was changed.';
+function f5TurnedOff(which, boxId){
+  noteProblem(which, 'Turned off during the audit (Step A); nothing was changed.');
+  const box = boxId && document.getElementById(boxId);
+  if(box) box.textContent = F5_TURNED_OFF;
+  try{ showStatus('info', F5_TURNED_OFF); }catch(e){ }
+}
+
 function putItRight(){
+  f5TurnedOff('reconcile', 'reconcileResult');
+  return;
+  // Not reached while Step A is in force; left intact so undoing it is simple.
   const res = applyReconcilePlan(lastReconcilePlan);
   const box = document.getElementById('reconcileResult');
   if(box){
@@ -5715,32 +5732,16 @@ function renderBrokerCheck(r){
       ${r.feesUnknown ? ` ${r.feesUnknown} of your trades have no fee worked out yet, so their after-fee figure is still short.` : ''}
     </div>`;
 
-  // ONE BUTTON, and only when there is genuinely something to put right.
-  // He asked for this outright: "How do we fix the duplicate trades forever
-  // so this is never a problem?" It says what it would remove, and why,
-  // BEFORE he presses anything -- a button that acts on his journal without
-  // first showing its working is not a fix, it is another thing to trust.
-  lastReconcilePlan = reconcilePlan(loadTrades(), r.differences);
-  const fix = !lastReconcilePlan.remove.length ? '' : `
-    <div style="margin-top:14px; padding:12px 14px; border-radius:10px; border:1px solid var(--gold); background:var(--panel);">
-      <div style="font-size:13px; font-weight:600; color:var(--gold);">Your journal holds ${lastReconcilePlan.contracts} contract${lastReconcilePlan.contracts===1?'':'s'} Schwab never charged you for.</div>
-      <div style="font-size:12px; color:var(--text-dim); margin-top:6px; line-height:1.55;">
-        ${lastReconcilePlan.days.slice(0, 8).map(d => `
-          <div style="margin-top:5px;">${escapeHtml(niceDate(d.date))} — you have ${d.journal}, Schwab charged you for ${d.broker}.
-          Removing ${d.removing}: ${escapeHtml(d.why.slice(0, 2).join('; '))}.</div>`).join('')}
-        ${lastReconcilePlan.days.length > 8 ? `<div style="margin-top:5px;">…and ${lastReconcilePlan.days.length - 8} more days.</div>` : ''}
-      </div>
-      <button class="secondary" style="margin-top:10px; width:100%;" onclick="putItRight()">Put this right</button>
-      <div id="reconcileResult" style="font-size:12px; margin-top:8px; line-height:1.5;"></div>
-      <div style="font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.5;">
-        Nothing is deleted. They are set aside and can be put back.
-      </div>
-    </div>`;
+  // The "Put this right" panel that used to sit here is switched off (audit
+  // Step A, 6 Oct 2026): it removed trades by how they LOOK, and genuine
+  // look-alike trades exist. The comparison above still shows every day
+  // that does not match; the journal is rebuilt from his broker's own
+  // records in a later step.
 
   return headline + scope + heads
     + moneyRows
     + row('Contracts bought', r.contracts.journal, r.contracts.broker, r.contracts.ok, false)
-    + diffs + fix + caveat;
+    + diffs + caveat;
 }
 
 // ---- The Checks page ------------------------------------------------
@@ -10360,11 +10361,15 @@ function findDuplicateTrades(){
     <div style="color:var(--gold);">Found ${dupeGroups.length} trade(s) recorded more than once — ${removing} extra cop${removing===1?'y':'ies'} in total.</div>
     ${examples}
     ${dupeGroups.length>3?`<div style="margin-top:4px;">…and ${dupeGroups.length-3} more.</div>`:''}
-    <div style="margin-top:8px;">You would be left with <b>${trades.length - removing}</b> trades. Nothing is sent anywhere — this only tidies what is on your phone.</div>
-    <button class="secondary" style="color:var(--bear); border-color:var(--bear-dim);" onclick="removeDuplicateTrades()">Remove the ${removing} extra cop${removing===1?'y':'ies'}</button>`;
+    <div style="margin-top:8px;">You would be left with <b>${trades.length - removing}</b> trades. Nothing is sent anywhere — this only tidies what is on your phone.</div>`;
+    // Its "Remove the N extra copies" button is gone (audit Step A, F5).
 }
 
 function removeDuplicateTrades(){
+  // Audit Step A (F5): switched off -- see f5TurnedOff.
+  f5TurnedOff('duplicates', 'dupeOut');
+  return;
+  // Not reached while Step A is in force; left intact so undoing it is simple.
   if(!pendingDupeRemoval){ findDuplicateTrades(); return; }
   const { dropIds } = pendingDupeRemoval;
   const trades = loadTrades();
