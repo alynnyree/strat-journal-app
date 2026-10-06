@@ -21,6 +21,13 @@ rather than passing quietly:
   used to be completely invisible, both to "Check for Duplicate Trades" and to the
   import, so it was written down again on every pass.
 
+- **look-alike-trades.js** -- audit Step D (F2, 6 Oct 2026). Two genuine
+  trades that look identical but are made of different broker fills must
+  both be kept. Also checked: the same pair arriving again refreshes; the
+  same fills paired twice are refused; a pair that would make a fill cover
+  more contracts than it holds is refused and recorded; partial closes are
+  kept. Shown to fail on the code before the change.
+
 - **turned-off-removal.js** — audit Step A (F5, 6 Oct 2026). Checks that
   nothing on the screen can take trades out of the journal by how they look:
   the "Check for Duplicate Trades" and "Put this right" buttons are gone, no

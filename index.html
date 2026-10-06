@@ -8553,23 +8553,94 @@ async function autoImportPendingTrades(url, pending){
     const f = Array.isArray(t.fills) ? t.fills : [];
     return f.length ? f.map(String).join('+') : null;
   };
-  const claimedPairs = new Set();
-  for(const t of trades){ const k = fillPair(t); if(k) claimedPairs.add(k); }
+  // ---- A trade with a fill pair IS its pair (audit Step D, F2) -----------
+  //
+  // Two genuine trades can look identical -- same contract, minutes, prices
+  // and size -- and still be two trades, because they are made of different
+  // broker fills. This used to fold any arrival with the same SHAPE into the
+  // trade already saved, different fills or not, so the second one was lost;
+  // the audit traced 8 of his real trades lost that way. When both copies
+  // carry a fill pair, the pair decides: the same pair is the same trade, a
+  // different pair is a different trade. Shape is only asked when a copy has
+  // no pair to go on.
+  // Only the broker's own references count: the references a trade read
+  // from his broker's FILE were invented by the file reader ("csv|..."), and
+  // those trades keep the shape and timeless matching below, unchanged.
+  const hasPair = (t) => Array.isArray(t && t.fills) && t.fills.length === 2 && !referencesAreInvented(t);
+  const byPair = new Map();            // pair -> { trade, claimed }
+  // How many contracts each fill already accounts for, from the trades in
+  // the journal that cite it. Each trade uses exactly its own `contracts`
+  // from its purchase AND from its sale; each distinct pair is counted once,
+  // so a trade saved twice cannot make a fill look used up.
+  const consumption = new Map();       // side|fill|contract -> Map(pair -> contracts)
+  const useKey = (side, fill, tr) => side + '|' + String(fill) + '|' + String(tr.occ || '').trim();
+  const rememberPair = (tr, claimed) => {
+    if(!hasPair(tr)) return;
+    const pk = fillPair(tr);
+    if(!byPair.has(pk) || claimed) byPair.set(pk, { trade: tr, claimed: !!claimed });
+    for(const [side, fill] of [['open', tr.fills[0]], ['close', tr.fills[1]]]){
+      const k = useKey(side, fill, tr);
+      if(!consumption.has(k)) consumption.set(k, new Map());
+      consumption.get(k).set(pk, Number(tr.contracts) || 0);
+    }
+  };
+  for(const t of trades) rememberPair(t, false);
+  const used = (side, fill, tr) => {
+    const m = consumption.get(useKey(side, fill, tr));
+    let n = 0; if(m) for(const v of m.values()) n += v;
+    return n;
+  };
+  // A pair not in the journal is a new trade -- unless taking it would make
+  // one of its fills cover MORE contracts than that fill holds, which is what
+  // the same fills paired up differently looks like (after a re-match). The
+  // holding comes from the arrival itself: contractsOpened for the purchase,
+  // closeQuantity for the sale. An unknown holding never refuses anything.
+  const overCapacity = (t) => {
+    const c = Number(t.contracts) || 1;
+    const why = [];
+    const check = (side, fill, holds) => {
+      if(!(Number.isFinite(holds) && holds > 0)) return;
+      const already = used(side, fill, t);
+      if(already + c > holds){
+        why.push(`its ${side === 'open' ? 'purchase' : 'sale'} ${fill} would cover ${already + c} contracts, more contracts than it holds (${holds})`);
+      }
+    };
+    check('open', t.fills[0], Number(t.contractsOpened));
+    check('close', t.fills[1], Number(t.closeQuantity));
+    return why.length ? why.join('; ') : null;
+  };
+  const sameShape = (a, b) => {
+    const ia = tradeIdentity(a), ib = tradeIdentity(b);
+    return ia.loose === ib.loose && codesAgree(ia.code, ib.code);
+  };
+  // Every refusal is written down, never silent: a line behind Details, and
+  // the last 50 kept on the phone for me to read.
+  const refuse = (t, reason) => {
+    const what = `${t.ticker||'?'} ${t.entryDate||'?'} ${t.entryTime||'--'}->${t.exitTime||'--'} x${t.contracts||1} [${(t.fills||[]).join('+')}]`;
+    try{ noteProblem('import', `Not added: ${what}. ${reason}`); }catch(e){}
+    try{
+      const list = JSON.parse(localStorage.getItem('strat_import_refusals') || '[]');
+      list.push({ at: Date.now(), what, fills: t.fills || [], reason });
+      localStorage.setItem('strat_import_refusals', JSON.stringify(list.slice(-50)));
+    }catch(e){}
+  };
 
   // The trades his broker's FILE left without minutes, each claimable once.
   // See timelessIdentity above for why this is kept separate from the shape.
   const awaitingTimes = timelessIndex(trades, awaitingSchwabTimes);
-  const alreadySpokenFor = (t) => {
-    const k = fillPair(t);
-    if(!k) return null;                  // older trades carry none; fall through to the shape check
-    return claimedPairs.has(k) ? k : null;
-  };
   // The saved trade this arrival is a second sighting of, or null. An exact
   // code match is preferred; a missing code on either side is accepted.
   const findSaved = (t) => {
     const id = tradeIdentity(t);
     const group = byIdentity.get(id.loose);
     if(!group) return null;
+    return group.find(e => e.code && e.code === id.code)
+        || group.find(e => codesAgree(e.code, id.code))
+        || null;
+  };
+  const findSavedWithoutPair = (t) => {
+    const id = tradeIdentity(t);
+    const group = (byIdentity.get(id.loose) || []).filter(e => !hasPair(e.trade));
     return group.find(e => e.code && e.code === id.code)
         || group.find(e => codesAgree(e.code, id.code))
         || null;
@@ -8642,12 +8713,31 @@ async function autoImportPendingTrades(url, pending){
     //   * same fills, DIFFERENT shape -> the same broker fills paired up a
     //     second time, which is the phantom that put contracts in his
     //     journal he never bought. Refused, exactly as before.
-    const clash = alreadySpokenFor(t);
-    const seen = findSaved(t);
-    if(clash && !seen){
+    const pk = hasPair(t) ? fillPair(t) : null;
+    if(pk && byPair.has(pk)){
+      const owner = byPair.get(pk);
+      if(!sameShape(owner.trade, t)){
+        refuse(t, 'These broker fills are already in your journal as a trade of a different shape -- the same fills paired up twice.');
+        toClear.push(t.id);
+        continue;
+      }
+      if(owner.claimed){                 // a second copy inside this same batch
+        toClear.push(t.id);
+        continue;
+      }
+      if(!owner.trade.replayData) t = await withBars(t);
+      snap(owner.trade);
+      if(refreshTradeFacts(owner.trade, t) && !pollTally.seen.has(owner.trade.id)){
+        pollTally.seen.add(owner.trade.id);
+        refreshed++;
+      }
       toClear.push(t.id);
       continue;
     }
+    // The shape is only asked of a saved copy that has NO fill pair to go on
+    // (older, or read from his broker's file before it met the connection).
+    // A saved copy WITH a different pair is a different trade.
+    const seen = pk ? findSavedWithoutPair(t) : findSaved(t);
     if(seen){
       const already = seen.claimed ? null : seen.trade;
       if(!already){
@@ -8673,6 +8763,7 @@ async function autoImportPendingTrades(url, pending){
         pollTally.seen.add(already.id);
         refreshed++;
       }
+      rememberPair(already, false);      // it may have just gained its fill pair
       toClear.push(t.id);
       continue;
     }
@@ -8698,7 +8789,7 @@ async function autoImportPendingTrades(url, pending){
         // remembered, so a second arrival of the same trade is caught by
         // the ordinary checks above rather than reaching this one again.
         remember(blank.trade, true);
-        { const k = fillPair(blank.trade); if(k) claimedPairs.add(k); }
+        rememberPair(blank.trade, true);
         toClear.push(t.id);
         continue;
       }
@@ -8721,6 +8812,16 @@ async function autoImportPendingTrades(url, pending){
     // match it. If the fault is an identity with a hole in it, the near-miss
     // is the saved trade it should have recognised, and the difference
     // between the two names the hole outright.
+    // A NEW trade. The one thing that can still stop it: its fills already
+    // fully accounted for by trades in the journal (see overCapacity).
+    if(pk){
+      const over = overCapacity(t);
+      if(over){
+        refuse(t, 'Taking it would mean ' + over + ' -- the same fills paired up a second time.');
+        toClear.push(t.id);
+        continue;
+      }
+    }
     {
       const id = tradeIdentity(t);
       const sameDay = trades.filter(x =>
@@ -8746,7 +8847,7 @@ async function autoImportPendingTrades(url, pending){
     // Kept, so this is where the chart bars are worth their weight.
     t = await withBars(t);
     remember(t, true); // claimed by this batch
-    { const k = fillPair(t); if(k) claimedPairs.add(k); }
+    rememberPair(t, true);
     const hasExit = t.optExit != null;
     const perContractDiff = hasExit ? (t.optExit - t.optEntry) : null;
     const pnlDollar = hasExit ? perContractDiff * 100 * (t.contracts||1) : null;
