@@ -102,6 +102,12 @@ Status on 30 Sept 2026:
     authorization.
   - Step A is implemented: both F5 controls are removed and the two
     actions refuse (tests/turned-off-removal.js).
+  - Steps B and C are live in the service (#85, #86).
+  - Step D (F2) is implemented: an arrival with broker fill references is
+    recognised by its fill PAIR, never by its shape. A pair not in the
+    journal is added unless it would make a fill cover more contracts than
+    it holds (contractsOpened / closeQuantity). Each refusal is recorded
+    in strat_import_refusals and behind Details (tests/look-alike-trades.js).
 - The 7 known failures stay as baseline until the phase that owns them
   (auditor, C2). No new known failure without the owner's authorization.
 
