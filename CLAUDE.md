@@ -80,6 +80,28 @@ Status on 30 Sept 2026:
   output and rollback plan, and needs the owner's authorization in words.
 - Phase 0 and Phase 1A were carried out and are live, before this
   sequence was set. See "Auditor_Review_Pack_Phase1".
+- **6 Oct 2026, the owner changed the process to end revision loops.**
+  - The Level 2 read-only code audit is COMPLETE for existing code. It
+    found six blockers: F1 (orderId identity), F2 (shape overrides fill
+    pairs on import), F3 (a backfill erases live open legs), F4 (unlocked
+    whole-state read-modify-write in tradeStore), F5 (shape-only removal
+    controls) and F6 (journal does not reconcile).
+  - The Trade Engine design (v21, A-4, A-5, A-6, C-7, C-8, OD-1 to OD-9b)
+    is PARKED as written. It reopens only if measured usage puts the free
+    limits at risk.
+  - The remaining work, in this fixed order:
+    - A: gate F5;
+    - B: F3 + F4 + H-3 + H-7, as one storage fix;
+    - C: F1 + H-5;
+    - D: F2;
+    - E: rebuild the journal from the ledger, after the owner picks
+      B3-5.
+  - Each step gets a one-page plan, ONE auditor review round (only
+    correctness or safety defects block), the owner's authorization in
+    words, then a PR with green checks and a separate merge
+    authorization.
+  - Step A is implemented: both F5 controls are removed and the two
+    actions refuse (tests/turned-off-removal.js).
 - The 7 known failures stay as baseline until the phase that owns them
   (auditor, C2). No new known failure without the owner's authorization.
 

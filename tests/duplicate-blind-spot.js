@@ -54,6 +54,9 @@ const { buildJournal } = require('./real-journal.js');
   // What the app itself reports when asked to find duplicates.
   async function findDupes(p){
     return await p.evaluate(() => {
+      // The page no longer has this box (Step A); the test supplies one so
+      // the read-only check can still be asked.
+      if(!document.getElementById('dupeOut')){ const d = document.createElement('div'); d.id = 'dupeOut'; document.body.appendChild(d); }
       findDuplicateTrades();
       const el = document.getElementById('dupeOut');
       const txt = el ? el.textContent : '';
@@ -89,16 +92,15 @@ const { buildJournal } = require('./real-journal.js');
     await p.close();
   }
 
-  // Removing them has to land him back on his broker's own figures, not just
-  // on a smaller number.
+  // Audit Step A (F5, 6 Oct 2026): removing by shape is switched off until
+  // the journal is rebuilt from his broker's own records, because genuine
+  // look-alike trades exist. Asking to remove must change nothing.
   {
     const extras = real.slice(0, 50).map(t => copyOf(t, { occ: '' }));
     const { p } = await journalWith(real.concat(extras));
     await findDupes(p);
-    const after = await p.evaluate(() => { removeDuplicateTrades(); const t = loadTrades();
-      return { n: t.length, fees: Math.round(t.reduce((s,x)=>s+(x.fees||0)*100,0))/100 }; });
-    check(`after removing them he is back to 254 trades (got ${after.n})`, after.n === 254);
-    check(`and back to $404.73 of fees (got $${after.fees.toFixed(2)})`, after.fees === 404.73);
+    const after = await p.evaluate(() => { removeDuplicateTrades(); return loadTrades().length; });
+    check(`removing is refused: the journal still holds all 304 (got ${after})`, after === 304);
     await p.close();
   }
 

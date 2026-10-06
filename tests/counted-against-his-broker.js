@@ -150,10 +150,10 @@ const { launch, serve } = require('./browser.js');
       money:{afterFees:{journal:0,broker:0,ok:true},beforeFees:{journal:0,broker:0,ok:true},fees:{journal:0,broker:0,ok:true}},
       contracts:{ok:false, journal:9, broker:6}, differences:d,
     }), DIFF9v6);
-    check('it offers to put it right', /Put this right/.test(withFix));
-    check('naming how many contracts he was never charged for', /3 contracts Schwab never charged you for/.test(withFix));
-    check('showing its working first', /you have 9, Schwab charged you for 6/.test(withFix));
-    check('and saying nothing is deleted', /set aside and can be put back/.test(withFix));
+    // Audit Step A (F5, 6 Oct 2026): the comparison still shows the
+    // mismatch, but no longer offers to remove anything.
+    check('it still shows the day that does not match', /Days that do not match/.test(withFix) && /SPY 05\/04\/2026 723\.00 C/.test(withFix));
+    check('and offers no removal (Step A)', !/Put this right/.test(withFix));
 
     const clean = await p.evaluate(() => renderBrokerCheck({
       everythingMatches:true, from:'2026-05-01', to:'2026-07-23',
