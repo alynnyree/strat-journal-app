@@ -45,6 +45,12 @@ const { launch, serve } = require('./browser.js');
       return r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});
     });
     await p.goto(site.base + '/index.html');
+    // Since audit Step E the start-up jobs (the trim among them) run once the
+    // page holds its journal lock, a moment after loading. Wait for that, so
+    // the empty first load's trim cannot run AFTER this check's journal is
+    // put in place and then be repeated, overwriting what it said.
+    await p.waitForFunction(() => typeof journalLockState !== 'undefined' && journalLockState === 'shared');
+    await p.waitForTimeout(100);
     await p.evaluate((args) => {
       localStorage.setItem('strat_intro', JSON.stringify({on:false,motion:false}));
       localStorage.setItem('strat_backend_url', 'https://fake.example.com');

@@ -9833,15 +9833,20 @@ journalReady.then(() => startAutoPoll());
 // The journal put back to the three months he asked for. Its own attempt
 // and its own catch: something that must happen cannot sit downstream of
 // something that can fail.
-try{ trimJournalToFloor(); }
-catch(e){ noteProblem('trim', 'The journal could not be trimmed to the last three months.'); }
+//
+// Audit Step E: both of these write the journal, so they run only once this
+// copy holds its journal lock (a write before then is refused).
+journalReady.then(() => {
+  try{ trimJournalToFloor(); }
+  catch(e){ noteProblem('trim', 'The journal could not be trimmed to the last three months.'); }
 
-// Every picture already sitting in his journal, moved across once. It has
-// its OWN attempt and its own catch: anything that must happen regardless
-// cannot sit downstream of something that can fail, which is on this
-// project's own record.
-movePicturesOffTheJournal().catch(() => {
-  noteProblem('pictureMove', 'The pictures already in the journal could not be moved.');
+  // Every picture already sitting in his journal, moved across once. It has
+  // its OWN attempt and its own catch: anything that must happen regardless
+  // cannot sit downstream of something that can fail, which is on this
+  // project's own record.
+  movePicturesOffTheJournal().catch(() => {
+    noteProblem('pictureMove', 'The pictures already in the journal could not be moved.');
+  });
 });
 
 // Claims automatically-captured screenshots (from the Pushcut-triggered
