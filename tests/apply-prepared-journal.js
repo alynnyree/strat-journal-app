@@ -270,14 +270,22 @@ const { launch, serve } = require('./browser.js');
   }
   // s. found in testing: a copy starting the moment an update finishes may
   // not yet see the update's last save. It must never lose the new journal.
+  // The apply is held until the new copy is waiting at start-up, so the new
+  // copy starts the instant the update lets go -- the timing that failed.
+  // (7l and 7m pin the same fault down deterministically: a journal item
+  // with no record is never deleted.)
   {
     let lost = 0, runs = 0;
-    for(let rep = 0; rep < 8; rep++){
+    for(let rep = 0; rep < 20; rep++){
       const k = await ctx(R0);
+      await k.p.evaluate(() => { window.__stepEHooks = { afterRead: () => new Promise(r => { window.__go = r; }) }; });
       const running = k.p.evaluate(f => applyPreparedJournal(f), prepared(R0, P0));
+      await k.p.waitForFunction(() => typeof window.__go === 'function');
       const p2 = await k.c.newPage();
       await p2.route('**/api/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
       await p2.goto(site.base + '/index.html');
+      await p2.waitForFunction(() => typeof journalLockState !== 'undefined' && journalLockState === 'waiting');
+      await k.p.evaluate(() => window.__go());
       const out = await running;
       await p2.waitForFunction(() => journalLockState === 'shared', null, { timeout: 15000 });
       await p2.waitForTimeout(300);
