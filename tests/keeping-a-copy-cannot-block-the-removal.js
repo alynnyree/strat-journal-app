@@ -52,7 +52,17 @@ global.localStorage = {
   get length(){ return store.size; },
   key: i => [...store.keys()][i],
 };
-for (const n of ['loadTrades', 'saveTrades', 'noteProblem', 'applyReconcilePlan']) eval(grab(n));
+// Since audit Step E the journal is read and written through journalKey(),
+// which these functions now call; they are taken from the page as well, with
+// the page's own constants (read out of the page, not retyped here). No
+// update record exists in this check, so the journal is "strat_trades".
+for (const c of ['JOURNAL_LEGACY_KEY', 'STEPE_RECORD_KEY', 'STEPE_ITEM', 'RECOVERY_TEXT']) {
+  const m = new RegExp('const ' + c + ' = ([^;]+);').exec(page);
+  global[c] = eval(m[1]);
+}
+global.journalWritesBlocked = null;
+global.stepEState = { phase: 'none' };   // what a copy with no update record settles on
+for (const n of ['storageKeys', 'readStepERecord', 'journalKey', 'journalRecoveryReason', 'journalNotWritable', 'loadTrades', 'saveTrades', 'noteProblem', 'applyReconcilePlan']) eval(grab(n));
 
 // A journal with one real trade and one duplicate of it, plus chart bars
 // on both so the copy has something worth not keeping.
