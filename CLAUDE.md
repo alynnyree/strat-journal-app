@@ -71,8 +71,10 @@ Status on 30 Sept 2026:
   - D5 the journal splits fee cents differently from R12's largest
     remainder; fill totals agree. No fee rewrite now; R12 applies to any
     future canonical data.
-  B3-5 remains OPEN: fifo-v1 and current-rule-v1 differ on 10 sales, with
-  identical money on every contract-day. The two NIO trades carrying his
+  B3-5 remained OPEN at 3B: fifo-v1 and current-rule-v1 differ on 10
+  sales, with identical money on every contract-day. **DECIDED 7 Oct 2026
+  by the owner: "Option 1", fifo-v1 (oldest purchase first) is the
+  production pairing rule** (Step E). The two NIO trades carrying his
   chart drawings must be migrated non-destructively, never mapped by
   contract count.
   **Nothing further is authorized.** Any next implementation phase must
@@ -108,6 +110,28 @@ Status on 30 Sept 2026:
     journal is added unless it would make a fill cover more contracts than
     it holds (contractsOpened / closeQuantity). Each refusal is recorded
     in strat_import_refusals and behind Details (tests/look-alike-trades.js).
+  - Steps A-D are live in both projects.
+  - **Step E (plan v7, accepted by the auditor; implementation authorized
+    7 Oct 2026: "I authorize Step E implementation")**. The app half (E2):
+    - The journal is read and written through `journalKey()`. With no
+      commit record it is "strat_trades", exactly as before. With a
+      record (strat_stepE_applied) it is the item the record names.
+    - A prepared journal is applied, or put back, by writing a NEW item
+      (strat_trades_e1, _e2, ...) and then ONE write of the commit record.
+      Nothing before that write changes which journal is current.
+    - "strat_trades" is never written by it, and once an update has
+      committed it is never made current again. A copy of the app from
+      before this version can only ever write that retired item.
+    - Every copy holds a SHARED Web Lock for its whole life; apply and
+      put back take it EXCLUSIVELY "only if free" and refuse whenever
+      another copy is open.
+    - A damaged record is RECOVERY-REQUIRED: writes refuse, and the
+      Checks page says "Your journal needs attention".
+    - The controls (a file picker, and Put back after an update) sit
+      behind Details on the Checks page only.
+    - Checked by tests/apply-prepared-journal.js (61 checks).
+    - The APPLY on his phone is a separate gate: the dry-run log goes to
+      the auditor first, and it needs his words naming "Step E apply".
 - The 7 known failures stay as baseline until the phase that owns them
   (auditor, C2). No new known failure without the owner's authorization.
 

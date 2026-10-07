@@ -28,6 +28,14 @@ rather than passing quietly:
   more contracts than it holds is refused and recorded; partial closes are
   kept. Shown to fail on the code before the change.
 
+- **apply-prepared-journal.js** -- audit Step E (E2, 7 Oct 2026). Applying a
+  prepared journal and putting it back: only onto the journal the file was
+  made from; through a new stored item and one final record, so a failure
+  or a closed page part-way leaves the journal exactly as it was; never
+  writing "strat_trades", which an older copy of the app may still be
+  writing; refused while another copy is open; a damaged record stops all
+  saving and says so. Two pages share storage and locks, as two tabs do.
+
 - **turned-off-removal.js** — audit Step A (F5, 6 Oct 2026). Checks that
   nothing on the screen can take trades out of the journal by how they look:
   the "Check for Duplicate Trades" and "Put this right" buttons are gone, no
