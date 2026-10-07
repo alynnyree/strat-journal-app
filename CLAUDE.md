@@ -112,26 +112,46 @@ Status on 30 Sept 2026:
     in strat_import_refusals and behind Details (tests/look-alike-trades.js).
   - Steps A-D are live in both projects.
   - **Step E (plan v7, accepted by the auditor; implementation authorized
-    7 Oct 2026: "I authorize Step E implementation")**. The app half (E2):
-    - The journal is read and written through `journalKey()`. With no
-      commit record it is "strat_trades", exactly as before. With a
-      record (strat_stepE_applied) it is the item the record names.
+    7 Oct 2026: "I authorize Step E implementation"; merge authorized
+    7 Oct 2026: "I authorize merging step E")**. The app half (E2):
+    - **The AUTHORITATIVE Step E commit state is IndexedDB: database
+      `strat_journal_state`, store `state`, key `stepE`.** Each copy reads
+      it once at start-up, after it holds its lock. No record there: the
+      journal is "strat_trades", exactly as before. A record: the journal
+      is the item it names.
+    - **`strat_stepE_applied` in localStorage is DIAGNOSTIC ONLY**, a copy
+      written after the commit. Nothing decides from it, and its absence
+      never determines the current journal after a Step E commit
+      (localStorage gives no promise about when one tab sees another
+      tab's save; measured, test 7t).
+    - **Fail closed**: missing (a named item that does not appear),
+      malformed, unreadable or contradictory authoritative state is
+      RECOVERY-REQUIRED (writes refuse; the Checks page says "Your
+      journal needs attention"). While a named item is not yet visible
+      the copy waits, reading and writing nothing. It never falls back
+      to "strat_trades".
     - A prepared journal is applied, or put back, by writing a NEW item
-      (strat_trades_e1, _e2, ...) and then ONE write of the commit record.
-      Nothing before that write changes which journal is current.
-    - "strat_trades" is never written by it, and once an update has
-      committed it is never made current again. A copy of the app from
-      before this version can only ever write that retired item.
+      (strat_trades_e1, _e2, ...), checking it, re-checking the current
+      journal, and then ONE committed IndexedDB transaction. Nothing
+      before that commit changes which journal is current.
+    - **"strat_trades" is never written by it, and is never made current
+      again after a Step E commit.** Put back creates and commits a NEW
+      item holding the old journal; it does not revive "strat_trades". A
+      copy of the app from before this version can only ever write that
+      retired item, which is watched and reported.
+    - **Unnamed journal items are never deleted automatically.** The only
+      deletion is of the item a copy itself just wrote and never
+      committed, while it holds the exclusive lock.
     - Every copy holds a SHARED Web Lock for its whole life; apply and
       put back take it EXCLUSIVELY "only if free" and refuse whenever
-      another copy is open.
-    - A damaged record is RECOVERY-REQUIRED: writes refuse, and the
-      Checks page says "Your journal needs attention".
+      another copy is open. A 1-second settle time before and after is a
+      mitigation only.
     - The controls (a file picker, and Put back after an update) sit
       behind Details on the Checks page only.
-    - Checked by tests/apply-prepared-journal.js (61 checks).
-    - The APPLY on his phone is a separate gate: the dry-run log goes to
-      the auditor first, and it needs his words naming "Step E apply".
+    - Checked by tests/apply-prepared-journal.js (75 checks).
+    - The DRY RUN and the APPLY are separate gates: the dry-run log goes
+      to the auditor first, and the apply needs his words naming "Step E
+      apply".
 - The 7 known failures stay as baseline until the phase that owns them
   (auditor, C2). No new known failure without the owner's authorization.
 
