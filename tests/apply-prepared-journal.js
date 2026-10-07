@@ -144,7 +144,7 @@ const { launch, serve } = require('./browser.js');
     const s = await state(k.p);
     check(`put back (${out.reason || 'ok'})`, out.ok === true, out);
     check('the journal is exactly the one from before', fp(s.current) === fp(R0) && JSON.parse(s.record).kind === 'put back');
-    check('in a new item; "strat_trades" untouched; the prepared item removed', s.key === 'strat_trades_e2' && s.legacy === RTEXT && s.items.join() === 'strat_trades_e2');
+    check('in a new item; "strat_trades" untouched; the replaced item kept, unused', s.key === 'strat_trades_e2' && s.legacy === RTEXT && s.items.join() === 'strat_trades_e1,strat_trades_e2');
     await k.close();
   }
 
@@ -268,6 +268,26 @@ const { launch, serve } = require('./browser.js');
       && its.ids.join() === P0.map(t => String(t.id)).sort().join(), out);
     await k.close();
   }
+  // s. found in testing: a copy starting the moment an update finishes may
+  // not yet see the update's last save. It must never lose the new journal.
+  {
+    let lost = 0, runs = 0;
+    for(let rep = 0; rep < 8; rep++){
+      const k = await ctx(R0);
+      const running = k.p.evaluate(f => applyPreparedJournal(f), prepared(R0, P0));
+      const p2 = await k.c.newPage();
+      await p2.route('**/api/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+      await p2.goto(site.base + '/index.html');
+      const out = await running;
+      await p2.waitForFunction(() => journalLockState === 'shared', null, { timeout: 15000 });
+      await p2.waitForTimeout(300);
+      const seen = await p2.evaluate(() => ({ key: journalKey(), items: Object.keys(localStorage).filter(x => /^strat_trades_e\d+$/.test(x)) }));
+      runs++;
+      if(!(out.ok && seen.key === 'strat_trades_e1' && seen.items.includes('strat_trades_e1'))) lost++;
+      await k.close();
+    }
+    check(`7s. a copy starting as an update finishes never loses the new journal (${lost} of ${runs} lost)`, lost === 0);
+  }
   // i. put back; the retired item changed -> the restore file
   {
     const k = await ctx(R0);
@@ -315,18 +335,18 @@ const { launch, serve } = require('./browser.js');
     await k.p.waitForTimeout(300);
     const s = await state(k.p);
     check('7l. on reopening: the journal is "strat_trades", unchanged; no record', s.key === 'strat_trades' && s.legacy === RTEXT && s.record === null);
-    check('7l. the leftover is removed and the interruption is said behind Details', s.items.length === 0 && /did not finish and was not applied/.test(s.problem || ''), s.problem);
+    check('7l. the leftover is kept, never used, and the interruption is said behind Details', s.items.join() === 'strat_trades_e1' && /did not finish and was not applied/.test(s.problem || ''), s.problem);
     await k.close();
   }
-  // m. removing the leftover fails
+  // m. nothing tries to delete a leftover (deleting is made to fail here)
   {
     const k = await ctx(R0, { init: () => { const del = Storage.prototype.removeItem; Storage.prototype.removeItem = function(key){ if(/^strat_trades_e\d+$/.test(key)) throw new Error('refused'); return del.call(this, key); }; } });
     await k.p.evaluate(v => localStorage.setItem('strat_trades_e1', v), JSON.stringify(P0));
     await k.p.reload(); await k.p.waitForFunction(() => journalLockState === 'shared');
     await k.p.waitForTimeout(300);
     const s = await state(k.p);
-    check('7m. the journal is still "strat_trades"; the leftover stays, reported, never current',
-      s.key === 'strat_trades' && fp(s.current) === fp(R0) && s.items.join() === 'strat_trades_e1' && /could not be|harmless/.test(s.problem || ''), s.problem);
+    check('7m. the journal is still "strat_trades"; the leftover stays, reported, never current; no page errors',
+      s.key === 'strat_trades' && fp(s.current) === fp(R0) && s.items.join() === 'strat_trades_e1' && /kept, never used/.test(s.problem || '') && k.errors.length === 0, s.problem);
     await k.close();
   }
   // n. a damaged or dangling record
@@ -366,7 +386,7 @@ const { launch, serve } = require('./browser.js');
     await k.p.evaluate(() => { const set = Storage.prototype.setItem; window.__failOnce = true; Storage.prototype.setItem = function(key, v){ if(key === 'strat_stepE_applied' && window.__failOnce){ window.__failOnce = false; throw new Error('refused'); } return set.call(this, key, v); }; });
     const first = await putBack(k.p);
     let s = await state(k.p);
-    check('7p. still applied and unchanged; reported', first.ok === false && s.key === 'strat_trades_e1' && fp(s.current) === fp(P0) && s.items.join() === 'strat_trades_e1', first);
+    check('7p. still applied and unchanged; reported', first.ok === false && s.key === 'strat_trades_e1' && fp(s.current) === fp(P0), first);
     const second = await putBack(k.p);
     s = await state(k.p);
     check('7p. a second try succeeds', second.ok === true && fp(s.current) === fp(R0));

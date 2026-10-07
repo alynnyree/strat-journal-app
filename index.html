@@ -1560,6 +1560,14 @@ let journalWritesBlocked = null;   // a reason while writes must not happen
 let releaseSharedLock = null;      // lets this copy give up its shared lock
 let sharedLockDone = null;         // settles once that lock is really released
 let journalLockState = 'none';
+// How long an update keeps the journal to itself before it starts and after
+// it commits. Found in testing (7 Oct 2026): browsers do not promise that one
+// tab's saves are visible in another at the moment the lock passes between
+// them. A copy starting just as an update finished saw the new journal item
+// but not yet its commit record. This settle time lets every copy catch up
+// first, and nothing is ever deleted on the strength of what a copy sees.
+const STEPE_SETTLE_MS = 1000;
+const stepESleep = ms => new Promise(r => setTimeout(r, ms));
 
 // The stored names in ONE call. Walking them one index at a time is not safe
 // while another tab adds or removes an entry: the indexes shift underneath
@@ -1631,7 +1639,9 @@ async function withJournalToItself(fn){
     result = await navigator.locks.request(STEPE_LOCK, { mode:'exclusive', ifAvailable:true }, async lock => {
       if(!lock) return { ok:false, refused:true, reason:'The app is open somewhere else (another tab or window). Close the app\'s other tabs, then try again. Nothing was changed.' };
       journalLockState = 'exclusive';
-      return await fn();
+      await stepESleep(STEPE_SETTLE_MS);       // saves made just before by a copy now closed land first
+      try{ return await fn(); }
+      finally{ await stepESleep(STEPE_SETTLE_MS); }   // and ours reach every copy before any can start
     });
   }catch(e){
     result = { ok:false, refused:true, reason:'The update stopped part-way (' + ((e && e.message) || e) + '). Nothing was switched; your journal is as it was.' };
@@ -1740,8 +1750,8 @@ async function runSwitch({ currentKey, currentText, newTrades, expectFp, record 
   if(readBack == null){ removeLeftover(item); return { ok:false, refused:true, reason:'The final step did not stick, so nothing was switched; your journal is as it was.' }; }
   if(readBack !== recText) return { ok:false, unconfirmed:true, reason:'The update record reads back differently from what was written. Close and reopen the app; what is stored decides.' };
   stepEHook('afterCommit');
-  // The journal no longer named is removed -- never "strat_trades".
-  if(currentKey !== JOURNAL_LEGACY_KEY) removeLeftover(currentKey);
+  // The journal no longer named is KEPT, unused (never deleted on the
+  // strength of what this copy sees; see STEPE_SETTLE_MS).
   return { ok:true, item };
 }
 function removeLeftover(item){
@@ -1861,14 +1871,17 @@ function reportStepE(what, out){
 function stepEStartupChecks(){
   const r = readStepERecord();
   if(r.state === 'damaged'){ noteProblem('stepE', RECOVERY_TEXT + r.why + '. Nothing is being saved until it is put right.'); return; }
-  // A new item that no record names is what an update leaves when it did
-  // not finish. It never became your journal.
+  // A journal item that no record names is either what an update leaves
+  // when it did not finish, or one an update replaced. It is never used.
+  // It is NOT deleted here: what this copy sees at start-up may not yet
+  // include another copy's last save (measured: a copy starting as an update
+  // finished saw the new item without its record, and deleted the new
+  // journal). Keeping a harmless copy costs room; deleting a real one costs
+  // his journal.
   const named = r.state === 'applied' ? r.rec.item : null;
-  const leftovers = storageKeys().filter(k => STEPE_ITEM.test(k || '') && k !== named);
-  let removed = 0;
-  for(const k of leftovers) if(removeLeftover(k)) removed++;
-  if(leftovers.length){
-    noteProblem('stepE', `An earlier journal update did not finish and was not applied. ${removed} unused cop${removed === 1 ? 'y was' : 'ies were'} removed${removed < leftovers.length ? '; ' + (leftovers.length - removed) + ' could not be and are harmless' : ''}.`);
+  const unused = storageKeys().filter(k => STEPE_ITEM.test(k || '') && k !== named);
+  if(unused.length && r.state === 'none'){
+    noteProblem('stepE', `An earlier journal update did not finish and was not applied. ${unused.length} unused cop${unused.length === 1 ? 'y of the journal is' : 'ies of the journal are'} kept, never used.`);
   }
 }
 let retiredSeen = null;
@@ -6902,7 +6915,8 @@ function techText(){
       const where = r.state === 'none' ? 'journal: strat_trades (no update applied)'
         : r.state === 'applied' ? `journal: ${r.rec.item} (${r.rec.kind} ${r.rec.at || ''})`
         : `journal: RECOVERY-REQUIRED (${r.why})`;
-      return `${where} · lock ${journalLockState}${ep ? ' · update: ' + ep.text + ' (' + when(ep) + ')' : ''}`;
+      const unused = storageKeys().filter(k => STEPE_ITEM.test(k || '') && !(r.rec && r.rec.item === k)).length;
+      return `${where} · lock ${journalLockState}${unused ? ' · unused journal copies kept ' + unused : ''}${ep ? ' · update: ' + ep.text + ' (' + when(ep) + ')' : ''}`;
     })(),
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
     `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
