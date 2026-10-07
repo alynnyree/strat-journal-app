@@ -1427,8 +1427,9 @@ function saveTrades(t){
   // Audit Step E: no write while a journal update runs or before this copy
   // holds its lock, and none at all while the update record is damaged.
   const k = journalKey();
-  if(journalWritesBlocked || !k){
-    const reason = journalWritesBlocked || (RECOVERY_TEXT + journalRecoveryReason() + '. That change was not saved.');
+  const notNow = journalNotWritable();
+  if(notNow || !k){
+    const reason = notNow || 'That change could not be saved. Your trades already saved are safe.';
     noteProblem('saving', reason);
     return { ok:false, reason, blocked:true };
   }
@@ -1476,8 +1477,9 @@ function commitTradeChanges(updated, added){
   // saving onto "nothing" would replace every trade he has.
   let fresh;
   const jk = journalKey();
-  if(journalWritesBlocked || !jk){
-    const reason = journalWritesBlocked || (RECOVERY_TEXT + journalRecoveryReason() + '. That change was not saved.');
+  const notNow = journalNotWritable();
+  if(notNow || !jk){
+    const reason = notNow || 'That change could not be saved. Nothing was lost.';
     noteProblem('saving', reason);
     return { ok:false, reason, applied:0, gone:0, added:0, blocked:true };
   }
@@ -1534,8 +1536,9 @@ function storageLine(){
 // copy of the app loaded BEFORE this version can still be open somewhere,
 // writing "strat_trades" without knowing anything below exists. So:
 //   * the journal is read and written through journalKey(), decided by ONE
-//     commit record (strat_stepE_applied). No record: "strat_trades", exactly
-//     as before. A record: the item it names.
+//     commit record kept in IndexedDB (database strat_journal_state). No
+//     record: "strat_trades", exactly as before. A record: the item it
+//     names. See JOURNAL STATE below for why it is not in localStorage.
 //   * an apply (and a put back) writes the new journal into a NEW item that
 //     no older copy knows, checks it, and makes it current with ONE write of
 //     the commit record -- the last step, after every check. Nothing before
@@ -1577,21 +1580,127 @@ const stepESleep = ms => new Promise(r => setTimeout(r, ms));
 function storageKeys(){
   try{ return Object.keys(localStorage); }catch(e){ return []; }
 }
-// The commit record, read and judged: 'none', 'applied' or 'damaged'.
-function readStepERecord(){
-  let raw;
-  try{ raw = localStorage.getItem(STEPE_RECORD_KEY); }
-  catch(e){ return { state:'damaged', why:'the record of the journal update could not be read' }; }
-  if(raw == null) return { state:'none' };
-  let rec;
-  try{ rec = JSON.parse(raw); }catch(e){ return { state:'damaged', why:'the record of the journal update is unreadable' }; }
-  if(!rec || typeof rec !== 'object' || typeof rec.item !== 'string' || !STEPE_ITEM.test(rec.item) || typeof rec.rFp !== 'string'){
-    return { state:'damaged', why:'the record of the journal update is not in the expected form', rec: rec && typeof rec === 'object' ? rec : null };
-  }
-  if(!storageKeys().includes(rec.item)) return { state:'damaged', why:'the journal the update record names is missing', rec };
-  return { state:'applied', rec };
+// ---- JOURNAL STATE: which stored item is the journal ----------------------
+// Found in testing and confirmed by the auditor (7 Oct 2026): localStorage
+// gives NO promise about when one tab sees another tab's save. A copy
+// starting the moment an update finished saw the new journal item but not
+// yet the record naming it -- so "I see no record" can never prove "no
+// update has happened", and a copy deciding from localStorage could pick the
+// retired "strat_trades" as current. A wait cannot fix that; it only makes
+// it rarer.
+//
+// IndexedDB does give the promise needed: a read-write transaction that has
+// COMPLETED is seen by every transaction started after it, in any tab of
+// this site (transactions on one database are ordered; it is not a per-tab
+// copy). The commit is that transaction, and it completes while the update
+// still holds the journal lock exclusively. A copy can only start reading
+// after it has the lock, so after that commit has completed. So:
+//   * the commit record lives in IndexedDB; this copy reads it ONCE, at
+//     start-up, after it holds its lock, and keeps it in memory. Only this
+//     copy's own updates change it after that (no update can run while
+//     another copy is open);
+//   * no record there: no update has ever committed in this browser, so
+//     "strat_trades" is the journal;
+//   * a record there: its item is the journal. If this copy cannot yet see
+//     that item in localStorage (the same visibility gap), it WAITS, writing
+//     nothing and reading nothing, until the item appears. It never falls
+//     back to "strat_trades" and never deletes anything. If the item has not
+//     appeared after STEPE_MISSING_MS it is RECOVERY-REQUIRED -- one closed
+//     state handing over to another, never to "strat_trades";
+//   * a record that is malformed, unreadable, or contradicted (the
+//     localStorage copy, strat_stepE_applied, exists but IndexedDB has no
+//     record) is RECOVERY-REQUIRED.
+// strat_stepE_applied in localStorage is a COPY of the record, written after
+// the commit, for the diagnostics and for that contradiction check. Nothing
+// decides from it.
+const STATE_DB = 'strat_journal_state';
+const STATE_STORE = 'state';
+const STATE_KEY = 'stepE';
+const STEPE_MISSING_MS = 15000;
+let stepEState = { phase:'loading' };   // loading | none | applied | waiting | damaged
+
+function stateDb(){
+  return new Promise((ok, no) => {
+    let r;
+    try{ r = indexedDB.open(STATE_DB, 1); }catch(e){ no(e); return; }
+    r.onupgradeneeded = () => { try{ r.result.createObjectStore(STATE_STORE); }catch(e){} };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => no(r.error || new Error('the store would not open'));
+    r.onblocked = () => no(new Error('the store is busy'));
+  });
 }
-// Which stored item IS the journal. null means RECOVERY-REQUIRED.
+async function readStepEStateFromStore(){
+  const db = await stateDb();
+  try{
+    return await new Promise((ok, no) => {
+      const tx = db.transaction(STATE_STORE, 'readonly');
+      const q = tx.objectStore(STATE_STORE).get(STATE_KEY);
+      q.onsuccess = () => ok(q.result === undefined ? null : q.result);
+      q.onerror = () => no(q.error || new Error('the record could not be read'));
+    });
+  } finally { try{ db.close(); }catch(e){} }
+}
+// Resolves only once the transaction has COMPLETED (that is the commit).
+async function writeStepEStateToStore(rec){
+  const db = await stateDb();
+  try{
+    await new Promise((ok, no) => {
+      let tx;
+      try{ tx = db.transaction(STATE_STORE, 'readwrite', { durability:'strict' }); }
+      catch(e){ tx = db.transaction(STATE_STORE, 'readwrite'); }
+      tx.oncomplete = () => ok();
+      tx.onerror = () => no(tx.error || new Error('the record was not saved'));
+      tx.onabort = () => no(tx.error || new Error('the record was not saved'));
+      tx.objectStore(STATE_STORE).put(rec, STATE_KEY);
+    });
+  } finally { try{ db.close(); }catch(e){} }
+}
+function validStepERecord(rec){
+  return !!rec && typeof rec === 'object' && typeof rec.item === 'string' && STEPE_ITEM.test(rec.item) && typeof rec.rFp === 'string';
+}
+// One read of the one item: visible or not.
+function itemVisible(item){ try{ return localStorage.getItem(item) != null; }catch(e){ return false; } }
+
+// Read the record once, under the lock, and settle what this copy uses.
+async function loadStepEState(){
+  let rec;
+  try{ rec = await readStepEStateFromStore(); }
+  catch(e){ stepEState = { phase:'damaged', why:'the record of which journal is current could not be read (' + ((e && e.message) || e) + ')' }; return; }
+  if(rec == null){
+    let copy = null;
+    try{ copy = localStorage.getItem(STEPE_RECORD_KEY); }catch(e){}
+    stepEState = copy == null ? { phase:'none' }
+      : { phase:'damaged', why:'the two records of the journal update disagree (one says an update was made, the other has no record of it)' };
+    return;
+  }
+  if(!validStepERecord(rec)){ stepEState = { phase:'damaged', why:'the record of the journal update is not in the expected form', rec: rec && typeof rec === 'object' ? rec : null }; return; }
+  if(itemVisible(rec.item)){ stepEState = { phase:'applied', rec }; return; }
+  // The record says which journal is current; this copy cannot see it yet.
+  stepEState = { phase:'waiting', rec, since: Date.now() };
+  await new Promise(done => {
+    const look = () => {
+      if(itemVisible(rec.item)){ stepEState = { phase:'applied', rec }; finish(); return; }
+      if(Date.now() - stepEState.since > STEPE_MISSING_MS){
+        stepEState = { phase:'damaged', why:'the journal the update record names is missing', rec }; finish();
+      }
+    };
+    const timer = setInterval(look, 250);
+    const onStorage = () => look();
+    window.addEventListener('storage', onStorage);
+    function finish(){ clearInterval(timer); window.removeEventListener('storage', onStorage); done(); }
+  });
+}
+
+// The record as this copy uses it.
+function readStepERecord(){
+  const st = stepEState;
+  if(st.phase === 'none') return { state:'none' };
+  if(st.phase === 'applied') return { state:'applied', rec: st.rec };
+  if(st.phase === 'loading') return { state:'pending', why:'the journal is still opening' };
+  if(st.phase === 'waiting') return { state:'pending', why:'waiting for the current journal to be readable', rec: st.rec };
+  return { state:'damaged', why: st.why, rec: st.rec || null };
+}
+// Which stored item IS the journal. null: not settled yet, or RECOVERY-REQUIRED.
 function journalKey(){
   const r = readStepERecord();
   if(r.state === 'none') return JOURNAL_LEGACY_KEY;
@@ -1603,23 +1712,38 @@ function journalRecoveryReason(){
   return r.state === 'damaged' ? r.why : null;
 }
 const RECOVERY_TEXT = 'Your journal needs attention: ' ;
+// Why a write cannot happen now, or null.
+function journalNotWritable(){
+  if(journalWritesBlocked) return journalWritesBlocked;
+  const r = readStepERecord();
+  if(r.state === 'pending') return 'Your journal is still opening, so that change was not saved.';
+  if(r.state === 'damaged') return RECOVERY_TEXT + r.why + '. That change was not saved.';
+  return null;
+}
 
 // ---- The shared lock, held for this copy's whole life --------------------
 function takeSharedJournalLock(){
   if(!(navigator.locks && navigator.locks.request)){
-    journalLockState = 'unsupported'; journalWritesBlocked = null;
+    journalLockState = 'unsupported';
     return Promise.resolve(false);
   }
   journalLockState = 'waiting';
-  journalWritesBlocked = 'The app is still starting, so nothing was saved.';
   return new Promise(granted => {
     sharedLockDone = navigator.locks.request(STEPE_LOCK, { mode:'shared' }, () => {
-      journalLockState = 'shared'; journalWritesBlocked = null; granted(true);
+      journalLockState = 'shared'; granted(true);
       return new Promise(release => { releaseSharedLock = release; });
-    }).catch(() => { journalLockState = 'unsupported'; journalWritesBlocked = null; granted(false); });
+    }).catch(() => { journalLockState = 'unsupported'; granted(false); });
   });
 }
-const journalReady = takeSharedJournalLock();
+// Start-up: the lock first, then the record; nothing reads or writes the
+// journal before both.
+async function openJournal(){
+  journalWritesBlocked = 'The app is still starting, so nothing was saved.';
+  await takeSharedJournalLock();
+  await loadStepEState();
+  journalWritesBlocked = null;
+}
+const journalReady = openJournal();
 
 // Runs fn with the journal to itself: this copy's shared lock is given up,
 // then the lock is asked for EXCLUSIVELY and only if free. Not free means
@@ -1647,6 +1771,7 @@ async function withJournalToItself(fn){
     result = { ok:false, refused:true, reason:'The update stopped part-way (' + ((e && e.message) || e) + '). Nothing was switched; your journal is as it was.' };
   }
   await takeSharedJournalLock();
+  journalWritesBlocked = null;
   return result;
 }
 
@@ -1693,6 +1818,7 @@ function nextJournalItem(){
   const r = readStepERecord();
   const m = r.rec && STEPE_ITEM.exec(r.rec.item || '');
   if(m) max = Math.max(max, +m[1]);
+  if(r.rec && Number.isFinite(r.rec.seq)) max = Math.max(max, r.rec.seq);
   return 'strat_trades_e' + (max + 1);
 }
 // Test hooks only (window.__stepEHooks is never set by the app). The two
@@ -1728,8 +1854,11 @@ async function runSwitch({ currentKey, currentText, newTrades, expectFp, record 
   try{ fpOk = back === text && (await journalFingerprint(JSON.parse(back))) === expectFp; }catch(e){ fpOk = false; }
   if(!fpOk){ removeLeftover(item); return { ok:false, refused:true, reason:'The new journal did not read back exactly as expected, so nothing was changed.' }; }
   await stepEHookAsync('afterNewItem');
-  // d. the journal that is current must be exactly as it was read. From here
-  // to the commit there is no wait.
+  // d. the journal that is current must be exactly as it was read. A write
+  // to "strat_trades" by an older copy after this check is kept there, never
+  // overwritten, and handled by checkRetiredJournal (the commit below is a
+  // transaction that completes a moment later; nothing else can write the
+  // new item or an e-item meanwhile, because this copy holds the lock).
   let now;
   try{ now = localStorage.getItem(currentKey); }catch(e){ now = null; }
   if(now !== currentText){
@@ -1739,19 +1868,34 @@ async function runSwitch({ currentKey, currentText, newTrades, expectFp, record 
       : 'Your journal changed while it was being updated, so nothing was switched.' };
   }
   stepEHook('betweenCheckAndCommit');
-  // e. COMMIT: one write, the only step that changes which journal is current.
-  const rec = Object.assign({}, record, { item });
-  const recText = JSON.stringify(rec);
-  try{ localStorage.setItem(STEPE_RECORD_KEY, recText); }
+  return await commitStepE(Object.assign({}, record, { item }));
+}
+// e. COMMIT: one IndexedDB transaction, the only step that changes which
+// journal is current (see JOURNAL STATE). Read back in a new transaction.
+// Then the localStorage copy of the record, for diagnostics only.
+async function commitStepE(rec){
+  const item = rec.item;
+  const m = STEPE_ITEM.exec(item);
+  rec = Object.assign({}, rec, { seq: m ? +m[1] : null });
+  try{ await writeStepEStateToStore(rec); }
   catch(e){ removeLeftover(item); return { ok:false, refused:true, reason:'The final step could not be saved, so nothing was switched; your journal is as it was.' }; }
-  let readBack;
-  try{ readBack = localStorage.getItem(STEPE_RECORD_KEY); }
-  catch(e){ return { ok:false, unconfirmed:true, reason:'The update was saved but could not be confirmed. Close and reopen the app; what is stored decides, and nothing is guessed.' }; }
-  if(readBack == null){ removeLeftover(item); return { ok:false, refused:true, reason:'The final step did not stick, so nothing was switched; your journal is as it was.' }; }
-  if(readBack !== recText) return { ok:false, unconfirmed:true, reason:'The update record reads back differently from what was written. Close and reopen the app; what is stored decides.' };
+  let back;
+  try{ back = await readStepEStateFromStore(); }
+  catch(e){
+    stepEState = { phase:'damaged', why:'an update was saved but could not be confirmed; close and reopen the app, and what is stored decides' };
+    return { ok:false, unconfirmed:true, reason:'The update was saved but could not be confirmed. Close and reopen the app; what is stored decides, and nothing is guessed.' };
+  }
+  if(back == null){ removeLeftover(item); return { ok:false, refused:true, reason:'The final step did not stick, so nothing was switched; your journal is as it was.' }; }
+  if(canonicalJson(back) !== canonicalJson(rec)){
+    stepEState = { phase:'damaged', why:'the update record reads back differently from what was written; close and reopen the app' };
+    return { ok:false, unconfirmed:true, reason:'The update record reads back differently from what was written. Close and reopen the app; what is stored decides.' };
+  }
+  stepEState = { phase:'applied', rec };
+  try{ localStorage.setItem(STEPE_RECORD_KEY, JSON.stringify(rec)); }
+  catch(e){ noteProblem('stepE', 'The update is made; only its diagnostic copy could not be written. Nothing depends on it.'); }
   stepEHook('afterCommit');
   // The journal no longer named is KEPT, unused (never deleted on the
-  // strength of what this copy sees; see STEPE_SETTLE_MS).
+  // strength of what this copy sees).
   return { ok:true, item };
 }
 function removeLeftover(item){
@@ -1767,7 +1911,7 @@ async function applyPreparedJournal(file){
     const bad = await fileIsIntact(file, KIND_PREPARED);
     if(bad) return { ok:false, refused:true, reason: bad + ' Nothing was changed.' };
     const rState = readStepERecord();
-    if(rState.state === 'damaged') return { ok:false, refused:true, reason: 'Your journal needs attention first (' + rState.why + '). Nothing was changed.' };
+    if(rState.state !== 'none' && rState.state !== 'applied') return { ok:false, refused:true, reason: 'Your journal needs attention first (' + rState.why + '). Nothing was changed.' };
     const currentKey = rState.state === 'applied' ? rState.rec.item : JOURNAL_LEGACY_KEY;
     let currentText, current;
     try{ currentText = localStorage.getItem(currentKey) || '[]'; current = JSON.parse(currentText); if(!Array.isArray(current)) throw new Error('x'); }
@@ -1802,6 +1946,7 @@ async function putBackJournal(restoreFile){
   const out = await withJournalToItself(async () => {
     const rState = readStepERecord();
     if(rState.state === 'none') return { ok:false, refused:true, reason:'There is no journal update to put back. Nothing was changed.' };
+    if(rState.state === 'pending') return { ok:false, refused:true, reason:'Your journal is still opening. Try again in a moment. Nothing was changed.' };
     let source;
     if(restoreFile){
       const bad = await fileIsIntact(restoreFile, KIND_RESTORE);
@@ -1850,8 +1995,7 @@ async function runSwitchFromRecovery(source, rec){
   try{ localStorage.setItem(item, text); }catch(e){ return { ok:false, refused:true, reason:'The restored journal could not be stored, so nothing was changed.' }; }
   if((await journalFingerprint(JSON.parse(localStorage.getItem(item) || '[]'))) !== source.fp){ removeLeftover(item); return { ok:false, refused:true, reason:'The restored journal did not read back exactly, so nothing was changed.' }; }
   const record = { kind:'put back', rFp: source.fp, rIds: rec.rIds || source.trades.map(t => String(t.id)), preparedFp: source.fp, from: 'recovery', at: new Date().toISOString(), item };
-  try{ localStorage.setItem(STEPE_RECORD_KEY, JSON.stringify(record)); }catch(e){ return { ok:false, refused:true, reason:'The final step could not be saved; nothing was switched.' }; }
-  return localStorage.getItem(STEPE_RECORD_KEY) === JSON.stringify(record) ? { ok:true, item } : { ok:false, unconfirmed:true, reason:'The restore could not be confirmed. Close and reopen the app.' };
+  return await commitStepE(record);
 }
 
 function reportStepE(what, out){
@@ -1918,7 +2062,7 @@ function renderStepEBox(message){
   const last = readProblem('stepE');
   box.innerHTML =
     `<div style="font-weight:600; color:var(--text); margin-bottom:6px;">Journal update</div>`
-    + `<div style="margin-bottom:8px;">${escapeHtml(message || (r.state === 'damaged' ? RECOVERY_TEXT + r.why + '.' : r.state === 'applied' ? 'The rebuilt journal is in use.' : 'No update has been applied.'))}</div>`
+    + `<div style="margin-bottom:8px;">${escapeHtml(message || (r.state === 'damaged' ? RECOVERY_TEXT + r.why + '.' : r.state === 'applied' ? 'The rebuilt journal is in use.' : r.state === 'pending' ? 'Your journal is still opening.' : 'No update has been applied.'))}</div>`
     + `<input type="file" id="stepEFile" accept=".json,application/json" style="display:none" onchange="stepEFilePicked(this)">`
     + `<button class="secondary" onclick="document.getElementById('stepEFile').click()" style="width:100%;">Apply a prepared journal file</button>`
     + (r.state !== 'none' ? `<button class="secondary" onclick="stepEPutBack()" style="width:100%; margin-top:6px;">Put back</button>` : '')
@@ -6914,6 +7058,7 @@ function techText(){
       const ep = readProblem('stepE');
       const where = r.state === 'none' ? 'journal: strat_trades (no update applied)'
         : r.state === 'applied' ? `journal: ${r.rec.item} (${r.rec.kind} ${r.rec.at || ''})`
+        : r.state === 'pending' ? `journal: not settled yet (${r.why})`
         : `journal: RECOVERY-REQUIRED (${r.why})`;
       const unused = storageKeys().filter(k => STEPE_ITEM.test(k || '') && !(r.rec && r.rec.item === k)).length;
       return `${where} · lock ${journalLockState}${unused ? ' · unused journal copies kept ' + unused : ''}${ep ? ' · update: ' + ep.text + ' (' + when(ep) + ')' : ''}`;
@@ -8720,7 +8865,7 @@ async function pollBackend(silent=false){
   if(pollInFlight) return;
   // Audit Step E: no collection while a journal update runs; whatever is
   // waiting stays on the server and arrives next time.
-  if(journalWritesBlocked) return;
+  if(journalNotWritable()) return;
   pollInFlight = true;
   try{
     await checkRetiredJournal().catch(() => {});
@@ -10948,8 +11093,8 @@ async function wipeData(){
   // Audit Step E: never while an update runs or the update record is
   // damaged; and after an update the journal item is emptied, not removed,
   // because a record naming a missing item is RECOVERY-REQUIRED.
-  if(journalWritesBlocked || !journalKey()){
-    showStatus('err', journalWritesBlocked || 'Your journal needs attention first. Nothing was erased.');
+  if(journalNotWritable() || !journalKey()){
+    showStatus('err', journalNotWritable() || 'Your journal needs attention first. Nothing was erased.');
     return;
   }
   const rState = readStepERecord();

@@ -61,7 +61,8 @@ for (const c of ['JOURNAL_LEGACY_KEY', 'STEPE_RECORD_KEY', 'STEPE_ITEM', 'RECOVE
   global[c] = eval(m[1]);
 }
 global.journalWritesBlocked = null;
-for (const n of ['storageKeys', 'readStepERecord', 'journalKey', 'journalRecoveryReason', 'loadTrades', 'saveTrades', 'noteProblem', 'applyReconcilePlan']) eval(grab(n));
+global.stepEState = { phase: 'none' };   // what a copy with no update record settles on
+for (const n of ['storageKeys', 'readStepERecord', 'journalKey', 'journalRecoveryReason', 'journalNotWritable', 'loadTrades', 'saveTrades', 'noteProblem', 'applyReconcilePlan']) eval(grab(n));
 
 // A journal with one real trade and one duplicate of it, plus chart bars
 // on both so the copy has something worth not keeping.

@@ -43,6 +43,10 @@ const { launch, serve } = require('./browser.js');
   const R0 = [T({ id: 'k1', fills: ['101', '102'], notes: 'keep me', shotEntry: 'kept' }), T({ id: 'gone', fills: ['csv|a', 'csv|b'], source: 'schwab-csv' })];
   const P0 = [T({ id: 'k1', fills: ['101', '102'], notes: 'keep me', shotEntry: 'kept', fees: 1.33, pnlNet: 9.67 }), T({ id: 'T:aaaaaaaaaaaaaaaaaaaaaaaa', fills: ['103', '104'] })];
 
+  // A copy is ready once it holds its lock AND has settled which journal is
+  // current (since the correction: read once from IndexedDB).
+  const ready = (p, t = 20000) => p.waitForFunction(() => typeof journalLockState !== 'undefined' && journalLockState === 'shared'
+    && typeof stepEState !== 'undefined' && stepEState.phase !== 'loading' && stepEState.phase !== 'waiting', null, { timeout: t });
   // ---- A fresh browser context per case (shared storage between its pages) --
   async function ctx(R, opts = {}){
     const c = await b.newContext({ viewport: { width: 390, height: 844 } });
@@ -66,10 +70,12 @@ const { launch, serve } = require('./browser.js');
       localStorage.setItem('strat_backfilled', '1');
       if(R) localStorage.setItem('strat_trades', JSON.stringify(R));
     }, { R, backend: !!opts.backend });
-    await p.reload(); await p.waitForFunction(() => typeof journalLockState !== 'undefined' && journalLockState === 'shared', null, { timeout: 10000 });
+    await p.reload(); await ready(p);
     return { c, p, open, errors, cleared, close: () => c.close() };
   }
-  const state = p => p.evaluate(() => ({
+  const state = p => p.evaluate(async () => ({
+    stored: await readStepEStateFromStore().catch(() => 'unreadable'),
+    phase: stepEState.phase,
     record: localStorage.getItem('strat_stepE_applied'),
     legacy: localStorage.getItem('strat_trades'),
     items: Object.keys(localStorage).filter(k => /^strat_trades_e\d+$/.test(k)).sort(),
@@ -95,7 +101,7 @@ const { launch, serve } = require('./browser.js');
     const out2 = await apply(k2.p, prepared(R0, P0));
     const s2 = await state(k2.p);
     check('a journal changed since the export is refused', out2.ok === false && /changed since the export/.test(out2.reason), out2);
-    check('nothing written: no record, no new item, the journal unchanged', s2.record === null && s2.items.length === 0 && s2.current[0].notes === 'typed after the export');
+    check('nothing written: no record, no new item, the journal unchanged', s2.stored === null && s2.record === null && s2.items.length === 0 && s2.current[0].notes === 'typed after the export');
     await k2.close();
   }
 
@@ -111,7 +117,7 @@ const { launch, serve } = require('./browser.js');
       const k = await ctx(R0);
       const out = await apply(k.p, file);
       const s = await state(k.p);
-      check(`${name}: refused, nothing written`, out.ok === false && s.record === null && s.items.length === 0 && s.legacy === RTEXT, out);
+      check(`${name}: refused, nothing written`, out.ok === false && s.stored === null && s.record === null && s.items.length === 0 && s.legacy === RTEXT, out);
       await k.close();
     }
   }
@@ -143,7 +149,7 @@ const { launch, serve } = require('./browser.js');
     const out = await putBack(k.p);
     const s = await state(k.p);
     check(`put back (${out.reason || 'ok'})`, out.ok === true, out);
-    check('the journal is exactly the one from before', fp(s.current) === fp(R0) && JSON.parse(s.record).kind === 'put back');
+    check('the journal is exactly the one from before', fp(s.current) === fp(R0) && s.stored && s.stored.kind === 'put back');
     check('in a new item; "strat_trades" untouched; the replaced item kept, unused', s.key === 'strat_trades_e2' && s.legacy === RTEXT && s.items.join() === 'strat_trades_e1,strat_trades_e2');
     await k.close();
   }
@@ -179,7 +185,7 @@ const { launch, serve } = require('./browser.js');
     const out = await apply(k.p, prepared(R0, P0));
     const s = await state(k.p);
     check('7a. another copy open: refused before anything', out.ok === false && /open somewhere else/.test(out.reason), out);
-    check('7a. nothing written; no record', s.record === null && s.items.length === 0 && s.legacy === RTEXT);
+    check('7a. nothing written; no record', s.stored === null && s.record === null && s.items.length === 0 && s.legacy === RTEXT);
     await k.close();
   }
   // b. an older copy writes after the fingerprint check, before the commit
@@ -190,7 +196,7 @@ const { launch, serve } = require('./browser.js');
     const out = await apply(k.p, prepared(R0, P0));
     const s = await state(k.p);
     check('7b. refused at the final check', out.ok === false && /Another copy of the app changed your journal/.test(out.reason), out);
-    check('7b. no record; the new item removed; "strat_trades" is exactly the older copy\'s', s.record === null && s.items.length === 0 && s.legacy === older);
+    check('7b. no record; the new item removed; "strat_trades" is exactly the older copy\'s', s.stored === null && s.record === null && s.items.length === 0 && s.legacy === older);
     check('7b. the refusal is behind Details', /not applied/.test(s.problem || ''), s.problem);
     await k.close();
   }
@@ -242,7 +248,7 @@ const { launch, serve } = require('./browser.js');
     });
     const out = await apply(k.p, prepared(R0, P0));
     const s = await state(k.p);
-    check('7f. no room: refused, nothing changed, no record', out.ok === false && /no room/.test(out.reason) && s.record === null && s.legacy === RTEXT, out);
+    check('7f. no room: refused, nothing changed, no record', out.ok === false && /no room/.test(out.reason) && s.stored === null && s.record === null && s.legacy === RTEXT, out);
     await k.close();
   }
   // h. a copy opening during the apply waits, then reads the new journal
@@ -296,6 +302,55 @@ const { launch, serve } = require('./browser.js');
     }
     check(`7s. a copy starting as an update finishes never loses the new journal (${lost} of ${runs} lost)`, lost === 0);
   }
+  // t. THE RACE, simulated deliberately (auditor's correction, 7 Oct 2026).
+  // A copy starts right after a commit with a STALE view: localStorage shows
+  // it neither the commit record's copy nor (at first) the new journal item.
+  // The view is controlled by hiding those two entries from this one page's
+  // reads, so the race happens every time rather than one run in ten.
+  {
+    const k = await ctx(R0);
+    const out = await apply(k.p, prepared(R0, P0));
+    const e1Before = await k.p.evaluate(() => localStorage.getItem('strat_trades_e1'));
+    // an uncommitted leftover, which must never become current
+    await k.p.evaluate(v => localStorage.setItem('strat_trades_e2', v), JSON.stringify([T({ id: 'never-current' })]));
+    await k.p.close();
+    const p2 = await k.c.newPage();
+    p2.on('pageerror', e => k.errors.push(e.message));
+    await p2.addInitScript(() => {
+      window.__hideRecord = true; window.__hideItem = true;
+      const get = Storage.prototype.getItem;
+      Storage.prototype.getItem = function(key){
+        if(window.__hideRecord && key === 'strat_stepE_applied') return null;
+        if(window.__hideItem && key === 'strat_trades_e1') return null;
+        return get.call(this, key);
+      };
+    });
+    await p2.route('**/api/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+    await p2.goto(site.base + '/index.html');
+    await p2.waitForTimeout(1500);
+    const hidden = await p2.evaluate(() => ({ key: journalKey(), n: loadTrades().length, save: saveTrades([{ id: 'written-while-stale' }]),
+      phase: typeof stepEState !== 'undefined' ? stepEState.phase : 'n/a', details: techText().split('\n').find(l => /^journal:/.test(l)) || '' }));
+    check('7t. the commit itself succeeded', out.ok === true, out);
+    check(`7t(1). a stale copy does not select "strat_trades" (${hidden.key})`, hidden.key !== 'strat_trades');
+    check(`7t(4). it does not report the old journal as current (${hidden.n} trades shown)`, hidden.n === 0);
+    check('7t(3). it does not write: the save is refused', hidden.save.ok === false);
+    check(`7t(5). it is in a safe, stated state (${hidden.phase}; "${hidden.details}")`, hidden.phase === 'waiting' && /not settled yet/.test(hidden.details));
+    const raw = await p2.evaluate(() => ({ e1: Storage.prototype.getItem.call(localStorage, 'strat_trades_e1'), legacy: Storage.prototype.getItem.call(localStorage, 'strat_trades') }));
+    // read without the hiding, by a third page
+    const p3 = await k.c.newPage();
+    await p3.goto(site.base + '/privacy.html');
+    const truth = await p3.evaluate(() => ({ e1: localStorage.getItem('strat_trades_e1'), legacy: localStorage.getItem('strat_trades') }));
+    check('7t(2)(6). the new journal is not deleted or changed, and stays recoverable', truth.e1 === e1Before);
+    check('7t. "strat_trades" was not written either', truth.legacy === RTEXT);
+    // The transition becomes visible: the new item appears (the record's copy
+    // stays hidden; nothing decides from it).
+    await p2.evaluate(() => { window.__hideItem = false; });
+    await ready(p2);
+    const after = await p2.evaluate(() => ({ key: journalKey(), ids: loadTrades().map(t => String(t.id)).sort() }));
+    check(`7t(7). once visible it resolves to the new journal (${after.key})`, after.key === 'strat_trades_e1' && after.ids.join() === P0.map(t => String(t.id)).sort().join());
+    check('7t(8). the uncommitted leftover never became current', after.key !== 'strat_trades_e2' && !after.ids.includes('never-current'));
+    await k.close();
+  }
   // i. put back; the retired item changed -> the restore file
   {
     const k = await ctx(R0);
@@ -328,21 +383,22 @@ const { launch, serve } = require('./browser.js');
   // k. the commit write fails
   {
     const k = await ctx(R0);
-    await k.p.evaluate(() => { const set = Storage.prototype.setItem; Storage.prototype.setItem = function(key, v){ if(key === 'strat_stepE_applied') throw new Error('refused'); return set.call(this, key, v); }; });
+    // The commit is the IndexedDB transaction; make it fail.
+    await k.p.evaluate(() => { const put = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function(v, key){ if(this.name === 'state') throw new Error('refused'); return put.call(this, v, key); }; });
     const out = await apply(k.p, prepared(R0, P0));
     const s = await state(k.p);
     check('7k. refused, never reported as applied; no record; the journal as before; leftover removed',
-      out.ok === false && !out.unconfirmed && s.record === null && s.key === 'strat_trades' && fp(s.current) === fp(R0) && s.items.length === 0, { out, s: { record: s.record, items: s.items } });
+      out.ok === false && !out.unconfirmed && s.stored === null && s.record === null && s.key === 'strat_trades' && fp(s.current) === fp(R0) && s.items.length === 0, { out, s: { stored: s.stored, record: s.record, items: s.items } });
     await k.close();
   }
   // l. interrupted after the new item was written (page closed before the commit)
   {
     const k = await ctx(R0);
     await k.p.evaluate(v => localStorage.setItem('strat_trades_e1', v), JSON.stringify(P0));
-    await k.p.reload(); await k.p.waitForFunction(() => journalLockState === 'shared');
+    await k.p.reload(); await ready(k.p);
     await k.p.waitForTimeout(300);
     const s = await state(k.p);
-    check('7l. on reopening: the journal is "strat_trades", unchanged; no record', s.key === 'strat_trades' && s.legacy === RTEXT && s.record === null);
+    check('7l. on reopening: the journal is "strat_trades", unchanged; no record', s.key === 'strat_trades' && s.legacy === RTEXT && s.stored === null && s.record === null);
     check('7l. the leftover is kept, never used, and the interruption is said behind Details', s.items.join() === 'strat_trades_e1' && /did not finish and was not applied/.test(s.problem || ''), s.problem);
     await k.close();
   }
@@ -350,39 +406,50 @@ const { launch, serve } = require('./browser.js');
   {
     const k = await ctx(R0, { init: () => { const del = Storage.prototype.removeItem; Storage.prototype.removeItem = function(key){ if(/^strat_trades_e\d+$/.test(key)) throw new Error('refused'); return del.call(this, key); }; } });
     await k.p.evaluate(v => localStorage.setItem('strat_trades_e1', v), JSON.stringify(P0));
-    await k.p.reload(); await k.p.waitForFunction(() => journalLockState === 'shared');
+    await k.p.reload(); await ready(k.p);
     await k.p.waitForTimeout(300);
     const s = await state(k.p);
     check('7m. the journal is still "strat_trades"; the leftover stays, reported, never current; no page errors',
       s.key === 'strat_trades' && fp(s.current) === fp(R0) && s.items.join() === 'strat_trades_e1' && /kept, never used/.test(s.problem || '') && k.errors.length === 0, s.problem);
     await k.close();
   }
-  // n. a damaged or dangling record
-  for(const [name, rec] of [['unreadable', '{bad'], ['naming a missing item', JSON.stringify({ item: 'strat_trades_e9', rFp: 'x', kind: 'apply' })]]){
+  // n. a damaged, dangling or contradicted record
+  for(const [name, setup, waitMs] of [
+    ['malformed', p => p.evaluate(() => writeStepEStateToStore('not a record')), 0],
+    ['naming an item that never appears', p => p.evaluate(() => writeStepEStateToStore({ item: 'strat_trades_e9', rFp: 'x', kind: 'apply' })), 16500],
+    ['contradicted (a copy in localStorage, nothing in the store)', p => p.evaluate(() => localStorage.setItem('strat_stepE_applied', JSON.stringify({ item: 'strat_trades_e1', rFp: 'x' }))), 0],
+  ]){
     const k = await ctx(R0);
-    await k.p.evaluate(v => localStorage.setItem('strat_stepE_applied', v), rec);
-    await k.p.reload(); await k.p.waitForTimeout(800);
+    await setup(k.p);
+    await k.p.reload();
+    if(waitMs){
+      await k.p.waitForTimeout(1500);
+      const during = await k.p.evaluate(() => ({ key: journalKey(), n: loadTrades().length, save: saveTrades([{ id: 'x' }]).ok, phase: stepEState.phase }));
+      check(`7n. ${name}: while waiting, it neither reads nor writes, and is never "strat_trades"`, during.key === null && during.n === 0 && during.save === false && during.phase === 'waiting', during);
+      await k.p.waitForTimeout(waitMs);
+    } else await k.p.waitForTimeout(1200);
     const s = await state(k.p);
     const saved = await k.p.evaluate(() => saveTrades([{ id: 'x' }]));
     await k.p.evaluate(() => renderAppStatus());
     const status = await k.p.evaluate(() => (document.getElementById('appStatus') || {}).textContent || '');
-    check(`7n. record ${name}: RECOVERY-REQUIRED, never silently "strat_trades"`, s.key === null && s.current.length === 0 && s.legacy === RTEXT);
-    check(`7n. record ${name}: every writer refuses`, saved.ok === false && saved.blocked === true);
-    check(`7n. record ${name}: the Checks page says so`, /needs attention/.test(status), status);
+    check(`7n. ${name}: RECOVERY-REQUIRED, never silently "strat_trades"`, s.phase === 'damaged' && s.key === null && s.current.length === 0 && s.legacy === RTEXT, s.phase);
+    check(`7n. ${name}: every writer refuses`, saved.ok === false && saved.blocked === true);
+    check(`7n. ${name}: the Checks page says so`, /needs attention/.test(status), status);
     await k.close();
   }
   // o. the read-back after the commit fails
   {
     const k = await ctx(R0);
+    // The commit completes; the read-back of it fails once.
     await k.p.evaluate(() => {
-      const set = Storage.prototype.setItem, get = Storage.prototype.getItem;
+      const put = IDBObjectStore.prototype.put, get = IDBObjectStore.prototype.get;
       let committed = false;
-      Storage.prototype.setItem = function(key, v){ const r = set.call(this, key, v); if(key === 'strat_stepE_applied') committed = true; return r; };
-      Storage.prototype.getItem = function(key){ if(committed && key === 'strat_stepE_applied' && !window.__readBackDone){ window.__readBackDone = true; throw new Error('unreadable'); } return get.call(this, key); };
+      IDBObjectStore.prototype.put = function(v, key){ if(this.name === 'state') committed = true; return put.call(this, v, key); };
+      IDBObjectStore.prototype.get = function(key){ if(committed && this.name === 'state' && !window.__readBackDone){ window.__readBackDone = true; throw new Error('unreadable'); } return get.call(this, key); };
     });
     const out = await apply(k.p, prepared(R0, P0));
     check('7o. "outcome not confirmed"', out.ok === false && out.unconfirmed === true && /could not be confirmed/.test(out.reason), out);
-    await k.p.reload(); await k.p.waitForFunction(() => journalLockState === 'shared');
+    await k.p.reload(); await ready(k.p);
     const s = await state(k.p);
     check('7o. on reopening, the stored record decides', s.key === 'strat_trades_e1' && fp(s.current) === fp(P0));
     await k.close();
@@ -391,7 +458,7 @@ const { launch, serve } = require('./browser.js');
   {
     const k = await ctx(R0);
     await apply(k.p, prepared(R0, P0));
-    await k.p.evaluate(() => { const set = Storage.prototype.setItem; window.__failOnce = true; Storage.prototype.setItem = function(key, v){ if(key === 'strat_stepE_applied' && window.__failOnce){ window.__failOnce = false; throw new Error('refused'); } return set.call(this, key, v); }; });
+    await k.p.evaluate(() => { const put = IDBObjectStore.prototype.put; window.__failOnce = true; IDBObjectStore.prototype.put = function(v, key){ if(this.name === 'state' && window.__failOnce){ window.__failOnce = false; throw new Error('refused'); } return put.call(this, v, key); }; });
     const first = await putBack(k.p);
     let s = await state(k.p);
     check('7p. still applied and unchanged; reported', first.ok === false && s.key === 'strat_trades_e1' && fp(s.current) === fp(P0), first);
@@ -442,7 +509,7 @@ const { launch, serve } = require('./browser.js');
     }) }; });
     const out = await apply(k2.p, prepared(R0, P0));
     const s = await state(k2.p);
-    check('7r. a copy arriving in the release-then-exclusive instant: refused rather than written', out.ok === false && /open somewhere else/.test(out.reason) && s.record === null && s.items.length === 0, out);
+    check('7r. a copy arriving in the release-then-exclusive instant: refused rather than written', out.ok === false && /open somewhere else/.test(out.reason) && s.stored === null && s.record === null && s.items.length === 0, out);
     await k2.close();
   }
 
