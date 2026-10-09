@@ -134,8 +134,14 @@ const { launch, serve } = require('./browser.js');
   // This is the whole point. A re-import hands back every trade he already
   // has; each of those used to arrive carrying 300 chart bars that were
   // read once and discarded.
+  //
+  // AUDIT M-1: a trade's id now comes from its fill pair, so "the same id"
+  // is no longer only the same queued entry sent again -- it is also the
+  // same trade REBUILT, whose catch-up must land. So the saved copies here
+  // already hold their chart (nothing to catch up), and case 2b below shows
+  // a saved copy WITHOUT one gaining it once, and keeping it.
   {
-    const journal = Array.from({length: 12}, (_,i) => saved(i));
+    const journal = Array.from({length: 12}, (_,i) => saved(i, { replayData: bars(300) }));
     const queue = Array.from({length: 12}, (_,i) => Object.assign(arriving(i), { __bars: true }));
     const { p, asked, errors, close } = await phone(journal, queue);
     await p.evaluate(() => pollBackendOnce('https://fake.example.com', true));
@@ -148,9 +154,28 @@ const { launch, serve } = require('./browser.js');
     await close();
   }
 
+  // ---- 2b (M-1). A saved trade with NO chart gains it once, and keeps it --
+  {
+    const journal = Array.from({length: 4}, (_,i) => saved(i));
+    const queue = Array.from({length: 4}, (_,i) => Object.assign(arriving(i), { __bars: true }));
+    const { p, asked, errors, close } = await phone(journal, queue);
+    await p.evaluate(() => pollBackendOnce('https://fake.example.com', true));
+    const stored = await p.evaluate(() => loadTrades());
+    check(`four trades stay four (${stored.length})`, stored.length === 4);
+    check(`each fetched its missing chart once (${asked.replay.length})`, asked.replay.length === 4);
+    check('and KEPT it: every one now replays 300 bars, nothing downloaded to be thrown away',
+      stored.every(t => ((t.replayData||{}).candles||[]).length === 300));
+    // The same four served again (a removal that did not land): nothing to fetch now.
+    const before = asked.replay.length;
+    await p.evaluate(() => pollBackendOnce('https://fake.example.com', true));
+    check(`served again, not one more set of bars (${asked.replay.length - before})`, asked.replay.length === before);
+    check('nothing threw', errors.length === 0);
+    await close();
+  }
+
   // ---- 3. A new trade DOES get its chart ---------------------------------
   {
-    const journal = Array.from({length: 12}, (_,i) => saved(i));
+    const journal = Array.from({length: 12}, (_,i) => saved(i, { replayData: bars(300) }));
     const fresh = Array.from({length: 3}, (_,i) => Object.assign(arriving(50+i), { __bars: true }));
     const queue = Array.from({length: 12}, (_,i) => Object.assign(arriving(i), { __bars: true })).concat(fresh);
     const { p, asked, errors, close } = await phone(journal, queue);

@@ -9121,9 +9121,43 @@ async function fetchPendingReplay(url, t){
   }
 }
 
+// AUDIT M-1 (authorized by the owner 9 Oct 2026: "I authorize M-1
+// implementation"; plan v4). A trade's id now comes from its two broker
+// fills, so the same trade arriving again carries the SAME id. Two different
+// fill pairs under one id would be a collision: never trusted away, never
+// overwriting either trade. It is written down ONCE per incident (the same
+// key every time it is seen again, with a count), in the refusals list kept
+// on the phone and on the Details line -- never on his screen.
+// The key: "id-collision:" + id + ":" + SHA-256 of the sorted fill-pair
+// strings ("open+close"). The app sees no account, so its pair strings carry
+// none; the service keeps its own record with the account included.
+async function recordIdCollision(id, pairs, why){
+  const sorted = [...new Set(pairs.map(String))].sort();
+  let digest = sorted.join('\n');
+  try{
+    if(window.crypto && crypto.subtle){
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(digest));
+      digest = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  }catch(e){ /* the readable pair strings stay the key */ }
+  const key = `id-collision:${id}:${digest}`;
+  const reason = `Trade id ${id} is already used by different broker fills (${sorted.join(' vs ')}). ${why} Neither trade was changed.`;
+  try{ noteProblem('import', 'Not added: ' + reason); }catch(e){}
+  try{
+    const list = JSON.parse(localStorage.getItem('strat_import_refusals') || '[]');
+    const at = Date.now();
+    const i = list.findIndex(x => x && x.key === key);
+    if(i >= 0) list[i] = Object.assign({}, list[i], { at, detections: (Number(list[i].detections) || 1) + 1 });
+    else list.push({ key, kind: 'id-collision', at, firstAt: at, id: String(id), pairs: sorted,
+      detectedBy: 'app', detections: 1, what: `trade id ${id}`, fills: [], reason });
+    localStorage.setItem('strat_import_refusals', JSON.stringify(list.slice(-50)));
+  }catch(e){}
+}
+
 async function autoImportPendingTrades(url, pending){
   const trades = loadTrades();
   const existingIds = new Set(trades.map(t=>t.id));
+  const journalById = new Map(trades.map(t => [String(t.id), t]));
   // Keep the trade itself, not just its identity — a repeat arrival is
   // usually a REBUILD carrying facts the saved copy does not have, and
   // throwing it away loses them.
@@ -9299,21 +9333,36 @@ async function autoImportPendingTrades(url, pending){
     // be offered again on every check, for ever.
     if(beforeTheFloor(t)){
       tooOld++;
-      toClear.push(t.id);
+      toClear.push(t);
       continue;
     }
     if(existingIds.has(t.id)){
-      // Already in his journal. This used to just move on -- which left
-      // the trade sitting in the server's queue for ever, and that queue
-      // is re-sent IN FULL, chart bars and all, every thirty seconds the
-      // app is open. Twenty stuck trades measured at 160KB a poll, about
-      // 19MB an hour, for ever. The comment here even named the cause (a
-      // delete that did not land) and then did nothing about it.
-      //
-      // Every way out of this loop now clears the server's copy, because
-      // the trade is accounted for however it got here.
-      toClear.push(t.id);
-      continue;
+      // M-1: the id is now made from the fill pair, so an arrival with the
+      // SAME id and the SAME pair is the same trade arriving again -- it goes
+      // on to the pair check below, where a catch-up still lands (skipping it
+      // here would silently stop every catch-up, the fault recorded on
+      // 2026-09-09). The same id with a DIFFERENT pair is a collision: refused
+      // and recorded, neither trade changed.
+      const mine = journalById.get(String(t.id));
+      if(mine && hasPair(mine) && hasPair(t)){
+        if(fillPair(mine) !== fillPair(t)){
+          await recordIdCollision(t.id, [fillPair(mine), fillPair(t)], 'It arrived while that id was already in your journal.');
+          toClear.push(t);
+          continue;
+        }
+      } else {
+        // Already in his journal. This used to just move on -- which left
+        // the trade sitting in the server's queue for ever, and that queue
+        // is re-sent IN FULL, chart bars and all, every thirty seconds the
+        // app is open. Twenty stuck trades measured at 160KB a poll, about
+        // 19MB an hour, for ever. The comment here even named the cause (a
+        // delete that did not land) and then did nothing about it.
+        //
+        // Every way out of this loop now clears the server's copy, because
+        // the trade is accounted for however it got here.
+        toClear.push(t);
+        continue;
+      }
     }
     // Same broker fills as a trade already on file. Never a new trade --
     // but WHICH kind of repeat it is decides what happens next, and getting
@@ -9340,11 +9389,11 @@ async function autoImportPendingTrades(url, pending){
       const owner = byPair.get(pk);
       if(!sameShape(owner.trade, t)){
         refuse(t, 'These broker fills are already in your journal as a trade of a different shape -- the same fills paired up twice.');
-        toClear.push(t.id);
+        toClear.push(t);
         continue;
       }
       if(owner.claimed){                 // a second copy inside this same batch
-        toClear.push(t.id);
+        toClear.push(t);
         continue;
       }
       if(!owner.trade.replayData) t = await withBars(t);
@@ -9353,7 +9402,7 @@ async function autoImportPendingTrades(url, pending){
         pollTally.seen.add(owner.trade.id);
         refreshed++;
       }
-      toClear.push(t.id);
+      toClear.push(t);
       continue;
     }
     // The shape is only asked of a saved copy that has NO fill pair to go on
@@ -9367,7 +9416,7 @@ async function autoImportPendingTrades(url, pending){
         // batch. Skipping it was right; leaving it in the server's queue
         // was not -- it would be re-sent, chart bars and all, on every
         // check from then on.
-        toClear.push(t.id);
+        toClear.push(t);
         continue;
       }
       // Same trade, arriving again. This is what "Reset & Re-import"
@@ -9386,7 +9435,7 @@ async function autoImportPendingTrades(url, pending){
         refreshed++;
       }
       rememberPair(already, false);      // it may have just gained its fill pair
-      toClear.push(t.id);
+      toClear.push(t);
       continue;
     }
     // Not on file by its references and not by its shape. Before treating it
@@ -9412,7 +9461,7 @@ async function autoImportPendingTrades(url, pending){
         // the ordinary checks above rather than reaching this one again.
         remember(blank.trade, true);
         rememberPair(blank.trade, true);
-        toClear.push(t.id);
+        toClear.push(t);
         continue;
       }
     }
@@ -9440,7 +9489,7 @@ async function autoImportPendingTrades(url, pending){
       const over = overCapacity(t);
       if(over){
         refuse(t, 'Taking it would mean ' + over + ' -- the same fills paired up a second time.');
-        toClear.push(t.id);
+        toClear.push(t);
         continue;
       }
     }
@@ -9520,13 +9569,25 @@ async function autoImportPendingTrades(url, pending){
     trades.unshift(trade);   // so a repeat later in this batch is recognised
     added.unshift(trade);
     imported++;
-    toClear.push(t.id);
+    toClear.push(t);
   }
   const wrote = commitTradeChanges([...touched.values()], added);
   // Not saved: nothing is cleared, so every one of these is offered again.
   if(!wrote.ok) return { imported:0, refreshed:0, failed: wrote.reason };
-  for(const id of toClear){
-    try{ await fetch(url+'/api/trades/pending/'+encodeURIComponent(id), {method:'DELETE'}); }catch(e){ /* offered again next check, and recognised as already on file */ }
+  // M-1: each removal names the fill pair it handled, so the server removes
+  // only that pair. A different pair waiting under the same id is kept and
+  // answered 409: recorded as a collision, and nothing else is cleared for it.
+  for(const c of toClear){
+    const pair = Array.isArray(c.fills) && c.fills.length === 2 ? c.fills.map(String) : null;
+    try{
+      const r = await fetch(url+'/api/trades/pending/'+encodeURIComponent(c.id)
+        + (pair ? '?fills=' + encodeURIComponent(pair.join(',')) : ''), {method:'DELETE'});
+      if(r && r.status === 409 && pair){
+        const body = await r.json().catch(() => null);
+        const queued = body && Array.isArray(body.queuedPairs) ? body.queuedPairs.map(p => (p || []).map(String).join('+')) : [];
+        await recordIdCollision(c.id, [pair.join('+')].concat(queued), 'The server kept a different pair waiting under this id.');
+      }
+    }catch(e){ /* offered again next check, and recognised as already on file */ }
   }
   return { imported: wrote.added, refreshed };
 }
