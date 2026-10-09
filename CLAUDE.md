@@ -164,6 +164,21 @@ Status on 30 Sept 2026:
   (rules in the service's notes). H-4 owner decisions of
   the same day (Q1 Option A; Q2 rule V-1 to V-7 approved) are policy only;
   the live fetch is unchanged until its own plan.
+- **M-1 (Phase 1; plan v4 approved; implementation authorized 9 Oct 2026:
+  "I authorize M-1 implementation")**, the app half. A trade's id now comes
+  from its two broker fills, so the SAME trade arriving again carries the
+  SAME id. An arrival whose id is already in the journal:
+  - with the same fill pair goes on to the pair check (Step D), so its
+    catch-up still lands -- skipping it on the id would silently stop every
+    catch-up (the 2026-09-09 fault; tests/trade-id-collision.js C4);
+  - with a different pair is a collision: refused, both trades unchanged,
+    ONE entry per incident in strat_import_refusals (kind id-collision,
+    detectedBy "app", detections), and a line behind Details.
+  Every queue removal names its pair (DELETE ...?fills=open,close); a 409
+  (another pair kept under that id) is recorded the same way. The rollback
+  proof is permanent: tests/rollback-keeps-one-trade.js passes on the app
+  before M-1 and after. ROLLBACK ORDER: service first, then app -- the old
+  app with the M-1 service would skip same-id catch-ups.
 - The 7 known failures stay as baseline until the phase that owns them
   (auditor, C2). No new known failure without the owner's authorization.
 
