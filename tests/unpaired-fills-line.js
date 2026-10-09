@@ -90,6 +90,14 @@ const { launch, serve } = require('./browser.js');
     check(`"${r.line}"`, r.line === 'broker fills not paired: 0 open · 0 resolved · open legs held 2', r.line);
   }
 
+  console.log('\n--- 5. conflicting evidence and unreadable records are said, not hidden ---');
+  {
+    const r = await open({ exceptions: [], counts: { open: 2, resolved: 0, conflicted: 1, malformed: 3, byKind: {} }, openLegs: { held: 0, withoutAccountRef: 0 } });
+    check(`"${r.line}"`, r.line === 'broker fills not paired: 2 open · 0 resolved · 1 with conflicting evidence · 3 stored records unreadable · open legs held 0', r.line);
+    const r2 = await open({ exceptions: [], counts: { open: 0, resolved: 0, conflicted: 0, malformed: 'the whole record', byKind: {} }, openLegs: { held: 0, withoutAccountRef: 0 } });
+    check(`"${r2.line}"`, r2.line === 'broker fills not paired: 0 open · 0 resolved · the stored record is unreadable · open legs held 0', r2.line);
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await b.close(); if(site.close) site.close();
   process.exit(fail ? 1 : 0);

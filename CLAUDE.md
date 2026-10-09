@@ -157,7 +157,11 @@ Status on 30 Sept 2026:
   pair instead of dropping it; the app shows ONE line behind Details
   ("broker fills not paired: N open · M resolved"), never on his screen,
   with "not checked yet", "could not ask", and "older build" kept as
-  separate answers (tests/unpaired-fills-line.js). H-4 owner decisions of
+  separate answers (tests/unpaired-fills-line.js). After the auditor's
+  implementation review the line also says how many records carry
+  conflicting evidence and whether any stored record is unreadable; a
+  record is resolved only by the same broker fill paired in every contract
+  (rules in the service's notes). H-4 owner decisions of
   the same day (Q1 Option A; Q2 rule V-1 to V-7 approved) are policy only;
   the live fetch is unchanged until its own plan.
 - The 7 known failures stay as baseline until the phase that owns them

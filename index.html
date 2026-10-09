@@ -6369,6 +6369,9 @@ function unpairedLine(){
   const c = u.counts || {};
   const latest = (u.exceptions || []).find(e => e.status === 'open');
   return `broker fills not paired: ${c.open || 0} open · ${c.resolved || 0} resolved`
+    + (c.conflicted ? ` · ${c.conflicted} with conflicting evidence` : '')
+    + (c.malformed === 'the whole record' ? ' · the stored record is unreadable'
+       : c.malformed ? ` · ${c.malformed} stored records unreadable` : '')
     + (latest ? ` · latest ${latest.ticker || '?'} ${latest.occ || ''} ${latest.date || ''} (${latest.reason || latest.kind})` : '')
     + ` · open legs held ${u.openLegs ? u.openLegs.held : '?'}`;
 }
