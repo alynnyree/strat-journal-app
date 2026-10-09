@@ -6350,7 +6350,30 @@ async function gatherTech(url){
     const r = await fetch(url.replace(/\/$/,'')+'/health');
     techNotes.server = r.ok ? await r.json() : { unreachable: true, status: r.status };
   }catch(e){ techNotes.server = { unreachable: true, why: e && e.message }; }
+  // Audit H-2: broker fills the service could not pair, recorded rather than
+  // dropped. Read-only, behind Details only. Four different answers, never
+  // folded into one: not asked yet, could not reach it, an older service
+  // that does not report it, and the count itself.
+  try{
+    const r = await fetch(url.replace(/\/$/,'')+'/api/trades/exceptions');
+    techNotes.unpaired = r.ok ? await r.json()
+      : r.status === 404 ? { olderService: true } : { unreachable: true, status: r.status };
+  }catch(e){ techNotes.unpaired = { unreachable: true, why: e && e.message }; }
   techNotes.checked = true;
+}
+function unpairedLine(){
+  const u = techNotes.unpaired;
+  if(!techNotes.checked || !u) return 'broker fills not paired: not checked yet';
+  if(u.olderService) return 'broker fills not paired: not reported by this service (older build)';
+  if(u.unreachable) return `broker fills not paired: could not ask (${u.why || u.status})`;
+  const c = u.counts || {};
+  const latest = (u.exceptions || []).find(e => e.status === 'open');
+  return `broker fills not paired: ${c.open || 0} open · ${c.resolved || 0} resolved`
+    + (c.conflicted ? ` · ${c.conflicted} with conflicting evidence` : '')
+    + (c.malformed === 'the whole record' ? ' · the stored record is unreadable'
+       : c.malformed ? ` · ${c.malformed} stored records unreadable` : '')
+    + (latest ? ` · latest ${latest.ticker || '?'} ${latest.occ || ''} ${latest.date || ''} (${latest.reason || latest.kind})` : '')
+    + ` · open legs held ${u.openLegs ? u.openLegs.held : '?'}`;
 }
 
 // True when the server is measuring with an older rule than this app
@@ -7098,6 +7121,7 @@ function techText(){
       : `server up ${Math.round((srv.uptimeSeconds||0)/60)}m · mem ${srv.memoryMb ?? '?'}MB peak ${srv.peakMemoryMb ?? '?'}MB · failures ${(srv.recentFailures||[]).length}`,
     !techNotes.checked ? '' : `server ftfc rule v${srv.ftfcRuleVersion ?? 'unknown (older build)'}${
       srv.ftfcRuleVersion === FTFC_RULE_VERSION ? ' (matches)' : ' — DOES NOT MATCH app v' + FTFC_RULE_VERSION}`,
+    unpairedLine(),
     `last rebuild ask: ${when(ask)}${ask && ask.forced ? ' (forced)' : ''}`,
     dec ? `rebuild declined: ${dec.text} (${when(dec)})` : 'rebuild not declined',
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
