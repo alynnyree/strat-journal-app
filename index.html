@@ -1056,7 +1056,7 @@
       </div>
       <div class="strat-opt play-opt" data-v="Broadening Formation Scalp" onclick="selectPlay(this)">
         <div class="t">Broadening Formation Scalp</div>
-        <div class="d">About WHERE price is, not which combo. Spot the broadening formation on a bigger timeframe — 30 minute or 1 hour, say — then trade it on the 1 or 5 minute, in at one edge and aiming for the other side. Any combo can be this.</div>
+        <div class="d">About WHERE price is, not which combo. The broadening formation is drawn on a bigger timeframe and the scalp taken on any smaller one — a 4 hour formation scalped on the 15 minute, or a 1 hour formation on the 5 minute, say. In at one edge and aiming for the other side. Any combo can be this.</div>
       </div>
       <div class="strat-opt play-opt" data-v="FTFC Direction Play" onclick="selectPlay(this)">
         <div class="t">FTFC Direction Play</div>
@@ -8425,7 +8425,11 @@ function tradeIsStale(t){
 }
 
 // Must match FTFC_RULE_VERSION in the server's cron.js.
-const FTFC_RULE_VERSION = 2;
+// 3 (11 Oct 2026): intraday bars counted from the start of the fill's
+// minute; under 2 a fill's seconds read every intraday open a minute late.
+// Raising it asks every trade measured under 2 to be measured ONCE again,
+// which is the re-run he asked for; a timeframe he set by hand is kept.
+const FTFC_RULE_VERSION = 3;
 
 // Asks the server whether Alpaca is connected. Kept separate from the
 // display on the Journal tab, because the answer is needed whether or not
