@@ -1056,7 +1056,7 @@
       </div>
       <div class="strat-opt play-opt" data-v="Broadening Formation Scalp" onclick="selectPlay(this)">
         <div class="t">Broadening Formation Scalp</div>
-        <div class="d">About WHERE price is, not which combo. Spot the broadening formation on a bigger timeframe — 30 minute or 1 hour, say — then trade it on the 1 or 5 minute, in at one edge and aiming for the other side. Any combo can be this.</div>
+        <div class="d">About WHERE price is, not which combo. The broadening formation is drawn on a bigger timeframe and the scalp taken on any smaller one — a 4 hour formation scalped on the 15 minute, or a 1 hour formation on the 5 minute, say. In at one edge and aiming for the other side. Any combo can be this.</div>
       </div>
       <div class="strat-opt play-opt" data-v="FTFC Direction Play" onclick="selectPlay(this)">
         <div class="t">FTFC Direction Play</div>
@@ -7088,7 +7088,10 @@ function techText(){
     })(),
     `trades ${all.length} · from schwab ${auto.length} · awaiting re-measure ${auto.filter(tradeIsStale).length}`,
     `awaiting read ${all.filter(classifyWaiting).length} · gave up on ${all.filter(classifyStuck).length}`,
-    `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}`,
+    `ftfc rule v${FTFC_RULE_VERSION} · alpaca ${alpacaConnected ? 'yes' : 'no'}${(() => {
+      try{ const h = JSON.parse(localStorage.getItem('strat_ftfc_held') || 'null');
+        return h && h.ids ? ` · re-measure held ${Object.keys(h.ids).length} (last: ${h.last.reason})` : ''; }catch(e){ return ' · re-measure held: record unreadable'; }
+    })()}`,
     (() => {
       const vv = window.visualViewport;
       const bar = document.querySelector('.navbar');
@@ -8389,6 +8392,14 @@ function tradeIsStale(t){
   // fill in a blank, never change a figure that is already known, so
   // this cannot move anything he is looking at except by completing it.
   if(missingEssentials(t) && (t.fillAttempts || 0) < MAX_FILL_ATTEMPTS) return true;
+  // A reading taken under an OLDER timeframe rule, and not one he set by
+  // hand. Asked BEFORE "finished", because a finished trade is exactly the
+  // kind that carries an old reading: checked after it (as it was until
+  // 11 Oct 2026), not one finished trade would ever ask, and the rule-3
+  // re-measure he asked for would never have started (proved by
+  // tests/ftfc-v3-remeasure.js, case T). Bounded: once re-measured the
+  // trade carries the new version and stops asking.
+  if(t.ftfcRun != null && Number(t.ftfcVersion || 1) < FTFC_RULE_VERSION && !his(t, 'ftfc')) return true;
   if(t.settled === true) return false;           // complete, and left alone
   // A stock price that has never been looked up with Alpaca available.
   //
@@ -8425,7 +8436,11 @@ function tradeIsStale(t){
 }
 
 // Must match FTFC_RULE_VERSION in the server's cron.js.
-const FTFC_RULE_VERSION = 2;
+// 3 (11 Oct 2026): intraday bars counted from the start of the fill's
+// minute; under 2 a fill's seconds read every intraday open a minute late.
+// Raising it asks every trade measured under 2 to be measured ONCE again,
+// which is the re-run he asked for; a timeframe he set by hand is kept.
+const FTFC_RULE_VERSION = 3;
 
 // Asks the server whether Alpaca is connected. Kept separate from the
 // display on the Journal tab, because the answer is needed whether or not
@@ -9659,8 +9674,24 @@ function his(saved, key){
   return !!(saved && saved.userSet && saved.userSet[key]);
 }
 
+// A rule-change re-measure that was held back, so a good reading was not
+// wiped. Kept OUTSIDE the journal (nothing of his changes) and shown
+// behind Details, so "why did this trade not update?" has an answer.
+function noteFtfcHeld(trade, reason){
+  try{
+    const h = JSON.parse(localStorage.getItem('strat_ftfc_held') || '{}');
+    h.ids = h.ids || {};
+    h.ids[trade.id] = { reason, at: new Date().toISOString() };
+    h.last = { id: trade.id, reason, at: h.ids[trade.id].at };
+    localStorage.setItem('strat_ftfc_held', JSON.stringify(h));
+  }catch(e){}
+}
+
 function refreshTradeFacts(saved, fresh){
   let changed = false;
+  // Asked BEFORE anything is filled in: only a trade that arrived short of
+  // something has its catch-up counted (see the end of this function).
+  const wasMissing = missingEssentials(saved);
   const set = (key, value) => {
     if(value === undefined || value === null) return;
     if(saved[key] === value) return;
@@ -9780,7 +9811,17 @@ function refreshTradeFacts(saved, fresh){
 
   // The underlying price, and how it was obtained. A rebuild that has an
   // exact print replaces a candle close; one that does not, does not.
-  if(fresh.undEntry != null && !his(saved, 'undEntry')){
+  // (Until 11 Oct 2026 the code did not do what this says: ANY rebuilt
+  // price replaced the one on file, so an exact print could be swapped for
+  // a rougher candle close. Found by tests/ftfc-v3-remeasure.js -- the rule
+  // 3 re-measure rebuilds every trade, so it would have done it to all.)
+  const betterPrice = (was, wasExact, wasUpgradable, now, nowExact, nowUpgradable) =>
+    now != null && (was == null
+      || (wasExact !== true && nowExact === true)
+      || (wasExact === true && wasUpgradable === true && nowExact === true && nowUpgradable !== true));
+  if(!betterPrice(saved.undEntry, saved.undEntryExact, saved.undEntryUpgradable, fresh.undEntry, fresh.undEntryExact, fresh.undEntryUpgradable)){
+    // Nothing better arrived: the price on file stays exactly as it is.
+  } else if(fresh.undEntry != null && !his(saved, 'undEntry')){
     set('undEntry', fresh.undEntry); set('undEntrySource', fresh.undEntrySource); set('undEntryExact', fresh.undEntryExact);
     // Whether it is STILL waiting on the all-venues price. Cleared once a
     // reply comes back that is not itself provisional, so a trade cannot
@@ -9794,7 +9835,9 @@ function refreshTradeFacts(saved, fresh){
   if(fresh.undPricedWithAlpaca === true && saved.undPricedWithAlpaca !== true){
     saved.undPricedWithAlpaca = true; changed = true;
   }
-  if(fresh.undExit  != null && !his(saved, 'undExit')){
+  if(!betterPrice(saved.undExit, saved.undExitExact, saved.undExitUpgradable, fresh.undExit, fresh.undExitExact, fresh.undExitUpgradable)){
+    // Nothing better arrived: the price on file stays exactly as it is.
+  } else if(fresh.undExit  != null && !his(saved, 'undExit')){
     set('undExit',  fresh.undExit);  set('undExitSource',  fresh.undExitSource);  set('undExitExact',  fresh.undExitExact);
     saved.undExitUpgradable = !!fresh.undExitUpgradable;
   }
@@ -9815,7 +9858,24 @@ function refreshTradeFacts(saved, fresh){
   // since. A corrected rule is a real reason; running again is not.
   const noReadingYet = saved.ftfcRun == null;
   const ruleMovedOn = Number(saved.ftfcVersion || 1) < Number(fresh.ftfcVersion || 1);
-  if(fresh.ftfcRun != null && !his(saved, 'ftfc') && (noReadingYet || ruleMovedOn)){
+  // A RE-measure replaces a reading only with a REAL one (11 Oct 2026). An
+  // answer with no timeframes at all, or one missing timeframes the trade
+  // already has, means the market data did not reach the server (Schwab
+  // keeps minute bars about a month; Alpaca may be off) -- not that the
+  // market had no direction. Taking it would wipe a good reading and stamp
+  // the trade "done" so it never came back. It is held instead: the reading
+  // on file stays exactly as it is, still marked with its old rule, and
+  // the reason is recorded for Details. The 1-minute is exempt: it is blank
+  // by design at minute resolution.
+  const freshGrid = fresh.ftfc || {};
+  const lostTimeframes = Object.keys(saved.ftfc || {}).filter(tf => tf !== '1m' && saved.ftfc[tf] && !freshGrid[tf]);
+  const realReading = fresh.ftfcRun != null && Object.keys(freshGrid).length > 0 && lostTimeframes.length === 0;
+  if(!noReadingYet && ruleMovedOn && !his(saved, 'ftfc') && !realReading){
+    noteFtfcHeld(saved, !Object.keys(freshGrid).length
+      ? 'the new reading came back with no timeframes'
+      : 'the new reading came back without ' + lostTimeframes.join(', '));
+  }
+  if(fresh.ftfcRun != null && !his(saved, 'ftfc') && (noReadingYet || (ruleMovedOn && realReading))){
     set('ftfcRun', fresh.ftfcRun);
     // The rule that produced the reading. Without carrying this over, a
     // rebuild that DID re-measure would look exactly like one that had
@@ -9823,7 +9883,9 @@ function refreshTradeFacts(saved, fresh){
     set('ftfcVersion', fresh.ftfcVersion);
     set('ftfcPriceAtEntry', fresh.ftfcPriceAtEntry);
     set('ftfcConfirmed', !!fresh.ftfcConfirmed);
-    set('ftfcDirection', fresh.ftfcDirection);
+    // One answer, taken whole: a new reading with NO direction must not
+    // leave the old reading's direction standing beside it.
+    if((saved.ftfcDirection ?? null) !== (fresh.ftfcDirection ?? null)){ saved.ftfcDirection = fresh.ftfcDirection ?? null; changed = true; }
     // Compared before assigning. Assigning unconditionally reported a
     // change on every rebuild, so a journal already up to date claimed to
     // have been updated — which is the same as saying nothing at all.
@@ -9853,9 +9915,14 @@ function refreshTradeFacts(saved, fresh){
     saved.stop = fresh.stop; saved.stopAuto = fresh.stopAuto; saved.stopReason = fresh.stopReason; changed = true;
   }
 
-  // That was a catch-up. Counted, so a blank that can never be filled is
-  // not chased for ever.
-  saved.fillAttempts = (saved.fillAttempts || 0) + 1;
+  // That was a catch-up for a blank. Counted, so a blank that can never be
+  // filled is not chased for ever. Counted ONLY when the trade arrived short
+  // of something: the count's one job is to cap retries for a blank (every
+  // reader asks missingEssentials first), so on a complete trade it means
+  // nothing -- and counting there made a timeframe re-measure of his finished
+  // trades write a field outside the seven approved for it (auditor's
+  // question, 11 Oct 2026; tests/ftfc-v3-remeasure.js case 1 and 5).
+  if(wasMissing) saved.fillAttempts = (saved.fillAttempts || 0) + 1;
   // "Finished" now means COMPLETE — or tried enough times that nothing
   // more is coming. Marking a trade finished while it is still missing a
   // fee is what left four of his outside the after-fee total with no way

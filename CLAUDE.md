@@ -482,7 +482,8 @@ Uses **The Strat**. Key concepts the code implements:
   The combo is WHAT he saw; the play is HOW he chose the trade. A trade
   carries both, and each is classified separately.
   1. **Broadening Formation Scalp** — broadening formation on a higher
-     timeframe, scalped on the 1m/5m from one edge to the other side.
+     timeframe, scalped on ANY smaller timeframe from one edge to the other
+     side (no fixed minutes; his rule of 11 Oct 2026).
   2. **FTFC Direction Play** — a Strat setup in the direction the
      timeframes already agree on. First target is completion of the
      setup, second is a gap or major pivot; once a pivot or its liquidity
@@ -511,9 +512,14 @@ Uses **The Strat**. Key concepts the code implements:
   appeared.
   Each play, as he has settled it:
   - **Broadening Formation Scalp — LOCATION.** A broadening formation can
-    form and be recognised on ANY timeframe. His method is to recognise it
-    on a LARGER timeframe (30-minute, 1-hour) and trade it on a LOWER one
-    (1-minute, 5-minute), in at one edge and aiming for the other side.
+    form and be recognised on ANY timeframe. His method: the formation is
+    drawn on a HIGHER timeframe chart and the scalp executed on a SMALLER
+    one, in at one edge and aiming for the other side. **ANY pairing
+    qualifies** (his words, 11 Oct 2026: "4HR formation / 15min scalp, or
+    1HR formation / 5min scalp"); no minutes are fixed, only that the
+    formation's timeframe is larger. This replaced "30m/1H formation,
+    1m/5m scalp", which the goal-sheet check found disagreeing with his
+    handwritten sheet (5m/15m).
     Exhaustion after a higher-timeframe target is a factor worth weighing,
     NOT a gate.
   - **FTFC Direction Play — DIRECTION.** Any combo, with the agreement.
