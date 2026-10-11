@@ -7,18 +7,21 @@
 // measured under 2 to be measured once more. This proves, in a real browser
 // on the real app, that the re-measure:
 //   T  actually starts for a journal of finished (settled) trades;
-//   1  changes ONLY the approved FTFC fields (plus the catch-up's own
-//      bookkeeping, fillAttempts and settled, which every catch-up writes);
+//   1  changes ONLY the seven approved FTFC fields on a finished trade --
+//      not even the catch-up's own counter (fillAttempts) or its finished
+//      mark (settled);
 //   2  never touches timeframes he set by hand;
 //   3  never touches money or anything else of his;
 //   4  never replaces a good reading with blanks -- not when the rebuild
 //      fails, not when it answers with nothing, not when it answers with
-//      fewer timeframes than the trade already has.
+//      fewer timeframes than the trade already has;
+//   5  still counts a catch-up for a trade that is SHORT of something (a fee),
+//      which is the counter's one job -- so narrowing it for case 1 did not
+//      switch off the retry cap.
 // Every trade here is invented; none of his data is in this project.
 const { launch, serve } = require('./browser.js');
 
 const APPROVED = ['ftfc', 'ftfcRun', 'ftfcVersion', 'ftfcPriceAtEntry', 'ftfcConfirmed', 'ftfcDirection', 'ftfcTimeframesInRun'];
-const BOOKKEEPING = ['fillAttempts', 'settled'];
 const URL_ = 'https://fake.example.com';
 
 // A finished trade measured under rule 2, as the journal holds it.
@@ -123,9 +126,10 @@ const freshDifferentMoney = (i, o = {}) => Object.assign({
     const out = await p.evaluate(async (a) => await autoImportPendingTrades('https://fake.example.com', a), [fresh(1)]);
     const after = byId(await read(p), 'T:1');
     const changed = changedKeys(before, after);
-    const unexpected = changed.filter(k => !APPROVED.includes(k) && !BOOKKEEPING.includes(k));
+    const unexpected = changed.filter(k => !APPROVED.includes(k));
     check(`the trade was re-measured (${out.refreshed} brought up to date, ${out.imported} added)`, out.refreshed === 1 && out.imported === 0, out);
-    check(`changed fields are only the approved FTFC ones (+ bookkeeping): ${changed.join(', ')}`, unexpected.length === 0, unexpected);
+    check(`changed fields are only the approved FTFC ones: ${changed.join(', ')}`, unexpected.length === 0, unexpected);
+    check(`the catch-up counter and the finished mark are unchanged (fillAttempts ${after.fillAttempts}, settled ${after.settled})`, after.fillAttempts === before.fillAttempts && after.settled === before.settled && after.settled === true);
     check('the new reading landed: run 12, version 3, the new grid',
       after.ftfcRun === 12 && after.ftfcVersion === 3 && JSON.stringify(after.ftfc) === JSON.stringify(NEW_GRID) && after.ftfcPriceAtEntry === 601.25);
     const MONEY = ['optEntry','optExit','contracts','contractsOpened','pnlDollar','pnlPercent','winLoss','fees','entryFees','exitFees','pnlNet'];
@@ -150,7 +154,7 @@ const freshDifferentMoney = (i, o = {}) => Object.assign({
     check('the exact stock prices stay (offered rougher candle closes 700 / 701)', after.undEntry === 601.23 && after.undExit === 602.10 && after.undEntryExact === true && after.undEntrySource === 'alpaca-trade');
     check('notes, setup, play and stop stay his', after.notes === before.notes && after.strat === before.strat && after.play === before.play && after.stop === before.stop);
     check('the disagreement is RECORDED, not applied (moneyDisagreement, by design)', !!(after.moneyDisagreement && after.moneyDisagreement.fees && after.moneyDisagreement.fees.kept === 2.66 && after.moneyDisagreement.fees.offered === 9.99));
-    const unexpected = changedKeys(before, after).filter(k => !APPROVED.includes(k) && !BOOKKEEPING.includes(k) && k !== 'moneyDisagreement');
+    const unexpected = changedKeys(before, after).filter(k => !APPROVED.includes(k) && k !== 'moneyDisagreement');
     check(`nothing else changed (${unexpected.join(', ') || 'none'})`, unexpected.length === 0, unexpected);
     check('nothing threw', errors.length === 0, errors);
     await ctx.close();
@@ -165,7 +169,7 @@ const freshDifferentMoney = (i, o = {}) => Object.assign({
     const after = byId(await read(p), 'T:1');
     check('his FTFC reading is byte-identical (grid, run, verdict, direction, version)', JSON.stringify(pick(after, APPROVED)) === JSON.stringify(pick(before, APPROVED)), pick(after, APPROVED));
     check('his hand-set mark is still there', after.userSet && after.userSet.ftfc === true);
-    const unexpected = changedKeys(before, after).filter(k => !BOOKKEEPING.includes(k));
+    const unexpected = changedKeys(before, after);
     check(`nothing else changed either (${unexpected.join(', ') || 'none'})`, unexpected.length === 0, unexpected);
     check('nothing threw', errors.length === 0, errors);
     await ctx.close();
@@ -204,13 +208,48 @@ const freshDifferentMoney = (i, o = {}) => Object.assign({
     const after = byId(await read(p), 'T:1');
     check(`${label}: the FTFC reading on file is byte-identical`, JSON.stringify(pick(after, APPROVED)) === JSON.stringify(pick(before, APPROVED)), pick(after, APPROVED));
     check(`${label}: it is still marked rule 2, so it can be measured again when data is there`, after.ftfcVersion === 2);
-    const unexpected = changedKeys(before, after).filter(k => !BOOKKEEPING.includes(k));
+    const unexpected = changedKeys(before, after);
     check(`${label}: nothing else changed (${unexpected.join(', ') || 'none'})`, unexpected.length === 0, unexpected);
     if (over.ftfcRun != null) {
       const held = await p.evaluate(() => JSON.parse(localStorage.getItem('strat_ftfc_held') || 'null'));
       check(`${label}: the hold is recorded with its reason, outside the journal (${held && held.last && held.last.reason})`, !!(held && held.ids && held.ids['T:1'] && /came back/.test(held.ids['T:1'].reason)));
     }
     check(`${label}: nothing threw`, errors.length === 0, errors);
+    await ctx.close();
+  }
+
+  console.log('\n--- 5. a trade SHORT of a fee still has its catch-up counted (the retry cap still works) ---');
+  {
+    const short = { fees:null, entryFees:null, exitFees:null, pnlNet:null, settled:false, fillAttempts:0 };
+    const { p, ctx, errors, loaded } = await page([saved(1, short), saved(2), saved(3), saved(4), saved(5)]);
+    const before = byId(loaded, 'T:1');
+    // The fee is still not known on this arrival: the blank stays, and the go is counted.
+    await p.evaluate(async (a) => await autoImportPendingTrades('https://fake.example.com', a),
+      [fresh(1, { fees:null, entryFees:null, exitFees:null, pnlNet:null })]);
+    let after = byId(await read(p), 'T:1');
+    check(`5a. no fee yet: the go is counted (fillAttempts ${before.fillAttempts} -> ${after.fillAttempts}) and it is not marked finished`, after.fillAttempts === 1 && after.settled === false && after.fees == null);
+    // The fee arrives on the next go: it is filled in (a blank may be filled once), counted, and finished.
+    await p.evaluate(async (a) => await autoImportPendingTrades('https://fake.example.com', a), [fresh(1)]);
+    after = byId(await read(p), 'T:1');
+    check(`5b. the fee arrives: filled in, counted (fillAttempts ${after.fillAttempts}), finished`, after.fees === 2.66 && after.pnlNet === 29.34 && after.fillAttempts === 2 && after.settled === true);
+    // A third go on what is now a complete trade is not counted.
+    await p.evaluate(async (a) => await autoImportPendingTrades('https://fake.example.com', a), [fresh(1)]);
+    const third = byId(await read(p), 'T:1');
+    check(`5c. once complete, a further go is not counted (fillAttempts stays ${third.fillAttempts})`, third.fillAttempts === 2 && third.settled === true);
+    check('5. the four other trades are byte-identical', JSON.stringify((await read(p)).filter(t => t.id !== 'T:1')) === JSON.stringify(loaded.filter(t => t.id !== 'T:1')));
+    check('5. nothing threw', errors.length === 0, errors);
+    await ctx.close();
+  }
+  {
+    // 5d. Short of a fee, and every go comes back without one: it stops after three.
+    const short = { fees:null, entryFees:null, exitFees:null, pnlNet:null, settled:false, fillAttempts:2 };
+    const { p, ctx, errors } = await page([saved(1, short), saved(2)]);
+    await p.evaluate(async (a) => await autoImportPendingTrades('https://fake.example.com', a),
+      [fresh(1, { fees:null, entryFees:null, exitFees:null, pnlNet:null })]);
+    const after = byId(await read(p), 'T:1');
+    check(`5d. the third go without a fee is counted and the trade stops asking (fillAttempts ${after.fillAttempts}, settled ${after.settled})`, after.fillAttempts === 3 && after.settled === true);
+    check('5d. it no longer asks for a catch-up for its fee', await p.evaluate(() => { const t = loadTrades().find(x => x.id === 'T:1'); return missingEssentials(t) && !(t.fillAttempts < MAX_FILL_ATTEMPTS); }));
+    check('5d. nothing threw', errors.length === 0, errors);
     await ctx.close();
   }
 

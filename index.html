@@ -9689,6 +9689,9 @@ function noteFtfcHeld(trade, reason){
 
 function refreshTradeFacts(saved, fresh){
   let changed = false;
+  // Asked BEFORE anything is filled in: only a trade that arrived short of
+  // something has its catch-up counted (see the end of this function).
+  const wasMissing = missingEssentials(saved);
   const set = (key, value) => {
     if(value === undefined || value === null) return;
     if(saved[key] === value) return;
@@ -9912,9 +9915,14 @@ function refreshTradeFacts(saved, fresh){
     saved.stop = fresh.stop; saved.stopAuto = fresh.stopAuto; saved.stopReason = fresh.stopReason; changed = true;
   }
 
-  // That was a catch-up. Counted, so a blank that can never be filled is
-  // not chased for ever.
-  saved.fillAttempts = (saved.fillAttempts || 0) + 1;
+  // That was a catch-up for a blank. Counted, so a blank that can never be
+  // filled is not chased for ever. Counted ONLY when the trade arrived short
+  // of something: the count's one job is to cap retries for a blank (every
+  // reader asks missingEssentials first), so on a complete trade it means
+  // nothing -- and counting there made a timeframe re-measure of his finished
+  // trades write a field outside the seven approved for it (auditor's
+  // question, 11 Oct 2026; tests/ftfc-v3-remeasure.js case 1 and 5).
+  if(wasMissing) saved.fillAttempts = (saved.fillAttempts || 0) + 1;
   // "Finished" now means COMPLETE — or tried enough times that nothing
   // more is coming. Marking a trade finished while it is still missing a
   // fee is what left four of his outside the after-fee total with no way
