@@ -21,6 +21,16 @@ rather than passing quietly:
   used to be completely invisible, both to "Check for Duplicate Trades" and to the
   import, so it was written down again on every pass.
 
+- **ftfc-fix1-app.js** -- FTFC Fix 1 (13 Oct 2026). A timeframe reading with
+  anything unmeasured is "FTFC unknown", never "did not agree". Checks the
+  six states, the app's own checks on every reading (fed readings the
+  service itself produced: `vectors/ftfc-fix1-vectors.json`, the same file in
+  the service), taking a re-measure only whole and only when better, the
+  final codes, that a refused or contradictory update changes nothing, that a
+  hand edit of the timeframes removes every Fix-1 field in the same save, and
+  that the other facts of an arrival (fee, stock price) still fill in as
+  before. Shown to fail on deliberately broken copies of the app.
+
 - **look-alike-trades.js** -- audit Step D (F2, 6 Oct 2026). Two genuine
   trades that look identical but are made of different broker fills must
   both be kept. Also checked: the same pair arriving again refreshes; the
