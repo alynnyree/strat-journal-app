@@ -4187,6 +4187,34 @@ function saveTrade(){
       // clearing a field he can see still clears it. Merging only puts back
       // what the screen never asked about.
       trades[idx] = Object.assign({}, before, trade);
+      // FTFC Fix 1 (W1). Only for a trade whose timeframes are not already
+      // his and not a reading from before Fix 1. The edit screen shows only
+      // the grid, so "did he change the timeframes?" is asked of the GRID
+      // alone: an unknown reading has no verdict, and the screen's own
+      // recount of a partial grid must not claim the timeframes for him
+      // just because he edited a note.
+      const ftfcBefore = ftfcStateOf(before);
+      if(ftfcBefore !== 'LEGACY' && ftfcBefore !== 'HAND'){
+        const merged = trades[idx];
+        const gridChanged = JSON.stringify(before.ftfc || {}) !== JSON.stringify(trade.ftfc || {});
+        if(gridChanged){
+          // HAND cleanup: in the save that makes the timeframes his, every
+          // Fix-1 field goes, so his grid is never shown as "unknown" and no
+          // later update can touch it.
+          merged.userSet = Object.assign({}, merged.userSet || {}, { ftfc: true });
+          for(const k of FTFC_META_KEYS.concat(FTFC_READING_KEYS)) delete merged[k];
+        } else {
+          // Any other edit leaves every FTFC field exactly as it was.
+          for(const k of FTFC_VERDICT_KEYS.concat(FTFC_META_KEYS, FTFC_READING_KEYS)){
+            if(Object.prototype.hasOwnProperty.call(before, k)) merged[k] = before[k]; else delete merged[k];
+          }
+          const hadIt = !!(before.userSet && before.userSet.ftfc);
+          if(!hadIt && merged.userSet && merged.userSet.ftfc){
+            const u = Object.assign({}, merged.userSet); delete u.ftfc;
+            if(Object.keys(u).length) merged.userSet = u; else delete merged.userSet;
+          }
+        }
+      }
     } else trades.unshift(trade);
   } else {
     trades.unshift(trade);
@@ -4392,7 +4420,7 @@ const FTFC_STANCE = {
   with:    'Traded in the direction of FTFC',
   against: 'Traded in the opposite direction of FTFC',
   none:    'No FTFC either way',
-  unknown: 'FTFC direction never recorded — not counted either side',
+  unknown: 'FTFC unknown, or its direction never recorded — not counted either side',
 };
 // The same vocabulary, shortened only by dropping the repeated verb, for
 // the indented rows under each play where the line already carries a
@@ -4871,6 +4899,9 @@ function toggleTradeNotes(el){
 // left out of the comparison instead, and counted separately, until a
 // refresh fills the direction in.
 function alignmentOf(t){
+  // FTFC Fix 1: an unknown reading is asked FIRST. It is neither "agreed"
+  // nor "did not agree", and must never be counted as either.
+  if(t && isFtfcUnknown(t)) return 'unknown';
   if(!t || !t.ftfcConfirmed) return 'none';
   if(!t.ftfcDirection || !t.dir) return 'unknown';
   const bullish = t.ftfcDirection === 'bull';
@@ -4880,6 +4911,441 @@ function alignmentOf(t){
 function ftfcDirectionWord(t){
   if(!t || !t.ftfcDirection) return null;
   return t.ftfcDirection === 'bull' ? 'BULLISH' : (t.ftfcDirection === 'bear' ? 'BEARISH' : null);
+}
+
+// ======================================================================
+// FTFC FIX 1 -- the app half (13 Oct 2026). Owner's authorisation, in
+// words: "I authorize FTFC Fix 1 implementation." Plans v1-v14 (auditor
+// passed v14), consolidated spec sections C to G.
+//
+// THE HARM IT REMOVES. A new trade's timeframe reading can come back
+// incomplete -- a provider refused or answered with nothing, or Alpaca's free
+// plan has not released the entry's minutes yet. That incomplete reading was
+// saved as final and could show "timeframes did not agree" when the truth
+// was UNKNOWN, and it was never measured again. Now:
+//   * an incomplete reading is "FTFC unknown", with a reason for every
+//     missing timeframe, and is left out of every with/against/none figure;
+//   * the service retries it (at most three times) and sends each result;
+//   * this file accepts a reading only whole, only if it validates, and only
+//     if it is better than what the trade already holds.
+//
+// The trade's FTFC fields are always in exactly ONE state (spec D):
+//   NONE    no reading, no Fix-1 fields
+//   LEGACY  a reading from before this change, no Fix-1 fields
+//   HAND    he set the timeframes himself (userSet.ftfc); Fix 1 never touches it
+//   PENDING a Fix-1 cycle with no reading taken yet
+//   ACTIVE  a Fix-1 reading kept, retries possibly still coming
+//   ENDED   a Fix-1 reading kept, retries over (final code set, never changes)
+// Anything else is INCONSISTENT and fails closed: nothing is applied to it.
+// ======================================================================
+const FTFC_META_KEYS = ['ftfcCycleVersion', 'ftfcReadingSeq', 'ftfcSeqSeen', 'ftfcFinal', 'ftfcFinalCode'];
+const FTFC_READING_KEYS = ['ftfcStatus', 'ftfcMissing', 'ftfcComplete', 'ftfcPriceSource', 'ftfcPriceTime', 'ftfcDiagnostics'];
+const FTFC_VERDICT_KEYS = ['ftfc', 'ftfcRun', 'ftfcConfirmed', 'ftfcDirection', 'ftfcTimeframesInRun', 'ftfcVersion', 'ftfcPriceAtEntry'];
+const FTFC_ENVELOPE_CODES = ['EXHAUSTED_READING', 'EXHAUSTED_INTERRUPTED', 'SUPERSEDED'];
+const FTFC_TRADE_CODES = FTFC_ENVELOPE_CODES.concat(['SINGLE_MEASUREMENT']);
+const FTFC_STATUSES = ['bull', 'bear', 'level', 'missing'];
+const FTFC_INTRADAY = ['4H', '2H', '1H', '30m', '15m', '5m', '3m', '1m'];
+const FTFC_REASON_NO_PRICE = 'no price at entry';
+const FTFC_REASON_BEFORE = 'entry before the session opened';
+const FTFC_REASON_NO_BAR = 'data did not contain this bar';
+const FTFC_FAILURE_RE = /^(Alpaca|Schwab) refused \(status \d+\)$|^(Alpaca|Schwab) answered with nothing$|^could not reach (Alpaca|Schwab)$/;
+const FTFC_FINAL_TEXT = {
+  EXHAUSTED_READING: 'Retries ended after 3 attempts.',
+  EXHAUSTED_INTERRUPTED: 'Retries ended: the last attempt was interrupted',
+  SUPERSEDED: 'Retries stopped: the measuring rule changed.',
+  SINGLE_MEASUREMENT: 'Measured once by a history import; not retried.',
+};
+const ftfcHas = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+const ftfcInt03 = v => Number.isInteger(v) && v >= 0 && v <= 3;
+
+const FTFC_ET_CLOCK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit' });
+function ftfcEasternMinutes(ms){
+  const p = Object.fromEntries(FTFC_ET_CLOCK.formatToParts(new Date(ms)).map(x => [x.type, x.value]));
+  let h = Number(p.hour); if(h === 24) h = 0;
+  return h * 60 + Number(p.minute);
+}
+
+// Which of the six states (or INCONSISTENT) a trade's FTFC fields are in.
+function ftfcStateOf(t){
+  if(!t) return 'INCONSISTENT';
+  const anyMeta = FTFC_META_KEYS.some(k => ftfcHas(t, k));
+  const anyRead = FTFC_READING_KEYS.some(k => ftfcHas(t, k));
+  if(t.userSet && t.userSet.ftfc) return (anyMeta || anyRead) ? 'INCONSISTENT' : 'HAND';
+  if(!anyMeta && !anyRead){
+    const gridEmpty = !t.ftfc || Object.keys(t.ftfc).length === 0;
+    const noRun = t.ftfcRun == null || t.ftfcRun === 0;
+    return gridEmpty && noRun ? 'NONE' : 'LEGACY';
+  }
+  if(!Number.isInteger(t.ftfcCycleVersion) || t.ftfcCycleVersion < 1) return 'INCONSISTENT';
+  const finalOk = (t.ftfcFinal === false && !ftfcHas(t, 'ftfcFinalCode'))
+               || (t.ftfcFinal === true && FTFC_TRADE_CODES.includes(t.ftfcFinalCode));
+  if(!finalOk) return 'INCONSISTENT';
+  if(!ftfcHas(t, 'ftfcStatus')){
+    // PENDING: a cycle with no reading taken yet.
+    if(anyRead || ftfcHas(t, 'ftfcReadingSeq')) return 'INCONSISTENT';
+    if(ftfcHas(t, 'ftfcSeqSeen') && !ftfcInt03(t.ftfcSeqSeen)) return 'INCONSISTENT';
+    if(t.ftfc && Object.keys(t.ftfc).length) return 'INCONSISTENT';
+    return 'PENDING';
+  }
+  if(!ftfcInt03(t.ftfcReadingSeq) || !ftfcInt03(t.ftfcSeqSeen) || t.ftfcReadingSeq > t.ftfcSeqSeen) return 'INCONSISTENT';
+  if(t.ftfcCycleVersion !== t.ftfcVersion) return 'INCONSISTENT';
+  if(typeof t.ftfcComplete !== 'boolean' || !t.ftfcStatus || typeof t.ftfcStatus !== 'object') return 'INCONSISTENT';
+  return t.ftfcFinal ? 'ENDED' : 'ACTIVE';
+}
+
+// "FTFC unknown": a Fix-1 reading that is incomplete, a Fix-1 cycle with no
+// reading yet, or a trade never measured at all (no grid, no run). Never
+// folded into "the timeframes did not agree".
+function isFtfcUnknown(t){
+  const st = ftfcStateOf(t);
+  if(st === 'PENDING') return true;
+  if(st === 'ACTIVE' || st === 'ENDED') return t.ftfcComplete === false;
+  if(st === 'NONE') return t.ftfcRun == null;
+  return false;
+}
+
+// Spec C4. The same rules the service applies (ftfcRetry.js readingProblems).
+function ftfcReadingProblems(r, entryMs){
+  const out = [];
+  if(!r || typeof r !== 'object') return ['not a reading'];
+  if(!Number.isInteger(r.version)) out.push('no rule version');
+  const st = r.status || {}, miss = r.missing || {};
+  for(const tf of TIMEFRAMES) if(!FTFC_STATUSES.includes(st[tf])) out.push(`status for ${tf} missing or unknown`);
+  for(const k of Object.keys(st)) if(!TIMEFRAMES.includes(k)) out.push(`unknown timeframe ${k}`);
+  const missingTfs = TIMEFRAMES.filter(tf => st[tf] === 'missing');
+  if(r.complete !== (missingTfs.length === 0)) out.push('complete flag disagrees with the statuses');
+  for(const tf of missingTfs) if(typeof miss[tf] !== 'string' || !miss[tf].length || miss[tf].length > 120) out.push(`no reason for ${tf}`);
+  for(const k of Object.keys(miss)) if(st[k] !== 'missing') out.push(`reason given for ${k}, which is not missing`);
+  const hasPrice = r.priceAtEntry != null;
+  if(hasPrice){
+    if(!(Number.isFinite(r.priceAtEntry) && r.priceAtEntry > 0)) out.push('price is not a positive number');
+    if(r.priceSource === 'exact-print'){
+      const s0 = Number.isFinite(entryMs) ? entryMs - (entryMs % 1000) : NaN;
+      if(!(Number.isFinite(r.priceTime) && r.priceTime >= s0 && r.priceTime <= entryMs)) out.push('exact print is not inside the entry second');
+    } else if(r.priceSource === 'prior-minute-close'){
+      const want = Number.isFinite(entryMs) ? entryMs - (entryMs % 60000) - 60000 : NaN;
+      if(r.priceTime !== want) out.push('prior minute is not the minute before the entry minute');
+    } else out.push('price has no allowed source');
+  } else if(r.priceSource != null || r.priceTime != null) out.push('a source or time without a price');
+  if(r.complete && !hasPrice) out.push('complete without a price');
+  for(const tf of missingTfs){
+    const why = miss[tf];
+    if(!hasPrice){ if(why !== FTFC_REASON_NO_PRICE) out.push(`${tf}: expected "${FTFC_REASON_NO_PRICE}"`); continue; }
+    if(why === FTFC_REASON_NO_PRICE){ out.push(`${tf}: "no price" given while a price exists`); continue; }
+    const before = Number.isFinite(entryMs) && ftfcEasternMinutes(entryMs) < 9 * 60 + 30;
+    if(FTFC_INTRADAY.includes(tf) && before){ if(why !== FTFC_REASON_BEFORE) out.push(`${tf}: expected "${FTFC_REASON_BEFORE}"`); continue; }
+    if(why === FTFC_REASON_BEFORE){ out.push(`${tf}: "before the session" given for an entry that was not`); continue; }
+    if(why !== FTFC_REASON_NO_BAR && !FTFC_FAILURE_RE.test(why)) out.push(`${tf}: reason not in the allowed forms`);
+  }
+  const grid = r.grid || {};
+  for(const tf of TIMEFRAMES){
+    const want = (st[tf] === 'bull' || st[tf] === 'bear') ? st[tf] : undefined;
+    if(grid[tf] !== want) out.push(`grid disagrees with the status for ${tf}`);
+  }
+  for(const k of Object.keys(grid)) if(!TIMEFRAMES.includes(k)) out.push(`grid has unknown ${k}`);
+  if(r.complete){
+    // The app RECOMPUTES the verdict with its own rule and the shared order.
+    const v = computeFtfcRun(grid);
+    if(r.run !== v.runLength || r.confirmed !== v.confirmed || (r.direction ?? null) !== (v.direction ?? null)
+       || JSON.stringify(r.timeframesInRun || []) !== JSON.stringify(v.timeframesInRun || [])) out.push('verdict disagrees with the statuses');
+  } else if(r.run != null || r.confirmed != null || r.direction != null || (r.timeframesInRun || []).length){
+    out.push('an incomplete reading carries a verdict');
+  }
+  return out;
+}
+
+// Spec C2 + C3: origin, kind and envelope structure. Returns a reason, or null.
+function ftfcEnvelopeProblem(item){
+  const env = item && item.ftfcEnvelope;
+  const origin = item && item.ftfcOrigin;
+  if(!env) return 'it carried no timeframe envelope (it arrived before its timeframes were measured, or from a mismatched sender)';
+  const allowed = origin === 'live' ? ['retry', 'final'] : origin === 'history' ? ['single'] : null;
+  if(!allowed) return `its origin "${origin}" is not one this app accepts`;
+  if(!allowed.includes(env.kind)) return `a "${env.kind}" envelope cannot come from origin "${origin}"`;
+  if(!Number.isInteger(env.version) || !env.open || !env.close) return 'the envelope does not name its rule version and fills';
+  const a = Array.isArray(env.attempts) ? env.attempts : null;
+  if(!a || !a.length) return 'the envelope lists no attempts';
+  for(let i = 0; i < a.length; i++){
+    const e = a[i];
+    if(!e || e.seq !== i || !ftfcInt03(e.seq)) return 'attempt numbers are not 0, 1, 2 ... in order without gaps';
+    if(e.version !== env.version || String(e.open) !== String(env.open) || String(e.close) !== String(env.close)) return 'an attempt belongs to another cycle';
+    if(e.outcome === 'interrupted'){ if(typeof e.reason !== 'string' || !e.reason) return 'an interrupted attempt has no reason'; }
+    else if(e.outcome !== 'reading') return 'an attempt has an unknown outcome';
+  }
+  const last = a[a.length - 1];
+  if(env.highestSeq !== last.seq) return 'the highest attempt number does not match the list';
+  if(env.kind === 'single'){
+    if(a.length !== 1 || last.outcome !== 'reading' || ftfcHas(env, 'finalCode')) return 'a "single" must be exactly one reading with no final code';
+  } else if(env.kind === 'retry'){
+    if(ftfcHas(env, 'finalCode') || last.seq >= 3) return 'a "retry" carries a final code or reaches attempt 3';
+  } else if(env.kind === 'final'){
+    const code = env.finalCode;
+    if(!FTFC_ENVELOPE_CODES.includes(code)) return 'a final has no allowed code';
+    if(code === 'EXHAUSTED_READING' && !(last.seq === 3 && last.outcome === 'reading')) return 'EXHAUSTED_READING without a reading as attempt 3';
+    if(code === 'EXHAUSTED_INTERRUPTED' && !(last.seq === 3 && last.outcome === 'interrupted')) return 'EXHAUSTED_INTERRUPTED without an interrupted attempt 3';
+  } else return 'unknown envelope kind';
+  return null;
+}
+
+// The trade fields one whole reading writes.
+function ftfcFieldsOf(r){
+  return {
+    ftfc: Object.assign({}, r.grid || {}), ftfcRun: r.run ?? null, ftfcConfirmed: r.confirmed ?? null,
+    ftfcDirection: r.direction ?? null, ftfcTimeframesInRun: (r.timeframesInRun || []).slice(),
+    ftfcVersion: r.version, ftfcPriceAtEntry: r.priceAtEntry ?? null,
+    ftfcStatus: Object.assign({}, r.status), ftfcMissing: Object.assign({}, r.missing || {}),
+    ftfcComplete: !!r.complete, ftfcPriceSource: r.priceSource ?? null, ftfcPriceTime: r.priceTime ?? null,
+    ftfcDiagnostics: Object.assign({}, r.diagnostics || {}),
+  };
+}
+
+// Diagnostics OUTSIDE the journal: malformed readings and every rejected or
+// discarded message, de-duplicated, newest 100 kept, shown behind Details.
+function ftfcLog(kind, key, text){
+  try{
+    const list = JSON.parse(localStorage.getItem('strat_ftfc_diag') || '[]');
+    const id = kind + '|' + key;
+    if(list.some(x => x.id === id)) return;
+    list.push({ id, kind, text: String(text).slice(0, 240), at: Date.now() });
+    localStorage.setItem('strat_ftfc_diag', JSON.stringify(list.slice(-100)));
+  }catch(e){}
+}
+
+// Whole-reading acceptance (spec E2): take it if there is no kept reading,
+// if it is complete and the kept one is not, or if both are incomplete and it
+// is a strict superset (every measured status identical, plus at least one).
+function ftfcTakesOver(kept, fresh){
+  if(!kept) return { take: true };
+  const ks = kept.ftfcStatus || {}, fs = fresh.status || {};
+  const conflict = TIMEFRAMES.filter(tf => ks[tf] !== 'missing' && fs[tf] !== 'missing' && ks[tf] !== fs[tf]);
+  if(fresh.complete && !kept.ftfcComplete) return { take: true };
+  if(!fresh.complete && !kept.ftfcComplete && !conflict.length){
+    const keepsAll = TIMEFRAMES.every(tf => ks[tf] === 'missing' || fs[tf] === ks[tf]);
+    const more = TIMEFRAMES.some(tf => ks[tf] === 'missing' && fs[tf] !== 'missing');
+    if(keepsAll && more) return { take: true };
+  }
+  return { take: false, why: conflict.length ? 'disagreed on ' + conflict.join(', ')
+    : (kept.ftfcComplete ? 'the kept reading is already complete' : 'it measured nothing the kept reading lacks') };
+}
+
+// THE FOLD (spec E). One validated envelope against one trade. Pure: returns
+// { outcome, fields } where fields is the trade's complete new set of FTFC
+// fields (keys set to undefined are removed), or null when nothing changes.
+// outcome is one of: applied, unchanged, stale, newer-version, not-applicable,
+// contradictory, invalid, inconsistent, legacy, hand.
+function ftfcFold(trade, item, appVersion){
+  const why = ftfcEnvelopeProblem(item);
+  if(why) return { outcome: 'contradictory', reason: why, fields: null };
+  const env = item.ftfcEnvelope;
+  const pair = env.open + '+' + env.close;
+  const st = ftfcStateOf(trade);
+  const ts = trade.entryTimestamp != null ? trade.entryTimestamp : item.entryTimestamp;
+  const entryMs = ts == null ? NaN : Number(ts);
+  if(st === 'INCONSISTENT') return { outcome: 'inconsistent', reason: 'this trade\'s FTFC record is inconsistent, so nothing is applied to it', fields: null };
+  // A history import's one measurement (spec B3, v14). Validated in full --
+  // all three rule versions equal and the reading itself -- whatever trade it
+  // meets; only a NONE trade takes it. Any other trade: valid but not
+  // applicable, nothing changes and nothing is recorded as an error.
+  if(env.kind === 'single'){
+    const r = env.attempts[0].reading;
+    if(env.version !== appVersion || !r || r.version !== appVersion){
+      return { outcome: 'invalid', reason: `measured under rule v${r && r.version != null ? r.version : env.version}, the app is on rule v${appVersion}`, fields: null };
+    }
+    const probs = ftfcReadingProblems(r, entryMs);
+    if(probs.length) return { outcome: 'invalid', reason: `the history reading for ${pair} failed the checks: ${probs[0]}`, fields: null };
+    if(st !== 'NONE') return { outcome: 'not-applicable', reason: null, fields: null };
+    return { outcome: 'applied', reason: null, fields: Object.assign(ftfcFieldsOf(r), {
+      ftfcCycleVersion: appVersion, ftfcReadingSeq: 0, ftfcSeqSeen: 0, ftfcFinal: true, ftfcFinalCode: 'SINGLE_MEASUREMENT' }) };
+  }
+  // LEGACY and HAND are never folded (spec E1). A live update reaching a
+  // trade whose timeframes he has since set himself lands here, by design.
+  if(st === 'HAND') return { outcome: 'not-applicable', reason: null, fields: null };
+  if(st === 'LEGACY') return { outcome: 'not-applicable', reason: null, fields: null };
+  if(st === 'NONE'){
+    const versions = env.attempts.filter(a => a.outcome === 'reading').map(a => a.reading && a.reading.version);
+    if(env.version !== appVersion || versions.some(v => v !== appVersion)){
+      return { outcome: 'invalid', reason: `measured under rule v${env.version}, the app is on rule v${appVersion}`, fields: null };
+    }
+  } else {
+    if(env.version < trade.ftfcCycleVersion) return { outcome: 'stale', reason: null, fields: null };
+    if(env.version > trade.ftfcCycleVersion) return { outcome: 'newer-version', reason: `an update for rule v${env.version} reached a trade on rule v${trade.ftfcCycleVersion}`, fields: null };
+  }
+  // The live cycle. State as read; nothing reset.
+  const seenBefore = ftfcHas(trade, 'ftfcSeqSeen') ? trade.ftfcSeqSeen : -1;
+  let kept = ftfcHas(trade, 'ftfcStatus') ? trade : null;
+  let keptFields = null, readingSeq = ftfcHas(trade, 'ftfcReadingSeq') ? trade.ftfcReadingSeq : undefined;
+  let seen = seenBefore, accounted = 0, seq3New = false, lastOutcome = null;
+  const conflicts = [];
+  for(const e of env.attempts){
+    if(e.seq <= seen) continue;                                   // already seen
+    if(e.outcome === 'interrupted'){ seen = e.seq; accounted++; if(e.seq === 3){ seq3New = true; lastOutcome = 'interrupted'; } continue; }
+    const probs = ftfcReadingProblems(e.reading, entryMs);
+    if(probs.length || (e.reading && e.reading.version !== env.version)){
+      ftfcLog('malformed', `${env.version}|${pair}|${e.seq}`, `attempt ${e.seq} for ${pair} failed the checks: ${probs[0] || 'wrong version'}`);
+      continue;                                                    // skipped, no advance
+    }
+    const verdict = ftfcTakesOver(keptFields || kept, e.reading);
+    if(verdict.take){ keptFields = ftfcFieldsOf(e.reading); readingSeq = e.seq; }
+    else conflicts.push(`attempt ${e.seq} ${verdict.why}`);
+    seen = e.seq; accounted++;
+    if(e.seq === 3){ seq3New = true; lastOutcome = 'reading'; }
+  }
+  if(conflicts.length) ftfcLog('conflict', `${env.version}|${pair}|${seen}`, `a re-measure of ${pair} was not taken (${conflicts.join('; ')}); the kept reading stays`);
+  if(st === 'NONE' && !accounted) return { outcome: 'unchanged', reason: null, fields: null };
+  // Finalisation (spec E4).
+  let final = ftfcHas(trade, 'ftfcFinal') ? trade.ftfcFinal : false;
+  let code = ftfcHas(trade, 'ftfcFinalCode') ? trade.ftfcFinalCode : undefined;
+  if(!final && env.kind === 'final'){
+    if(env.finalCode === 'SUPERSEDED') { final = true; code = 'SUPERSEDED'; }
+    else if(seq3New && ((env.finalCode === 'EXHAUSTED_READING' && lastOutcome === 'reading') || (env.finalCode === 'EXHAUSTED_INTERRUPTED' && lastOutcome === 'interrupted'))){
+      final = true; code = env.finalCode;
+    } else if(seenBefore >= 3){
+      ftfcLog('inconsistent', `${env.version}|${pair}|final`, `a final for ${pair} arrived with attempt 3 already seen but retries not ended; not ended`);
+    }
+  }
+  const fields = {};
+  const base = keptFields || (kept ? Object.fromEntries(FTFC_VERDICT_KEYS.concat(FTFC_READING_KEYS).map(k => [k, trade[k]])) : null);
+  if(base) Object.assign(fields, base);
+  else Object.assign(fields, { ftfc: {}, ftfcRun: null, ftfcConfirmed: null, ftfcDirection: null, ftfcTimeframesInRun: [] });
+  fields.ftfcCycleVersion = st === 'NONE' ? appVersion : trade.ftfcCycleVersion;
+  if(readingSeq !== undefined && (keptFields || kept)) fields.ftfcReadingSeq = readingSeq;
+  if(seen >= 0) fields.ftfcSeqSeen = seen;
+  fields.ftfcFinal = !!final;
+  fields.ftfcFinalCode = final ? code : undefined;
+  if(!keptFields && !kept){
+    // PENDING: no reading kept -- no reading fields at all.
+    for(const k of FTFC_READING_KEYS) fields[k] = undefined;
+    fields.ftfcReadingSeq = undefined;
+    fields.ftfcVersion = undefined; fields.ftfcPriceAtEntry = undefined;
+  }
+  const same = Object.keys(fields).every(k => JSON.stringify(fields[k]) === JSON.stringify(trade[k]));
+  return { outcome: same ? 'unchanged' : 'applied', reason: null, fields: same ? null : fields };
+}
+
+// Writes a fold's fields onto a trade object (undefined removes the key).
+function ftfcWrite(trade, fields){
+  for(const [k, v] of Object.entries(fields)){ if(v === undefined) delete trade[k]; else trade[k] = v; }
+}
+
+// What a trade's FTFC record says, for Details (one short line).
+function ftfcDetailsLine(t){
+  const st = ftfcStateOf(t);
+  if(st === 'INCONSISTENT') return 'FTFC record inconsistent for this trade';
+  if(st === 'PENDING') return t.ftfcFinal ? `no reading; ${FTFC_FINAL_TEXT[t.ftfcFinalCode] || ''}` : 'no reading yet; retries running';
+  if(st !== 'ACTIVE' && st !== 'ENDED') return null;
+  const miss = Object.entries(t.ftfcMissing || {}).map(([tf, why]) => `${tf}: ${why}`).join('; ');
+  const status = t.ftfcFinal ? (FTFC_FINAL_TEXT[t.ftfcFinalCode] || '') : (t.ftfcComplete ? 'complete' : 'retries running');
+  return (t.ftfcComplete ? 'complete' : `unknown -- ${miss}`) + ` · price ${t.ftfcPriceSource || 'none'} · ${status}`;
+}
+
+// Records what a fold refused, outside the journal (spec C5). Stale and
+// not-applicable are defined outcomes, not faults, and are not recorded.
+function ftfcNoteOutcome(res, item){
+  if(!res || !['contradictory', 'invalid', 'inconsistent', 'newer-version'].includes(res.outcome)) return;
+  const env = item && item.ftfcEnvelope;
+  const key = env && env.open ? `${env.version}|${env.open}+${env.close}|${env.highestSeq}`
+    : `${item && item.id}|${Array.isArray(item && item.fills) ? item.fills.join('+') : ''}`;
+  ftfcLog(res.outcome, key, `${res.outcome}: ${res.reason || 'no reason given'}`);
+}
+
+// An arriving trade's envelope, against the trade it lands on (W2 and W3).
+// Only a marked item (ftfcProtocol 1) ever reaches the fold; an unmarked one
+// keeps the legacy path exactly as before (C1). The trade object is changed
+// in memory only; the caller's one save writes it, and a failed save writes
+// nothing.
+function ftfcApplyArrival(trade, item){
+  if(!item || item.ftfcProtocol !== 1) return 'legacy-item';
+  const res = ftfcFold(trade, item, FTFC_RULE_VERSION);
+  ftfcNoteOutcome(res, item);
+  if(res.fields) ftfcWrite(trade, res.fields);
+  return res.outcome;
+}
+
+// The waiting timeframe updates (spec B5, E6). Asked only after the trade
+// queue was collected without a fault, so an update never outruns the trade
+// it belongs to. Each one is folded onto the trade with EXACTLY its fill
+// pair, every change is written in one save, and only then is each removed
+// from the service by its version, pair and sequence. A failed save clears
+// nothing. An update whose trade is not in the journal is left waiting while
+// the trade queue may still hold it, and cleared (and recorded) once the
+// queue has been read to the end.
+let ftfcUpdatesNote = { text: 'not checked yet', at: null };
+async function collectFtfcUpdates(url, queueDrained){
+  let r;
+  try{ r = await fetch(url + '/api/ftfc/updates'); }
+  catch(e){ ftfcUpdatesNote = { text: 'could not ask: ' + (e && e.message ? e.message : 'connection failed'), at: Date.now() }; return; }
+  if(r.status === 404){ ftfcUpdatesNote = { text: 'older service build (no timeframe updates to ask for)', at: Date.now() }; return; }
+  if(!r.ok){ ftfcUpdatesNote = { text: 'the service refused (status ' + r.status + ')', at: Date.now() }; return; }
+  let data;
+  try{ data = await r.json(); }catch(e){ ftfcUpdatesNote = { text: 'the answer could not be read', at: Date.now() }; return; }
+  const list = data && Array.isArray(data.updates) ? data.updates : null;
+  if(!list){ ftfcUpdatesNote = { text: 'the service answered with no list', at: Date.now() }; return; }
+  if(!list.length){ ftfcUpdatesNote = { text: 'none waiting', at: Date.now() }; return; }
+  const trades = loadTrades();
+  const byPair = new Map();
+  for(const t of trades){
+    if(Array.isArray(t.fills) && t.fills.length === 2){
+      const k = t.fills.map(String).join('+');
+      if(!byPair.has(k)) byPair.set(k, t);
+    }
+  }
+  const touched = [], toClear = [], tally = { applied: 0, unchanged: 0, refused: 0, waiting: 0 };
+  for(const env of list){
+    if(!env || typeof env !== 'object' || !env.open || !env.close){ tally.refused++; ftfcLog('contradictory', 'unnamed|' + JSON.stringify(env).slice(0, 60), 'an update named no fills'); continue; }
+    const pairKey = String(env.open) + '+' + String(env.close);
+    const t = byPair.get(pairKey);
+    if(!t){
+      if(queueDrained){ ftfcLog('no-trade', `${env.version}|${pairKey}|${env.highestSeq}`, `an update for ${pairKey} found no trade with those fills`); toClear.push(env); }
+      else tally.waiting++;
+      continue;
+    }
+    const before = snapshotTrade(t);
+    const item = { ftfcProtocol: 1, ftfcOrigin: 'live', ftfcEnvelope: env };
+    const res = ftfcFold(t, item, FTFC_RULE_VERSION);
+    ftfcNoteOutcome(res, item);
+    if(res.fields){ ftfcWrite(t, res.fields); touched.push({ before, after: t }); tally.applied++; }
+    else if(['contradictory', 'invalid', 'inconsistent', 'newer-version'].includes(res.outcome)) tally.refused++;
+    else tally.unchanged++;
+    toClear.push(env);
+  }
+  if(touched.length){
+    const wrote = commitTradeChanges(touched, []);
+    if(!wrote.ok){ ftfcUpdatesNote = { text: 'not saved, nothing cleared: ' + wrote.reason, at: Date.now() }; return; }
+  }
+  let cleared = 0;
+  for(const env of toClear){
+    if(!Number.isInteger(env.version) || !Number.isInteger(env.highestSeq)) continue;
+    try{
+      const d = await fetch(url + '/api/ftfc/updates?version=' + env.version
+        + '&fills=' + encodeURIComponent(String(env.open) + ',' + String(env.close)) + '&seq=' + env.highestSeq, { method: 'DELETE' });
+      if(d.ok) cleared++;
+    }catch(e){ /* offered again next check; folding it again changes nothing */ }
+  }
+  ftfcUpdatesNote = { text: `${list.length} waiting · ${tally.applied} applied · ${tally.unchanged} unchanged · ${tally.refused} refused · ${tally.waiting} held for their trade · ${cleared} cleared`, at: Date.now() };
+}
+
+// Details only: one summary line, then up to ten unknown trades.
+function ftfcDetailsLines(all){
+  const counts = { unknown: 0, retrying: 0, ended: 0, inconsistent: 0 };
+  const unknownOnes = [];
+  for(const t of all){
+    const st = ftfcStateOf(t);
+    if(st === 'INCONSISTENT') counts.inconsistent++;
+    if(isFtfcUnknown(t)){ counts.unknown++; unknownOnes.push(t); }
+    if((st === 'ACTIVE' || st === 'PENDING') && !t.ftfcFinal) counts.retrying++;
+    if(t.ftfcFinal === true && st !== 'INCONSISTENT') counts.ended++;
+  }
+  let rejects = '';
+  try{
+    const d = JSON.parse(localStorage.getItem('strat_ftfc_diag') || '[]');
+    rejects = d.length ? ` · recent rejects ${d.length} (last: ${d[d.length - 1].text})` : ' · recent rejects 0';
+  }catch(e){ rejects = ' · recent rejects: record unreadable'; }
+  const lines = [`ftfc unknown ${counts.unknown} · retrying ${counts.retrying} · ended ${counts.ended} · inconsistent ${counts.inconsistent}${rejects}`,
+    `ftfc updates: ${ftfcUpdatesNote.text}${ftfcUpdatesNote.at ? ' (' + new Date(ftfcUpdatesNote.at).toLocaleString() + ')' : ''}`];
+  for(const t of unknownOnes.slice(0, 10)){
+    lines.push(`  ${t.ticker || '?'} ${t.entryDate || '?'} ${t.entryTime || '--'}: ${ftfcDetailsLine(t) || 'never measured'}`);
+  }
+  return lines;
 }
 
 // Newest trade first, always. The list used to be shown in the order
@@ -5073,7 +5539,10 @@ function renderJournal(){
     const ftfcWord = ftfcDirectionWord(t);
     const stance = alignmentOf(t);
     let ftfcBadge;
-    if(t.ftfcConfirmed && ftfcWord){
+    if(stance === 'unknown' && isFtfcUnknown(t)){
+      // FTFC Fix 1: not measured in full. Never "did not agree".
+      ftfcBadge = `<span class="badge open">FTFC unknown</span>`;
+    } else if(t.ftfcConfirmed && ftfcWord){
       const arrow = t.ftfcDirection === 'bull' ? '▲' : '▼';
       const dirColour = t.ftfcDirection === 'bull' ? 'var(--bull)' : 'var(--bear)';
       const stanceColour = stance === 'against' ? 'var(--amber)' : 'var(--bull)';
@@ -7092,6 +7561,7 @@ function techText(){
       try{ const h = JSON.parse(localStorage.getItem('strat_ftfc_held') || 'null');
         return h && h.ids ? ` · re-measure held ${Object.keys(h.ids).length} (last: ${h.last.reason})` : ''; }catch(e){ return ' · re-measure held: record unreadable'; }
     })()}`,
+    ...ftfcDetailsLines(all),
     (() => {
       const vv = window.visualViewport;
       const bar = document.querySelector('.navbar');
@@ -8933,7 +9403,7 @@ const PENDING_MAX_ROUNDS = 60;
 async function pollBackendOnce(url, silent){
   if(!silent){ setBusy('btnRefresh', true); showStatus('info', 'Checking for new trades...'); }
   try{
-    let imported = 0, refreshed = 0, collected = 0;
+    let imported = 0, refreshed = 0, collected = 0, drained = false;
     for(let round = 0; round < PENDING_MAX_ROUNDS; round++){
       // slim=1 leaves the chart bars out; they are asked for one trade at a
       // time, and only for the trades this app is actually going to keep.
@@ -8944,7 +9414,7 @@ async function pollBackendOnce(url, silent){
       if(!r.ok) throw new Error('Server responded with status '+r.status);
       const data = await r.json();
       const batch = data.pending||[];
-      if(!batch.length) break;
+      if(!batch.length){ drained = true; break; }
       const got = await autoImportPendingTrades(url, batch);
       // Not saved, so nothing was taken off the server: stop rather than be
       // handed the same trades again, and say why in the message below.
@@ -8953,8 +9423,13 @@ async function pollBackendOnce(url, silent){
       collected += batch.length;
       // An older server hands back everything at once and ignores the page
       // size, so there is nothing more to come round for.
-      if(batch.length < PENDING_BATCH) break;
+      if(batch.length < PENDING_BATCH){ drained = true; break; }
     }
+    // FTFC Fix 1: the timeframe updates, only now that the trades they
+    // belong to have been collected without a fault (a fault above throws
+    // past this). Its own catch: it must never cost the trades their message.
+    try{ await collectFtfcUpdates(url, drained); }
+    catch(e){ ftfcUpdatesNote = { text: 'stopped: ' + (e && e.message ? e.message : 'unknown'), at: Date.now() }; }
     if(collected){
       pollTally.imported += imported; pollTally.refreshed += refreshed;
       // Only speak up when something actually landed. "0 trade(s)
@@ -9413,7 +9888,10 @@ async function autoImportPendingTrades(url, pending){
       }
       if(!owner.trade.replayData) t = await withBars(t);
       snap(owner.trade);
-      if(refreshTradeFacts(owner.trade, t) && !pollTally.seen.has(owner.trade.id)){
+      // FTFC Fix 1 (W3): FTFC changes only through the envelope; the
+      // other facts are refreshed exactly as before.
+      const ftfcOutcome = ftfcApplyArrival(owner.trade, t);
+      if((refreshTradeFacts(owner.trade, t) || ftfcOutcome === 'applied') && !pollTally.seen.has(owner.trade.id)){
         pollTally.seen.add(owner.trade.id);
         refreshed++;
       }
@@ -9445,7 +9923,10 @@ async function autoImportPendingTrades(url, pending){
       // a delete that has not landed yet must not inflate the figure.
       if(!already.replayData) t = await withBars(t);
       snap(already);
-      if(refreshTradeFacts(already, t) && !pollTally.seen.has(already.id)){
+      // FTFC Fix 1 (W3): FTFC changes only through the envelope; the
+      // other facts are refreshed exactly as before.
+      const ftfcOutcome = ftfcApplyArrival(already, t);
+      if((refreshTradeFacts(already, t) || ftfcOutcome === 'applied') && !pollTally.seen.has(already.id)){
         pollTally.seen.add(already.id);
         refreshed++;
       }
@@ -9467,7 +9948,10 @@ async function autoImportPendingTrades(url, pending){
       if(blank){
         if(!blank.trade.replayData) t = await withBars(t);
         snap(blank.trade);
-        if(refreshTradeFacts(blank.trade, t) && !pollTally.seen.has(blank.trade.id)){
+        // FTFC Fix 1 (W3): FTFC changes only through the envelope; the
+        // other facts are refreshed exactly as before.
+        const ftfcOutcome = ftfcApplyArrival(blank.trade, t);
+        if((refreshTradeFacts(blank.trade, t) || ftfcOutcome === 'applied') && !pollTally.seen.has(blank.trade.id)){
           pollTally.seen.add(blank.trade.id);
           refreshed++;
         }
@@ -9557,8 +10041,13 @@ async function autoImportPendingTrades(url, pending){
       optEntry: t.optEntry ?? 0, optExit: hasExit ? t.optExit : null, contracts: t.contracts||1,
       undEntry: t.undEntry ?? null, undExit: t.undExit ?? null,
       stop: null, rrPlanned: null, // requires the trader's own risk plan — not derivable from Schwab data
-      ftfc: t.ftfc || {}, ftfcRun: t.ftfcRun||0, ftfcConfirmed: !!t.ftfcConfirmed,
-      ftfcDirection: t.ftfcDirection||null, ftfcTimeframesInRun: t.ftfcTimeframesInRun||[],
+      // FTFC Fix 1 (W2): a marked arrival starts with NO reading and takes
+      // one only through its validated envelope, just below. An unmarked one
+      // (an older service) is copied exactly as before.
+      ...(t.ftfcProtocol === 1
+        ? { ftfc: {}, ftfcRun: null, ftfcConfirmed: null, ftfcDirection: null, ftfcTimeframesInRun: [] }
+        : { ftfc: t.ftfc || {}, ftfcRun: t.ftfcRun||0, ftfcConfirmed: !!t.ftfcConfirmed,
+            ftfcDirection: t.ftfcDirection||null, ftfcTimeframesInRun: t.ftfcTimeframesInRun||[] }),
       replayData: t.replayData || null,
       // Why there is no chart to replay, in the server's own words. A blank
       // with no reason is the dead end that cost three rounds of guessing.
@@ -9581,6 +10070,7 @@ async function autoImportPendingTrades(url, pending){
       fillStatus: t.fillStatus || 'Closed', contractsOpened: t.contractsOpened || t.contracts || 1,
       source: 'schwab-auto'
     };
+    ftfcApplyArrival(trade, t);
     trades.unshift(trade);   // so a repeat later in this batch is recognised
     added.unshift(trade);
     imported++;
@@ -9856,6 +10346,11 @@ function refreshTradeFacts(saved, fresh){
   // the Dashboard and makes the card look unstable. So it is written only
   // when there is NO reading yet, or the rule itself has been corrected
   // since. A corrected rule is a real reason; running again is not.
+  // FTFC Fix 1 (W3, C1): this legacy block only ever moves a LEGACY or NONE
+  // trade, and only from an UNMARKED arrival (an older service). A marked
+  // arrival changes FTFC solely through its envelope (ftfcApplyArrival), and
+  // a Fix-1 or hand-set trade is never touched here.
+  const ftfcLegacyPath = fresh.ftfcProtocol !== 1 && ['LEGACY', 'NONE'].includes(ftfcStateOf(saved));
   const noReadingYet = saved.ftfcRun == null;
   const ruleMovedOn = Number(saved.ftfcVersion || 1) < Number(fresh.ftfcVersion || 1);
   // A RE-measure replaces a reading only with a REAL one (11 Oct 2026). An
@@ -9870,12 +10365,12 @@ function refreshTradeFacts(saved, fresh){
   const freshGrid = fresh.ftfc || {};
   const lostTimeframes = Object.keys(saved.ftfc || {}).filter(tf => tf !== '1m' && saved.ftfc[tf] && !freshGrid[tf]);
   const realReading = fresh.ftfcRun != null && Object.keys(freshGrid).length > 0 && lostTimeframes.length === 0;
-  if(!noReadingYet && ruleMovedOn && !his(saved, 'ftfc') && !realReading){
+  if(ftfcLegacyPath && !noReadingYet && ruleMovedOn && !his(saved, 'ftfc') && !realReading){
     noteFtfcHeld(saved, !Object.keys(freshGrid).length
       ? 'the new reading came back with no timeframes'
       : 'the new reading came back without ' + lostTimeframes.join(', '));
   }
-  if(fresh.ftfcRun != null && !his(saved, 'ftfc') && (noReadingYet || (ruleMovedOn && realReading))){
+  if(ftfcLegacyPath && fresh.ftfcRun != null && !his(saved, 'ftfc') && (noReadingYet || (ruleMovedOn && realReading))){
     set('ftfcRun', fresh.ftfcRun);
     // The rule that produced the reading. Without carrying this over, a
     // rebuild that DID re-measure would look exactly like one that had
@@ -11093,7 +11588,7 @@ async function exportDataAsync(){
 function exportCsvSheet(){
   const trades = tradesNewestFirst();
   const headers = ['EntryDate','EntryTime','ExitDate','ExitTime','Ticker','Strat','FTFC','Broadening','OCC','OptEntry','OptExit','UnderEntry','UnderExit','Stop','RRPlanned','RealizedRR','PnlDollar','PnlPercent','WinLoss','Direction','Notes'];
-  const rows = trades.map(t=>[t.entryDate,t.entryTime,t.exitDate,t.exitTime,t.ticker,t.strat||'Unclassified',t.ftfcConfirmed?'Yes':'No',t.offBroadeningFormation?'Yes':'No',t.occ,t.optEntry,t.optExit,t.undEntry,t.undExit,t.stop,t.rrPlanned,t.realizedRR==null?'':t.realizedRR.toFixed(2),t.pnlDollar==null?'':t.pnlDollar.toFixed(2),t.pnlPercent==null?'':t.pnlPercent.toFixed(1),t.winLoss,t.dir,(t.notes||'').replace(/,/g,';')]);
+  const rows = trades.map(t=>[t.entryDate,t.entryTime,t.exitDate,t.exitTime,t.ticker,t.strat||'Unclassified',isFtfcUnknown(t)?'Unknown':(t.ftfcConfirmed?'Yes':'No'),t.offBroadeningFormation?'Yes':'No',t.occ,t.optEntry,t.optExit,t.undEntry,t.undExit,t.stop,t.rrPlanned,t.realizedRR==null?'':t.realizedRR.toFixed(2),t.pnlDollar==null?'':t.pnlDollar.toFixed(2),t.pnlPercent==null?'':t.pnlPercent.toFixed(1),t.winLoss,t.dir,(t.notes||'').replace(/,/g,';')]);
   const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');

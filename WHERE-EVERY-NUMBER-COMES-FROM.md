@@ -43,7 +43,7 @@ only against a source that had no hand in making them.
 |---|---|---|---|
 | **Underlying stock price at entry / exit** | **Reconstructed.** Schwab's trade record never says where SPY was at the fill | Alpaca's own trade print for that second | **Partly.** The card marks "exact" vs "approx.", but nothing compares the two sources against each other |
 | 5m / 15m / 30m / 1H / 2H / 4H bars (Bar Replay) | Built from 1-minute bars | **Alpaca serves these sizes itself** | **NEW — `barAudit.js`.** This is what was missing and it is why the bars were wrong |
-| The thirteen timeframes (FTFC) | The price at entry against the open of the bar forming then | Same — the provider's own bars | **NEW — same referee** |
+| The thirteen timeframes (FTFC) | The price at entry against the open of the bar forming then. The price is the provider's own print inside the entry second, or the close of the minute before; never a later candle (FTFC Fix 1, 13 Oct 2026) | Same — the provider's own bars | **NEW — same referee.** Since Fix 1 a reading with any timeframe unmeasured is **"FTFC unknown"**, with the reason for each missing timeframe behind Details, and is left out of every with/against figure rather than counted as "did not agree" |
 | Realized reward-to-risk | Built on the reconstructed stock price above | Nothing; it inherits that price's error | **No referee, and cannot have one.** It is only ever as good as the stock price it is built on |
 | Which setup / which play | The AI reading the chart | Him | **He is the referee.** The card shows what it read; his own tag always wins |
 
