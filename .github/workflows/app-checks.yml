@@ -18,7 +18,13 @@ on:
 
 jobs:
   app-checks:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 by name, not "the latest": GitHub moved ubuntu-latest to
+    # 26.04 in November 2026, and Playwright 1.56.1 cannot install Chromium
+    # there ("Playwright does not support chromium on ubuntu26.04-x64"), so
+    # every run stopped at the install step before any check ran (run
+    # 42444917439, 8 Nov 2026). Switch back once the pinned Playwright
+    # supports the newer system. Owner's words, 8 Nov 2026.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
