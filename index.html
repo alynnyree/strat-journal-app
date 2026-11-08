@@ -244,6 +244,12 @@
   .shot-row{display:flex; gap:10px; margin-top:8px;}
   .shot-box{flex:1; border:1px dashed var(--border); border-radius:10px; height:90px; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:11px; overflow:hidden; position:relative;}
   .shot-box img{width:100%; height:100%; object-fit:cover;}
+  .shot-strip{display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px;}
+  .shot-strip figure{flex:0 0 132px; margin:0;}
+  .shot-strip figure.big{flex:0 0 100%;}
+  .shot-strip img{width:100%; height:88px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display:block;}
+  .shot-strip figure.big img{height:auto;}
+  .shot-strip figcaption{font-size:10px; color:var(--text-dim); margin-top:3px; line-height:1.3;}
 
   button.primary{
     width:100%; background:var(--bull); color:#04130C; border:none; border-radius:4px;
@@ -1098,6 +1104,14 @@
         <div class="shot-box" id="shotMidBox" onclick="document.getElementById('shotMidInput').click()">+ Mid-trade shot</div>
         <div class="shot-box" id="shotExitBox" onclick="document.getElementById('shotExitInput').click()">+ Exit shot</div>
       </div>
+      <!-- The chart camera's pictures from DURING the trade (one every few
+           minutes), in time order, each with its time and any note the
+           camera made about it. Only shown when a trade has some. -->
+      <div id="shotDuringWrap" style="display:none; margin-top:10px;">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">During the trade</div>
+        <div class="shot-strip" id="shotDuringStrip"></div>
+      </div>
+      <div id="shotNotes" style="font-size:11px; color:var(--text-dim); margin-top:6px; line-height:1.4;"></div>
       <input type="file" id="shotEntryInput" accept="image/*" capture="environment" style="display:none;" onchange="handleShot(this,'entry')">
       <input type="file" id="shotMidInput" accept="image/*" capture="environment" style="display:none;" onchange="handleShot(this,'mid')">
       <input type="file" id="shotExitInput" accept="image/*" capture="environment" style="display:none;" onchange="handleShot(this,'exit')">
@@ -2635,6 +2649,36 @@ function shotBoxId(which){
 }
 function shotEmptyLabel(which){ return '+ ' + SHOT_LABEL[which] + ' shot'; }
 
+// THE CHART CAMERA'S PICTURES FROM DURING A TRADE (one every few minutes).
+// Kept in the same picture store as the three slots, one per moment, under
+// "during-<moment>"; the trade keeps only the list of moments and any note
+// the camera made ("taken 3 s after your entry: the chart was switching").
+function duringSlot(at){ return 'during-' + at; }
+function timeOfDay(ms){ return new Date(ms).toTimeString().slice(0, 8); }
+function renderDuringShots(trade){
+  const wrap = document.getElementById('shotDuringWrap');
+  const strip = document.getElementById('shotDuringStrip');
+  const notes = document.getElementById('shotNotes');
+  if(!wrap || !strip) return;
+  const list = (trade && Array.isArray(trade.shotsDuring)) ? trade.shotsDuring.slice().sort((a, b) => a.at - b.at) : [];
+  strip.innerHTML = '';
+  wrap.style.display = list.length ? '' : 'none';
+  list.forEach(d => {
+    const fig = document.createElement('figure');
+    fig.innerHTML = `<img alt=""><figcaption>${escapeHtml(timeOfDay(d.at))}${d.note ? ' &middot; ' + escapeHtml(d.note) : ''}</figcaption>`;
+    strip.appendChild(fig);
+    const img = fig.querySelector('img');
+    img.onclick = () => fig.classList.toggle('big');
+    getPicture(trade.id, duringSlot(d.at)).then(got => {
+      if(!fig.isConnected) return;            // he has moved on
+      if(got.image) img.src = got.image;
+      else fig.querySelector('figcaption').textContent += ' (' + got.reason + ')';
+    }).catch(() => {});
+  });
+  const n = (trade && trade.shotNotes) || {};
+  if(notes) notes.innerHTML = ['entry', 'exit'].filter(k => n[k]).map(k => `${SHOT_LABEL[k]} picture: ${escapeHtml(n[k])}`).join('<br>');
+}
+
 function handleShot(input, which){
   const file = input.files[0];
   if(!file) return;
@@ -4046,6 +4090,7 @@ function editTrade(id){
   // same class of fault as a picture attached to the wrong trade.
   currentShots = { entry:null, mid:null, exit:null };
   const shotsForTradeId = trade.id;
+  renderDuringShots(trade);
   ['entry','mid','exit'].forEach(slot => {
     const field = SHOT_FIELD[slot];
     if(!trade[field]) return;
@@ -4236,6 +4281,7 @@ function saveTrade(){
     const box = document.getElementById(shotBoxId(slot));
     if(box) box.innerHTML = shotEmptyLabel(slot);
   });
+  renderDuringShots(null);
   buildTfGrid();
   updateFtfcResult();
 
@@ -10169,7 +10215,58 @@ journalReady.then(() => {
 // being photographed. Matches the same fifteen minutes on the server.
 const MID_SHOT_OFFSET_MS = 15 * 60 * 1000;
 // (declared up with the picture store, which needs it)
-const SCREENSHOT_MATCH_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes — generous enough for Pushcut/Shortcut latency, tight enough not to misattach
+const SCREENSHOT_MATCH_TOLERANCE_MS = 10 * 60 * 1000;
+// The chart camera stamps each picture with the exact second of the fill;
+// a trade's own times are to the minute. Three minutes is room for that
+// and no more, so two trades minutes apart are never confused.
+const CAMERA_MATCH_TOLERANCE_MS = 3 * 60 * 1000;
+
+function tradeMoments(t){
+  const entryTs = t.entryDate ? new Date(`${t.entryDate}T${t.entryTime||'09:30'}:00`).getTime() : null;
+  const exitTs = t.exitDate ? new Date(`${t.exitDate}T${t.exitTime||'09:30'}:00`).getTime() : null;
+  return { entryTs: isFinite(entryTs) ? entryTs : null, exitTs: isFinite(exitTs) ? exitTs : null };
+}
+
+// Which trade, and which place on it, a chart-camera picture belongs to.
+// "entry" and "exit" go only to those slots, on the trade whose own time
+// is nearest; "during" goes to the trade it falls inside. {already:true}
+// when that during-picture is on a trade already.
+function cameraMatch(trades, shot){
+  const at = shot.timestamp;
+  if(shot.moment === 'entry' || shot.moment === 'exit'){
+    const field = shot.moment === 'entry' ? 'shotEntry' : 'shotExit';
+    let best = null;
+    for(const t of trades){
+      const m = tradeMoments(t);
+      const ts = shot.moment === 'entry' ? m.entryTs : m.exitTs;
+      if(ts == null || t[field]) continue;
+      const diff = Math.abs(at - ts);
+      if(diff <= CAMERA_MATCH_TOLERANCE_MS && (!best || diff < best.diff)) best = { trade: t, field, diff };
+    }
+    return best;
+  }
+  if(shot.moment === 'during'){
+    let best = null;
+    for(const t of trades){
+      const m = tradeMoments(t);
+      if(m.entryTs == null || m.exitTs == null) continue;
+      if(at < m.entryTs - 60000 || at > m.exitTs + 60000) continue;
+      if((t.shotsDuring || []).some(d => d.at === at)) return { already: true };
+      if(!best || m.exitTs < best.exitTs) best = { trade: t, field: 'during', exitTs: m.exitTs, diff: 0 };
+    }
+    return best;
+  }
+  return null;
+}
+
+async function keepDuringPicture(trade, shot, dataUrl){
+  const put = await putPicture(trade.id, duringSlot(shot.timestamp), dataUrl);
+  if(!put.ok) return put;
+  const list = (trade.shotsDuring || []).filter(d => d.at !== shot.timestamp);
+  list.push({ at: shot.timestamp, note: shot.note ? String(shot.note).slice(0, 160) : null });
+  trade.shotsDuring = list.sort((a, b) => a.at - b.at);
+  return { ok:true, reason:null };
+} // 10 minutes — generous enough for Pushcut/Shortcut latency, tight enough not to misattach
 // One picture's actual image, fetched only once this app has decided to
 // keep it.
 //
@@ -10276,7 +10373,18 @@ async function matchPendingScreenshots(){
     // his journal.
     if(shot.test){ testShots.push(shot); continue; }
     let best = null; // {trade, field, diff}
-    for(const t of trades){
+    // The chart camera says which moment each picture is (entry, during,
+    // exit), so it is filed by THAT, never by time alone: by time alone, a
+    // picture from five minutes into a trade could be filed as its entry
+    // picture whenever the real entry picture was missing.
+    if(shot.source === 'camera'){
+      const m = cameraMatch(trades, shot);
+      if(m && m.already){
+        try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* offered again; recognised again */ }
+        continue;
+      }
+      best = m;
+    } else for(const t of trades){
       const entryTs = t.entryDate
         ? new Date(`${t.entryDate}T${t.entryTime||'09:30'}:00`).getTime() : null;
       const exitTs = t.exitDate
@@ -10315,8 +10423,12 @@ async function matchPendingScreenshots(){
       // The picture goes to the store that has room for it; the trade
       // keeps only a mark.
       const before = snapshotTrade(best.trade);
-      const kept = await keepPicture(best.trade, best.field, got.image);
+      const kept = best.field === 'during'
+        ? await keepDuringPicture(best.trade, shot, got.image)
+        : await keepPicture(best.trade, best.field, got.image);
       if(!kept.ok){ noteProblem('shots', kept.reason); break; }
+      const hadNote = best.field !== 'during' && shot.note;
+      if(hadNote) best.trade.shotNotes = Object.assign({}, best.trade.shotNotes, { [SLOT_OF_FIELD[best.field]]: String(shot.note).slice(0, 160) });
       // SAVED BEFORE IT IS CLEARED FROM THE QUEUE, never after. The picture
       // used to be deleted from the service the moment it was put on the
       // trade -- and the journal was only written at the end of the loop.
@@ -10326,14 +10438,20 @@ async function matchPendingScreenshots(){
       if(!wrote.ok){
         // Left exactly where it was, so it is offered again once there is
         // room. Undone at both ends, or it would look attached.
-        delete best.trade[best.field];
-        await dropPicture(best.trade.id, SLOT_OF_FIELD[best.field]);
+        if(best.field === 'during'){
+          best.trade.shotsDuring = (best.trade.shotsDuring || []).filter(d => d.at !== shot.timestamp);
+          await dropPicture(best.trade.id, duringSlot(shot.timestamp));
+        } else {
+          delete best.trade[best.field];
+          if(hadNote && best.trade.shotNotes) delete best.trade.shotNotes[SLOT_OF_FIELD[best.field]];
+          await dropPicture(best.trade.id, SLOT_OF_FIELD[best.field]);
+        }
         noteProblem('shots', wrote.reason);
         break;
       }
       changed = true;
       try{ await fetch(url+'/media/'+encodeURIComponent(shot.id)+'?key='+encodeURIComponent(appKey()), {method:'DELETE'}); }catch(e){ /* worst case it's offered again and just gets re-matched harmlessly */ }
-      log('syncLog', `Auto-attached ${SHOT_LABEL[SLOT_OF_FIELD[best.field]].toLowerCase()} picture to ${best.trade.ticker} (${best.trade.entryDate}).`);
+      log('syncLog', `Auto-attached ${best.field === 'during' ? 'a during-the-trade' : SHOT_LABEL[SLOT_OF_FIELD[best.field]].toLowerCase()} picture to ${best.trade.ticker} (${best.trade.entryDate}).`);
       if(!best.trade.strat && !readyToClassify.includes(best.trade)) readyToClassify.push(best.trade);
       attached++;
     } else {
@@ -11080,6 +11198,15 @@ async function exportDataAsync(){
       if(!t[field]) continue;
       const got = await pictureOn(t, field);
       if(got.image) copy[field] = got.image; else { copy[field] = null; missing++; }
+    }
+    // The chart camera's pictures from during the trade travel too.
+    if(Array.isArray(t.shotsDuring) && t.shotsDuring.length){
+      copy.shotsDuring = [];
+      for(const d of t.shotsDuring){
+        const got = await getPicture(t.id, duringSlot(d.at));
+        if(!got.image) missing++;
+        copy.shotsDuring.push({ at: d.at, note: d.note || null, image: got.image || null });
+      }
     }
     out.push(copy);
   }
