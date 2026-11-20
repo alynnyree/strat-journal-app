@@ -379,6 +379,13 @@
   .signin-note.warn{background:#2B2412; border-color:#7A5E14; color:#F2CE63;}
   .signin-note.stop{background:var(--bear-dim); border-color:var(--bear); color:#FF9A93;}
   .signin-note .signin-head{font-weight:700; color:inherit;}
+  .signin-note .signin-link{display:block; margin-top:9px; color:inherit; font-weight:700;}
+  /* Step 1 on the trade card: the setup to confirm, or the play and
+     timeframe question when no pop-up answer arrived. */
+  .s1chip{border:1px solid var(--border); border-radius:16px; padding:6px 11px; font-size:12.5px; font-weight:600;
+    color:var(--text); background:var(--bg); font-family:inherit;}
+  .s1chip.sel{border-color:#F2CE63; background:#2B2412; color:#F2CE63;}
+  .s1chip:disabled{opacity:.4;}
   .signin-note button{margin-top:11px; width:100%;}
   .signin-note .signin-link{margin-top:9px; font-size:11.5px; text-decoration:underline;
     color:var(--text-dim); display:inline-block;}
@@ -686,6 +693,9 @@
          One line at the top of the first screen, and the button that
          fixes it, right there. -->
     <div id="schwabReminder" class="signin-note" style="display:none;"></div>
+    <!-- Step 1B (his answer, 15 Nov 2026: "Not now" asks again next time he
+         opens the app): purchases still waiting for his play and timeframe. -->
+    <div id="purchasesWaiting" class="signin-note" style="display:none;"></div>
     <div class="stat-grid">
       <div class="stat"><div class="label">Net P&L</div><div class="val num" id="statPnl">$0.00</div><div class="alt" id="statPnlAlt"></div></div>
       <div class="stat"><div class="label">Win Rate</div><div class="val num" id="statWinRate">0%</div><div class="alt" id="statWinRateAlt"></div></div>
@@ -1067,6 +1077,12 @@
         <div class="d">One side taken out, then the other. Two ways in: a directional bar (2) expanding into an outside bar (3); or the Rev Strat, where an inside bar breaks one side first — making it a 2 — then fails and reverses through the other side, making it a 3. The failure and the reversal are the trade.</div>
       </div>
       <input type="hidden" id="f_play">
+      <!-- Step 1 (approved 14 Nov 2026): the timeframe he entered on, and for
+           a Broadening Formation Scalp the larger one the formation is drawn on. -->
+      <label for="f_entryTimeframe">Timeframe you entered on</label>
+      <select id="f_entryTimeframe"><option value="">Not named</option><option value="1m">1m</option><option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option><option value="30m">30m</option><option value="1H">1H</option><option value="2H">2H</option><option value="4H">4H</option><option value="Daily">Daily</option><option value="Weekly">Weekly</option><option value="Monthly">Monthly</option><option value="3 Month">3 Month</option><option value="6 Month">6 Month</option><option value="Yearly">Yearly</option></select>
+      <label for="f_formationTimeframe">Formation drawn on (Broadening Formation Scalp)</label>
+      <select id="f_formationTimeframe"><option value="">Not named</option><option value="1m">1m</option><option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option><option value="30m">30m</option><option value="1H">1H</option><option value="2H">2H</option><option value="4H">4H</option><option value="Daily">Daily</option><option value="Weekly">Weekly</option><option value="Monthly">Monthly</option><option value="3 Month">3 Month</option><option value="6 Month">6 Month</option><option value="Yearly">Yearly</option></select>
     </div>
 
     <div class="card">
@@ -1395,6 +1411,7 @@
      reloads. An older copy ignores the colours this app asks for -- and
      a chart that comes up WHITE is exactly what that looks like. Bump
      this whenever the file changes. -->
+<script src="answer/answer.js"></script>
 <script src="lightweight-charts.standalone.production.js?v=4.1.3"></script>
 <script>
 const TIMEFRAMES = ['6M','3M','1M','1W','1D','4H','2H','1H','30m','15m','5m','3m','1m'];
@@ -4022,6 +4039,9 @@ function editTrade(id){
     o.classList.toggle('sel', o.dataset.v === selectedStrat);
   });
 
+  document.getElementById('f_entryTimeframe').value = trade.entryTimeframe || '';
+  document.getElementById('f_formationTimeframe').value = trade.formationTimeframe || '';
+
   const isBroadening = !!trade.offBroadeningFormation;
   document.getElementById('f_broadening').value = isBroadening ? 'true' : 'false';
   document.getElementById('broadeningToggle').classList.toggle('sel', isBroadening);
@@ -4127,6 +4147,8 @@ function saveTrade(){
   const trade = {
     id: editingTradeId || Date.now(),
     ticker, dir, strat: selectedStrat, play: selectedPlay || null,
+    entryTimeframe: document.getElementById('f_entryTimeframe').value || null,
+    formationTimeframe: document.getElementById('f_formationTimeframe').value || null,
     offBroadeningFormation: document.getElementById('f_broadening').value === 'true',
     entryDate: document.getElementById('f_entryDate').value,
     entryTime: document.getElementById('f_entryTime').value,
@@ -4223,6 +4245,8 @@ function saveTrade(){
   selectedStrat = null;
   selectedPlay = null;
   document.getElementById('f_play').value = '';
+  document.getElementById('f_entryTimeframe').value = '';
+  document.getElementById('f_formationTimeframe').value = '';
   document.getElementById('f_broadening').value = 'false';
   document.getElementById('broadeningToggleLabel').textContent = 'Off Broadening Formation: No';
   currentTf = {};
@@ -4408,6 +4432,7 @@ function renderDashboard(){
   // that must happen cannot sit downstream of one that can fail.
   try{ drawSchwabReminder(); }catch(e){}
   refreshSchwabReminder().catch(()=>{});
+  refreshPurchasesWaiting().catch(()=>{});
   // Newest first, by when each trade CLOSED — the same order the Journal
   // uses. This was `loadTrades()` with no sort at all, which is not an
   // order, it is the order things happen to sit in storage. Imports add at
@@ -5125,11 +5150,13 @@ function renderJournal(){
       <div class="tc-badges">
         ${setupBadge}
         ${playBadge}
+        ${timeframeBadge(t)}
         ${ftfcBadge}
         ${broadeningBadge}
         ${sourceBadge}
         <span class="badge ${String(t.winLoss||'').toLowerCase()}">${escapeHtml(t.winLoss||'')}</span>
       </div>
+      ${stepOneBlock(t)}
       <div class="tc-details">
         <div>Entry: ${t.entryDate||''} ${t.entryTime||''}</div>
         <div>Exit: ${t.exitDate||''} ${t.exitTime||''}</div>
@@ -5228,8 +5255,16 @@ async function runAnalysis(){
 // three plays were added later, and every trade already carrying a combo
 // was quietly treated as finished. Both are now asked for, and each is
 // written on its own.
+// STEP 1: only trades read under the new rule (they carry setupReading) are
+// read again, and only when their reading could not finish. Every older trade
+// is left exactly as it is until re-reading them is authorised (L1-a): the old
+// reading was shown the minutes AFTER the entry.
+const RETRY_OUTCOMES = ['waiting-for-data', 'unreachable', 'daily-limit'];
+function newRuleTrade(t){ return !!(t && t.setupReading); }
 function needsClassifying(t){
-  return !t.strat || !t.play;
+  if(!newRuleTrade(t) || t.setupReading.pendingOwner) return false;
+  if(t.setupReading.outcome === 'confirmed-by-owner') return false;
+  return RETRY_OUTCOMES.includes(t.setupReading.outcome) && (!t.strat || !t.play);
 }
 
 // How many times the AI has already looked at this trade and come back
@@ -5488,8 +5523,13 @@ function readProblem(which){
 // the moment the request is made.
 async function tradeForClassifying(t){
   const trimmed = { ...t };
+  // Step 1: only bars that STARTED before the entry minute. The last fifteen
+  // of the replay window were all after the entry for 110 of his 111 trades.
   const candles = (t.replayData && t.replayData.candles) || [];
-  trimmed.replayData = candles.length ? { candles: candles.slice(-15) } : null;
+  const entry = Number(t.entryTimestamp);
+  const minuteStart = Number.isFinite(entry) ? Math.floor(entry / 60000) * 60000 : null;
+  const before = minuteStart == null ? [] : candles.filter(c => Number.isFinite(c.datetime) && c.datetime < minuteStart).slice(-30);
+  trimmed.replayData = before.length ? { candles: before } : null;
   delete trimmed.chartDrawings;   // his own drawings, never read by the classifier
   for(const field of ['shotEntry','shotMid','shotExit']){
     if(!t[field]){ trimmed[field] = null; continue; }
@@ -5555,11 +5595,18 @@ async function collectReadings(){
     awaitingAnswer.delete(String(id));
     const idx = live.findIndex(t => String(t.id) === String(id));
     if(idx === -1) continue;
+    const reading = result.setupReading || null;
     // Counted as looked at whatever came back, so a trade the AI cannot
-    // call stops being asked about instead of going round for ever.
-    live[idx].classifyTries = classifyTriesOf(live[idx]) + 1;
+    // call stops being asked about instead of going round for ever. Step 1:
+    // "the bars are not out yet" is not a look, and does not use a try.
+    if(!(reading && reading.outcome === 'waiting-for-data')) live[idx].classifyTries = classifyTriesOf(live[idx]) + 1;
     changed = true;
-    if(result.strategy && !live[idx].strat){
+    // Step 1: the new reading is kept on the trade, beside anything he
+    // confirmed -- never over his confirmation.
+    const hisConfirm = live[idx].setupReading && live[idx].setupReading.outcome === 'confirmed-by-owner';
+    if(reading && !hisConfirm) live[idx].setupReading = reading;
+    if(result.strategy && !live[idx].strat && !hisConfirm){
+      live[idx].stratTimeframe = result.stratTimeframe || null;
       live[idx].strat = result.strategy;
       live[idx].stratConfidence = result.confidence;
       live[idx].stratReasoning = result.reasoning;
@@ -5585,6 +5632,247 @@ async function collectReadings(){
   if(changed){ saveTrades(live); renderDashboard(); renderJournal(); }
   if(wrote) log('syncLog', `${wrote} setup/play answer(s) collected.`);
   return ids.length;
+}
+
+// ======================================================================
+// STEP 1 ON THE TRADE CARD (authorised 15 Nov 2026: "I authorize Step 1
+// implementation"; design approved 14 Nov). Shown ONLY on trades read under
+// the new rule (they carry setupReading): every older trade looks and stays
+// exactly as it was.
+//  - his timeframe as a label;
+//  - when he named the timeframe: the combo measured on THAT chart, to
+//    confirm (Yes / Pick another);
+//  - when no pop-up answer arrived: the same question the pop-up asks.
+// ======================================================================
+const S1_TIMEFRAMES = ['1m','3m','5m','15m','30m','1H','2H','4H','Daily','Weekly','Monthly','3 Month','6 Month','Yearly'];
+const S1_PLAYS = ['Broadening Formation Scalp','FTFC Direction Play','2s Turning Into 3s','None of these'];
+const S1_COMBOS = ['2-1-2 Continuation','2-1-2 Reversal','3-1-2 Reversal','2-2 Continuation','2-2 Reversal','3-2-2 Reversal','1-2-2 Rev Strat','1 Bar Rev Strat','PMG'];
+const s1Card = {};      // per trade id: { pick:true, msg, kind, play, timeframe, formation }
+if(self.StratAnswer) self.StratAnswer.configure({ url: () => backendUrl(), key: () => appKey() });
+
+function timeframeBadge(t){
+  if(!t.entryTimeframe) return '';
+  return `<span class="badge" style="background:var(--panel); color:var(--text); border:1px solid var(--border);">⏱ ${escapeHtml(t.entryTimeframe)}${t.formationTimeframe ? ' (formation ' + escapeHtml(t.formationTimeframe) + ')' : ''}</span>`;
+}
+
+function s1Chips(id, list, selected, fn){
+  return `<div class="chips" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">` + list.map(v =>
+    `<button type="button" class="s1chip${v === selected ? ' sel' : ''}" onclick="${fn}('${escapeHtml(String(id))}', '${escapeHtml(v)}')">${escapeHtml(v)}</button>`).join('') + `</div>`;
+}
+const s1Color = kind => kind === 'ok' ? '#7FE0B2' : kind === 'warn' ? '#F2CE63' : '#FF9A93';
+function s1Msg(id){
+  const st = s1Card[id];
+  return `<div class="s1msg" style="margin-top:8px; font-size:12.5px; color:${s1Color(st && st.kind)};">${st && st.msg ? escapeHtml(st.msg) : ''}</div>`;
+}
+// A refusal is written into the box already on screen. Redrawing the list
+// could not show it when the journal itself could not be read (the list
+// would come back empty and the message with it).
+function s1Refused(id, reason){
+  s1Card[id] = Object.assign({}, s1Card[id] || {}, { msg: 'Not saved -- ' + (reason || 'the journal could not be written.') + ' Tap again.', kind: 'bad' });
+  const el = document.querySelector('#s1box-' + CSS.escape(String(id)) + ' .s1msg');
+  if(el){ el.textContent = s1Card[id].msg; el.style.color = s1Color('bad'); }
+  else renderJournal();
+}
+
+function stepOneBlock(t){
+  const r = t.setupReading;
+  if(!r) return '';
+  const id = String(t.id);
+  const st = s1Card[id] || {};
+  const box = (inner) => `<div class="s1box" id="s1box-${escapeHtml(id)}" style="margin:10px 0 4px; border:1px solid #7A5E14; border-radius:10px; padding:10px 12px; background:#1a1608; font-size:13px; line-height:1.5;">${inner}${s1Msg(id)}</div>`;
+  // He already confirmed or chose the setup: nothing to ask.
+  if(r.outcome === 'confirmed-by-owner' || his(t, 'strat')) return st.msg ? box('') : '';
+  if(t.entryTimeframe){
+    const tf = t.entryTimeframe;
+    const here = ((r.candidates || []).filter(c => c.timeframe === tf));
+    const c = here[0] || null;
+    const notes = [];
+    if(c && c.borderline) notes.push('too close to call');
+    if(c && c.orderUnknown) notes.push('which came first is not known');
+    const tfStatus = r.timeframes && r.timeframes[tf] && r.timeframes[tf].status;
+    if(c && !c.confirmed && tfStatus && !['input','confirmed','derived'].includes(tfStatus)) notes.push(tfStatus === 'reconstruction' ? "the app's own reconstruction" : 'unconfirmed');
+    (r.dataNotes || []).forEach(n => { if(/single-exchange|entry minute missing/.test(n)) notes.push(n); });
+    const pick = st.pick ? `<div style="margin-top:8px; font-size:12px; color:var(--text-dim);">Pick the setup on your ${escapeHtml(tf)} chart:</div>` + s1Chips(id, S1_COMBOS, null, 's1PickCombo') : '';
+    if(!r.timeframes){
+      return box(`The setup on your <b style="color:#F2CE63">${escapeHtml(tf)}</b> chart could not be measured${r.dataNotes && r.dataNotes[0] ? ' (' + escapeHtml(r.dataNotes[0]) + ')' : ''}. <button type="button" class="s1chip" onclick="s1StartPick('${escapeHtml(id)}')">Pick it</button>${pick}`);
+    }
+    const head = c
+      ? `On your <b style="color:#F2CE63">${escapeHtml(tf)}</b> chart, the bars into your entry read <span style="font-family:var(--mono); font-weight:700; color:${c.direction === 'bearish' ? 'var(--bear)' : 'var(--bull)'};">${escapeHtml(c.notation || '')}</span>: a <b style="color:#F2CE63">${escapeHtml(c.combo)}</b> (${escapeHtml(c.direction)})${notes.length ? ' [' + escapeHtml(notes.join(', ')) + ']' : ''}. Right?`
+      : `No combo of yours finished on your <b style="color:#F2CE63">${escapeHtml(tf)}</b> chart at your entry.`;
+    return box(head
+      + `<div style="display:flex; gap:8px; margin-top:8px;">${c ? `<button type="button" class="s1chip sel" style="flex:1" onclick="s1Confirm('${escapeHtml(id)}')">Yes</button>` : ''}<button type="button" class="s1chip" style="flex:1" onclick="s1StartPick('${escapeHtml(id)}')">Pick another</button></div>`
+      + `<div style="font-size:11px; color:var(--text-dim); margin-top:5px;">Worked out from full-market prices up to the second you bought. Your chart (Cboe One) can differ by a few cents.</div>`
+      + pick);
+  }
+  // No answer from the pop-up: ask here (his answer, 15 Nov: yes).
+  if(!Array.isArray(t.fills) || !t.fills[0]) return box('The play and timeframe cannot be saved for this trade: it has no broker fill reference.');
+  const bf = st.play === 'Broadening Formation Scalp';
+  const larger = S1_TIMEFRAMES.slice(Math.max(1, S1_TIMEFRAMES.indexOf(st.timeframe) + 1));
+  const ready = st.play && st.timeframe && (!bf || st.formation);
+  return box(`<div style="font-weight:700;">Which play, and which timeframe did you enter on?</div>`
+    + s1Chips(id, S1_PLAYS, st.play, 's1SetPlay')
+    + s1Chips(id, S1_TIMEFRAMES, st.timeframe, 's1SetTimeframe')
+    + (bf ? `<div style="margin-top:8px; font-size:12px; color:var(--text-dim);">Formation drawn on:</div>` + s1Chips(id, larger, st.formation, 's1SetFormation') : '')
+    + `<button type="button" class="s1chip sel" style="margin-top:10px; width:100%;" ${ready ? '' : 'disabled'} onclick="s1SaveAnswer('${escapeHtml(id)}')">Save</button>`);
+}
+
+function s1Set(id, patch){ s1Card[id] = Object.assign({}, s1Card[id] || {}, patch); renderJournal(); }
+function s1SetPlay(id, v){ s1Set(id, { play: v, msg: null }); }
+function s1SetTimeframe(id, v){ const st = s1Card[id] || {}; s1Set(id, { timeframe: v, formation: st.formation && S1_TIMEFRAMES.indexOf(st.formation) > S1_TIMEFRAMES.indexOf(v) ? st.formation : null, msg: null }); }
+function s1SetFormation(id, v){ s1Set(id, { formation: v, msg: null }); }
+function s1StartPick(id){ s1Set(id, { pick: true, msg: null }); }
+
+// Writes onto the journal as it is now; "Saved" only when the write landed.
+function s1Write(id, mutate){
+  const live = loadTrades();
+  const cur = live.find(t => String(t.id) === String(id));
+  if(!cur){
+    let readable = false;
+    try{ readable = Array.isArray(JSON.parse(localStorage.getItem(journalKey()) || '[]')); }catch(e){ readable = false; }
+    return { ok:false, reason: readable ? 'That trade is no longer in your journal.' : 'The journal on this phone could not be read just now. Nothing was lost.' };
+  }
+  const before = snapshotTrade(cur);
+  const after = snapshotTrade(cur);
+  mutate(after);
+  return commitTradeChanges([{ before, after }], []);
+}
+function s1ConfirmWith(id, combo, cand){
+  const res = s1Write(id, t => {
+    const tf = t.entryTimeframe || null;
+    t.strat = combo;
+    t.stratConfidence = 'his';
+    t.stratTimeframe = tf;
+    t.stratNotation = cand ? cand.notation : null;
+    t.stratNotationDirection = cand ? (cand.direction === 'bearish' ? 'Bearish' : 'Bullish') : null;
+    t.userSet = Object.assign({}, t.userSet || {}, { strat: true });
+    t.setupReading = Object.assign({}, t.setupReading || {}, { outcome: 'confirmed-by-owner', pendingOwner: false,
+      ownerChoice: { combo, timeframe: tf, measured: !!cand }, ownerConfirmedAt: new Date().toISOString() });
+  });
+  if(!res.ok){ s1Refused(id, res.reason); return res; }
+  s1Card[id] = { msg: 'Saved: ' + combo + '.', kind: 'ok' };
+  renderJournal(); renderDashboard();
+  return res;
+}
+function s1Confirm(id){
+  const t = loadTrades().find(x => String(x.id) === String(id));
+  if(!t || !t.setupReading){ s1Refused(id, s1Write(id, () => {}).reason); return; }
+  const c = (t.setupReading.candidates || []).find(x => x.timeframe === t.entryTimeframe);
+  if(c) s1ConfirmWith(id, c.combo, c);
+}
+function s1PickCombo(id, combo){
+  const t = loadTrades().find(x => String(x.id) === String(id));
+  const c = t && t.setupReading && (t.setupReading.candidates || []).find(x => x.timeframe === t.entryTimeframe && x.combo === combo);
+  s1ConfirmWith(id, combo, c || null);
+}
+
+// The card's own answer (B15): saved on the service by the purchase's fill
+// id exactly as the pop-up's would be, then put on the trade.
+async function s1SaveAnswer(id){
+  const t = loadTrades().find(x => String(x.id) === String(id));
+  const st = s1Card[id] || {};
+  if(!t){ s1Refused(id, s1Write(id, () => {}).reason); return; }
+  if(!self.StratAnswer){ s1Refused(id, 'the answer code did not load. Reload the page.'); return; }
+  s1Set(id, { msg: 'Saving…', kind: 'warn' });
+  const fill = String(t.fills[0]);
+  const choices = { play: st.play, timeframe: st.timeframe, formationTimeframe: st.formation || null,
+                    createFrom: { occ: t.occ, ticker: t.ticker, dir: t.dir, entryTimestamp: t.entryTimestamp } };
+  const r = await self.StratAnswer.saveAnswer(fill, choices, st.replaces || null);
+  if(r.state === 'saved') {
+    const w = s1Apply(id, r.entry);
+    // Kept on the service either way; the journal picks it up again on
+    // its next look if this phone could not write it just now.
+    s1Card[id] = w.ok ? { msg: 'Saved: ' + r.entry.play + ' on the ' + r.entry.timeframe + '.', kind: 'ok' }
+      : { msg: 'Your answer is kept on your service, but this phone could not add it to the trade just now (' + (w.reason || 'not written') + '). It is added on the next try by itself.', kind: 'warn' };
+  }
+  else if(r.state === 'conflict'){
+    const c = r.current || {};
+    s1Card[id] = Object.assign({}, st, { replaces: c.answerId, msg: 'Already answered on your other device: ' + (c.play || '?') + ' on the ' + (c.timeframe || '?') + '. Tap Save to replace it with this answer.', kind: 'warn' });
+  } else s1Card[id] = Object.assign({}, st, { msg: 'Not saved -- ' + r.why + '. Your choices are kept; tap Save again.', kind: 'bad' });
+  renderJournal();
+}
+
+// His answer onto the trade. His answers are his (userSet); a value he set
+// BY HAND that differs is kept, and the difference recorded behind Details.
+function s1Apply(id, a){
+  return s1Write(id, t => {
+    const diff = {};
+    if(a.play){
+      if(his(t, 'play') && t.play && t.play !== a.play) diff.play = a.play;
+      else { t.play = a.play; t.playConfidence = 'his'; }
+    }
+    if(a.timeframe){
+      if(his(t, 'entryTimeframe') && t.entryTimeframe && t.entryTimeframe !== a.timeframe) diff.timeframe = a.timeframe;
+      else t.entryTimeframe = a.timeframe;
+    }
+    if(a.formationTimeframe && !(his(t, 'formationTimeframe') && t.formationTimeframe)) t.formationTimeframe = a.formationTimeframe;
+    t.userSet = Object.assign({}, t.userSet || {}, a.play && !diff.play ? { play: true } : {}, a.timeframe && !diff.timeframe ? { entryTimeframe: true } : {},
+      a.formationTimeframe ? { formationTimeframe: true } : {});
+    t.answerId = a.answerId;
+    if(Object.keys(diff).length) t.answerDifference = Object.assign({ at: new Date().toISOString() }, diff);
+  });
+}
+
+// Joins his pop-up answers to his trades (by the opening fill id). Only
+// trades read under the new rule; answers already on the trade are skipped.
+let s1Joining = false;
+async function joinPurchaseAnswers(){
+  const url = backendUrl();
+  if(!url || s1Joining) return { asked: 0, joined: 0 };
+  s1Joining = true;
+  try{
+    const want = loadTrades().filter(t => t.setupReading && Array.isArray(t.fills) && t.fills[0] && !t.answerId).slice(0, 100);
+    if(!want.length) return { asked: 0, joined: 0 };
+    const fills = [...new Set(want.map(t => String(t.fills[0])))];
+    let body = null;
+    try{
+      const r = await fetch(url + '/purchases/?fills=' + encodeURIComponent(fills.join(',')));
+      if(!r.ok) return { asked: fills.length, joined: 0, reason: 'answered ' + r.status };
+      body = await r.json();
+    }catch(e){ return { asked: fills.length, joined: 0, reason: 'could not reach the service' }; }
+    let joined = 0;
+    for(const t of want){
+      const got = body && body.answers && body.answers[String(t.fills[0])];
+      if(got && got.answer){ const w = s1Apply(t.id, got.answer); if(w.ok) joined++; }
+    }
+    if(joined){ renderJournal(); renderDashboard(); }
+    return { asked: fills.length, joined };
+  } finally { s1Joining = false; }
+}
+
+// The one line on Home (his answer, 15 Nov: yes). Says nothing when the
+// service cannot be asked: that is said by the Schwab line above it.
+// Behind Details only: how the new-rule readings came out, and any answer
+// of his that differed from something he had set by hand.
+function stepOneLine(){
+  const all = loadTrades().filter(t => t.setupReading);
+  if(!all.length) return 'setup readings (new rule): none yet';
+  const n = {};
+  all.forEach(t => { const o = t.setupReading.pendingOwner ? 'waiting-for-his-confirm' : (t.setupReading.outcome || 'none'); n[o] = (n[o] || 0) + 1; });
+  const diffs = all.filter(t => t.answerDifference).length;
+  return 'setup readings (new rule): ' + Object.keys(n).sort().map(k => k + ' ' + n[k]).join(' · ')
+    + ' · answered ' + all.filter(t => t.answerId).length + (diffs ? ' · differs from his hand-set value ' + diffs : '');
+}
+let s1WaitingAskedAt = 0;
+async function refreshPurchasesWaiting(force){
+  const box = document.getElementById('purchasesWaiting');
+  if(!box) return;
+  // Asked at most once a minute (every redraw of Home calls this), and
+  // straight away when he comes back to the app.
+  if(!force && Date.now() - s1WaitingAskedAt < 60000) return;
+  s1WaitingAskedAt = Date.now();
+  const url = backendUrl();
+  let n = 0;
+  if(url){
+    try{
+      const r = await fetch(url + '/purchases/waiting');
+      if(r.ok){ const b = await r.json(); n = ((b && b.waiting) || []).length; }
+    }catch(e){ n = 0; }
+  }
+  if(!n){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.className = 'signin-note warn';
+  box.innerHTML = `<div class="signin-head">${n} purchase${n === 1 ? '' : 's'} waiting for your play and timeframe</div>`
+    + `<a class="signin-link" href="answer/">Answer</a>`;
+  box.style.display = 'block';
 }
 
 // ---- Reading the setup on trades, without being asked to ----
@@ -7125,6 +7413,7 @@ function techText(){
     !techNotes.checked ? '' : `server ftfc rule v${srv.ftfcRuleVersion ?? 'unknown (older build)'}${
       srv.ftfcRuleVersion === FTFC_RULE_VERSION ? ' (matches)' : ' — DOES NOT MATCH app v' + FTFC_RULE_VERSION}`,
     unpairedLine(),
+    stepOneLine(),
     `last rebuild ask: ${when(ask)}${ask && ask.forced ? ' (forced)' : ''}`,
     dec ? `rebuild declined: ${dec.text} (${when(dec)})` : 'rebuild not declined',
     rp ? `rebuild problem: ${rp.text} (${when(rp)})` : 'no rebuild problem',
@@ -8720,7 +9009,7 @@ async function autoCollectOnOpen(){
     // Started a few seconds in so it is not competing with the first load
     // of the Journal, and left to run itself from there.
     setTimeout(autoClassifyLoop, 5000);
-    collectReadings();
+    collectReadings().then(() => joinPurchaseAnswers()).catch(()=>{});
 
     const auth = await fetchSchwabAuthState(url);
     if(auth && auth.needsReconnect){
@@ -9638,6 +9927,8 @@ const SERVER_ALSO_WRITES = [
   // wrong. If he typed a minute himself, it is his.
   'entryTime', 'exitTime',
   'undEntry', 'undExit', 'stop', 'strat', 'play',
+  // Step 1B: the timeframe he entered on, and the formation's, are his.
+  'entryTimeframe', 'formationTimeframe',
   'optEntry', 'optExit', 'contracts', 'pnlDollar', 'pnlPercent',
   'fees', 'entryFees', 'exitFees', 'pnlNet', 'winLoss',
 ];
@@ -9897,15 +10188,24 @@ function refreshTradeFacts(saved, fresh){
 
   if(fresh.replayData && !saved.replayData){ saved.replayData = fresh.replayData; changed = true; }
 
-  // A setup or play only where he has not chosen one himself.
-  if(!saved.strat && !his(saved, 'strat') && fresh.strat){ saved.strat = fresh.strat; saved.stratConfidence = fresh.stratConfidence || null; changed = true; }
-  if(!saved.play && !his(saved, 'play') && fresh.play){ saved.play = fresh.play; saved.playConfidence = fresh.playConfidence || null; changed = true; }
-  if(!saved.stratNotation && fresh.stratNotation){
+  // A setup or play only where he has not chosen one himself -- and, from
+  // Step 1, only from an arrival read under the new rule (it carries
+  // setupReading). An arrival without one was read from bars after the
+  // entry, so it may no longer fill anything in (re-reading old trades is
+  // its own step, L1-a). His confirmed setup is never replaced.
+  const newRule = !!fresh.setupReading;
+  const hisConfirm = !!(saved.setupReading && saved.setupReading.outcome === 'confirmed-by-owner');
+  if(newRule && !hisConfirm && JSON.stringify(saved.setupReading || null) !== JSON.stringify(fresh.setupReading)){
+    saved.setupReading = fresh.setupReading; changed = true;
+  }
+  if(newRule && !hisConfirm && !saved.strat && !his(saved, 'strat') && fresh.strat){ saved.strat = fresh.strat; saved.stratConfidence = fresh.stratConfidence || null; saved.stratTimeframe = fresh.stratTimeframe || null; changed = true; }
+  if(newRule && !saved.play && !his(saved, 'play') && fresh.play){ saved.play = fresh.play; saved.playConfidence = fresh.playConfidence || null; changed = true; }
+  if(newRule && !hisConfirm && !saved.stratNotation && fresh.stratNotation){
     saved.stratNotation = fresh.stratNotation;
     saved.stratNotationDirection = fresh.stratNotationDirection || null; changed = true;
   }
   // The AI's own reading of the formation. Never his own toggle.
-  if(saved.broadeningDetected == null && fresh.broadeningDetected != null){
+  if(newRule && saved.broadeningDetected == null && fresh.broadeningDetected != null){
     saved.broadeningDetected = fresh.broadeningDetected;
     saved.broadeningReasoning = fresh.broadeningReasoning || null; changed = true;
   }
@@ -10123,8 +10423,10 @@ function startAutoPoll(){
       pollBackend(true); matchPendingScreenshots(); matchPendingVideos(); showRebuildState(backendUrl());
       // Rechecks itself no more than once every five minutes.
       refreshSchwabReminder().catch(()=>{});
-      // Answers the server has finished working out since last time.
-      collectReadings();
+      // Answers the server has finished working out since last time, then
+      // his own pop-up answers (Step 1B).
+      collectReadings().then(() => joinPurchaseAnswers()).catch(()=>{});
+      refreshPurchasesWaiting().catch(()=>{});
       // Picks reading back up after an hour's pause, or after new trades
       // arrive, without him having to reopen the app. Returns immediately
       // if a run is already going or there is nothing left to read.
@@ -10132,7 +10434,7 @@ function startAutoPoll(){
     }
   }, 30000);
   document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); matchPendingVideos(); collectReadings(); autoClassifyLoop(); }
+    if(document.visibilityState==='visible' && backendUrl()){ pollBackend(true); matchPendingScreenshots(); matchPendingVideos(); collectReadings().then(() => joinPurchaseAnswers()).catch(()=>{}); refreshPurchasesWaiting(true).catch(()=>{}); autoClassifyLoop(); }
     // Forced, not the five-minute one: he may have just come back from
     // signing in, and the whole point is that the box changes when he does.
     if(document.visibilityState==='visible') refreshSchwabReminder(true).catch(()=>{});
