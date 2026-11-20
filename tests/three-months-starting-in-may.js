@@ -102,7 +102,12 @@ const { launch, serve } = require('./browser.js');
     const sinceMay = Math.ceil((Date.now() - Date.parse('2026-05-01T00:00:00')) / 86400000) + 2;
     check(`it asks back to May, not to last year (${days} days, May is ~${sinceMay})`,
       Math.abs(days - sinceMay) <= 2);
-    check('which is far less than the eleven months it used to ask for', days < 200);
+    // Measured against what the OLD rule would ask for TODAY (back to the
+    // oldest trade, 2025-10-14), never a fixed number of days: "fewer than
+    // 200" was true when written and became false by itself on 15 Nov 2026,
+    // when May fell 201 days back, with nothing in the app having changed.
+    const sinceOldest = Math.ceil((Date.now() - Date.parse('2025-10-14T00:00:00')) / 86400000);
+    check(`which is far less than the ${sinceOldest} days the old rule would ask for today`, days <= sinceOldest - 150);
     check('nothing threw', errors.length === 0);
     await close();
   }
