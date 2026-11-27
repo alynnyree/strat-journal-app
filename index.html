@@ -686,6 +686,9 @@
          One line at the top of the first screen, and the button that
          fixes it, right there. -->
     <div id="schwabReminder" class="signin-note" style="display:none;"></div>
+    <!-- Shown only when the journal's space on this phone passes 70% (owner,
+         27 Nov 2026: "Yes to the home warning line"). -->
+    <div id="storageWarning" class="signin-note" style="display:none;"></div>
     <div class="stat-grid">
       <div class="stat"><div class="label">Net P&L</div><div class="val num" id="statPnl">$0.00</div><div class="alt" id="statPnlAlt"></div></div>
       <div class="stat"><div class="label">Win Rate</div><div class="val num" id="statWinRate">0%</div><div class="alt" id="statWinRateAlt"></div></div>
@@ -1435,6 +1438,7 @@ function saveTrades(t){
   }
   try{
     localStorage.setItem(k, JSON.stringify(t));
+    roomRefusedAt = null;
     return { ok:true, reason:null };
   }catch(e){
     const full = e && (e.name === 'QuotaExceededError'
@@ -1443,6 +1447,7 @@ function saveTrades(t){
       ? 'There is no room left on this phone for the journal, so that change was not saved. Your trades already saved are safe.'
       : 'That change could not be saved to this phone. Your trades already saved are safe.';
     noteProblem('saving', reason);
+    if(full) roomRefusedAt = Date.now();
     return { ok:false, reason, full };
   }
 }
@@ -1511,19 +1516,87 @@ function commitTradeChanges(updated, added){
 // How much room the journal is using, and how much is left. Behind the
 // Details tap -- a number he did not ask for, that exists so neither of us
 // is surprised by a wall we can already see coming.
+// THE JOURNAL'S ROOM ON THIS PHONE (owner, 27 Nov 2026: "I authorize the
+// storage detail line, the Safari keep request, and the error message fix";
+// "Yes to the home warning line").
+//
+// Measured, not assumed: on 20 Nov 2026 Safari refused to save the journal
+// when this site's saved items totalled 2,577k characters (his Details line).
+// That is the reference the percentage is taken against. Other browsers may
+// allow more, so the figure can only overstate, never understate.
+const ROOM_REFUSED_AT = 2577 * 1024;
+let roomRefusedAt = null;          // when a save was last refused for lack of room
+const keepState = { result: 'not asked yet', why: null, estimate: null };
+
+// Every saved item, largest first. Names and sizes only -- never a value.
+function storageItems(){
+  const out = [];
+  for(let i = 0; i < localStorage.length; i++){
+    const k = localStorage.key(i);
+    out.push({ k, size: k.length + (localStorage.getItem(k) || '').length });
+  }
+  return out.sort((a, b) => b.size - a.size);
+}
+function roomUsed(){
+  try{ return storageItems().reduce((n, x) => n + x.size, 0); }catch(e){ return null; }
+}
 function storageLine(){
-  let used = 0;
-  try{
-    for(let i = 0; i < localStorage.length; i++){
-      const k = localStorage.key(i);
-      used += (k.length + (localStorage.getItem(k) || '').length);
-    }
-  }catch(e){ return 'room used: not reported by this browser'; }
+  let items;
+  try{ items = storageItems(); }catch(e){ return 'room used: not reported by this browser'; }
   const kb = n => Math.round(n / 1024) + 'k';
+  const used = items.reduce((n, x) => n + x.size, 0);
   let journal = 0;
   try{ journal = (localStorage.getItem(journalKey() || '') || '').length; }catch(e){}
   const pics = loadTrades().filter(t => t.shotEntry || t.shotMid || t.shotExit).length;
-  return `room used ${kb(used)} · journal ${kb(journal)} · trades with a picture ${pics}`;
+  const big = items.filter(x => x.size >= 1024);
+  const small = items.filter(x => x.size < 1024);
+  const est = keepState.estimate;
+  return `room used ${kb(used)} of ${kb(ROOM_REFUSED_AT)} (${Math.round(used / ROOM_REFUSED_AT * 100)}%; Safari refused a save at ${kb(ROOM_REFUSED_AT)} on 20 Nov)`
+    + ` · journal ${kb(journal)} · trades with a picture ${pics}`
+    + (roomRefusedAt ? ` · last save refused for room ${new Date(roomRefusedAt).toLocaleString()}` : '')
+    + `\nsaved items, largest first: ${big.map(x => `${x.k} ${kb(x.size)}`).join(' · ') || 'none over 1k'}`
+    + (small.length ? ` · ${small.length} small items ${kb(small.reduce((n, x) => n + x.size, 0))}` : '')
+    + `\nkept by Safari: ${keepState.result}${keepState.why ? ' (' + keepState.why + ')' : ''}`
+    + (est ? ` · Safari's own count for this site: ${kb(est.usage || 0)} used of ${kb(est.quota || 0)}` : ' · Safari\'s own count: not reported');
+}
+
+// Asks Safari to keep this site's data instead of clearing it after 7 days
+// of Safari use without a visit. Safari decides by its own rules (WebKit:
+// e.g. whether the site is opened from the Home Screen), so a "no" is
+// recorded, not treated as a fault. Never throws; never blocks the journal.
+async function askSafariToKeep(){
+  try{
+    const st = navigator.storage;
+    if(st && typeof st.estimate === 'function'){
+      try{ keepState.estimate = await st.estimate(); }catch(e){ keepState.estimate = null; }
+    }
+    if(!st || typeof st.persist !== 'function'){
+      keepState.result = 'cannot be asked'; keepState.why = 'this browser offers no way to ask'; return keepState;
+    }
+    if(typeof st.persisted === 'function' && await st.persisted()){ keepState.result = 'yes'; keepState.why = null; return keepState; }
+    const yes = await st.persist();
+    keepState.result = yes ? 'yes' : 'no';
+    keepState.why = yes ? null : 'Safari said no this time; it decides by its own rules, and opening from the Home Screen icon makes a yes more likely';
+  }catch(e){
+    keepState.result = 'could not ask'; keepState.why = (e && e.message) || 'no reason given';
+  }
+  return keepState;
+}
+
+// The one Home line, shown only past 70%. Says where he stands and that
+// nothing is lost; no figures he did not ask for beyond the percentage.
+function drawStorageWarning(){
+  const box = document.getElementById('storageWarning');
+  if(!box) return;
+  const used = roomUsed();
+  const share = used == null ? 0 : used / ROOM_REFUSED_AT;
+  const full = !!roomRefusedAt || share >= 1;
+  if(!full && share < 0.70){ box.style.display = 'none'; box.textContent = ''; return; }
+  box.className = 'signin-note ' + (full ? 'stop' : 'warn');
+  box.innerHTML = full
+    ? '<div class="signin-head">The journal\'s space on this phone is full</div>New trades can\'t be added yet. They are waiting safely on your journal\'s service, and nothing in your journal is lost.'
+    : `<div class="signin-head">The journal's space on this phone is ${Math.round(share * 100)}% full</div>Nothing is lost, and nothing for you to do.`;
+  box.style.display = 'block';
 }
 
 // ======================================================================
@@ -4408,6 +4481,7 @@ function renderDashboard(){
   // that must happen cannot sit downstream of one that can fail.
   try{ drawSchwabReminder(); }catch(e){}
   refreshSchwabReminder().catch(()=>{});
+  try{ drawStorageWarning(); }catch(e){}
   // Newest first, by when each trade CLOSED — the same order the Journal
   // uses. This was `loadTrades()` with no sort at all, which is not an
   // order, it is the order things happen to sit in storage. Imports add at
@@ -8930,6 +9004,20 @@ async function pollBackend(silent=false){
 const PENDING_BATCH = 25;
 const PENDING_MAX_ROUNDS = 60;
 
+function collectFailureText(e){
+  if(e && e.keyRefused) return `Could not collect trades: ${e.message} Nothing was changed.`;
+  if(e && e.notSaved){
+    // Verified in this file: a waiting trade is released by the service only
+    // after this phone has saved it, so these are still waiting there.
+    return `New trades were not added: ${e.message} ${e.full
+      ? 'They are waiting safely on your journal\'s service and arrive once there is room.'
+      : 'They are still waiting on your journal\'s service.'}`;
+  }
+  if(e && e.serviceAnswered) return `Your journal's service did not hand over the waiting trades (${e.message}).`;
+  if(e instanceof TypeError) return `Could not reach your journal's service (${e.message || 'no answer'}).`;
+  return `Could not collect trades: ${(e && e.message) || 'no reason was given'}.`;
+}
+
 async function pollBackendOnce(url, silent){
   if(!silent){ setBusy('btnRefresh', true); showStatus('info', 'Checking for new trades...'); }
   try{
@@ -8941,14 +9029,14 @@ async function pollBackendOnce(url, silent){
       // answers exactly as it always did, which still works.
       const r = await fetch(url+'/api/trades/pending?slim=1&limit='+PENDING_BATCH);
       if(r.status === 403) throw Object.assign(new Error('Your App Key does not match. Check it on the Journal tab.'), {keyRefused:true});
-      if(!r.ok) throw new Error('Server responded with status '+r.status);
+      if(!r.ok) throw Object.assign(new Error('it answered ' + r.status), { serviceAnswered: r.status });
       const data = await r.json();
       const batch = data.pending||[];
       if(!batch.length) break;
       const got = await autoImportPendingTrades(url, batch);
       // Not saved, so nothing was taken off the server: stop rather than be
       // handed the same trades again, and say why in the message below.
-      if(got.failed) throw new Error(got.failed);
+      if(got.failed) throw Object.assign(new Error(got.failed), { notSaved: true, full: !!got.full, importedBefore: imported });
       imported += got.imported; refreshed += got.refreshed;
       collected += batch.length;
       // An older server hands back everything at once and ignores the page
@@ -8981,9 +9069,11 @@ async function pollBackendOnce(url, silent){
     renderJournal();
     renderDashboard();
   }catch(e){
-    if(!silent) showStatus('err', e.keyRefused
-      ? `Could not collect trades: ${e.message} Nothing was changed.`
-      : `Refresh failed (${e.message}). Check the backend is actually running and the URL is correct.`);
+    // Each way this can fail says WHICH part failed, in its own words. It
+    // used to add "Check the backend is actually running and the URL is
+    // correct" to every failure -- a guess, and on 20 Nov 2026 a wrong one:
+    // the phone was full and the service was fine.
+    if(!silent) showStatus('err', collectFailureText(e));
     log('syncLog', 'Refresh failed: '+e.message);
   }
   if(!silent) setBusy('btnRefresh', false);
@@ -9588,7 +9678,7 @@ async function autoImportPendingTrades(url, pending){
   }
   const wrote = commitTradeChanges([...touched.values()], added);
   // Not saved: nothing is cleared, so every one of these is offered again.
-  if(!wrote.ok) return { imported:0, refreshed:0, failed: wrote.reason };
+  if(!wrote.ok) return { imported:0, refreshed:0, failed: wrote.reason, full: !!wrote.full };
   // M-1: each removal names the fill pair it handled, so the server removes
   // only that pair. A different pair waiting under the same id is kept and
   // answered 409: recorded as a collision, and nothing else is cleared for it.
@@ -11280,6 +11370,7 @@ journalReady.then(() => {
   loadStopRuleSettings();
   renderBacktestPickers();
   renderDashboard();
+  askSafariToKeep().catch(() => {});
   autoCollectOnOpen();
   refreshAlpacaState();
   checkRetiredJournal().catch(() => {});
